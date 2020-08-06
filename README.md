@@ -33,7 +33,7 @@ vi ~/.bashrc
 NRC7292 Software package is provided in this repository. Please refer to the following git command to get it.
 ```
 cd ~/
-git clone https://github.com/newracom/nrc7292_sw_pkg_draft.git
+git clone https://github.com/newracom/nrc7292_sw_pkg.git
 ```
 ### Prepare host platform (Raspberry Pi 3 Model B+)
 #### Install Newracom Device Tree (DT) overlay
