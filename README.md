@@ -2,16 +2,23 @@
 
 ## Notice
 ### Release roadmap
+- v1.3.1 (2020.08.05)
 - v1.3.0 (2020.05.30)
 
 ### Latest release
-- [NRC7292_SW_PKG_v1.3.0](https://github.com/newracom/nrc7292_sw_pkg_draft/releases/tag/v1.3.0)
+- [NRC7292_SW_PKG_v1.3.1](https://github.com/newracom/nrc7292_sw_pkg/releases/tag/v1.3.1)
 
 ### Release package contents
 - host
   - cli_app
   - evk
   - nrc_driver
+  - doc
+- host_kr_mic
+  - cli_app
+  - evk
+  - nrc_driver
+  - doc
 
 ## NRC7292 Software Package User Guide
 ### (Optional) Install toolchain
