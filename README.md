@@ -68,6 +68,37 @@ make clean
 make
 cp nrc.ko ~/nrc_pkg/sw/driver
 ```
+### Apply a specific package
+If you want to apply a specific package to your exiting package directory, you can choose one of following methods.
+#### Method #1: replace the whole package
+Let's assume that you have v1.3.0 and want to apply v1.3.1 to your package location.
+1. Download a specific package you want.
+   * If it is official release version 1.3.1
+     1. Go to https://github.com/newracom/nrc7292_sw_pkg/releases and choose the release package you want.
+     ![sw_pkg_release](/images/sw_pkg_release.png)
+     1. Downalod the compressed package: zip version or tar.gz version
+     1. Check the filename: nrc7292_sw_pkg-1.3.1.zip or nrc7292_sw_pkg-1.3.1.tar.gz
+   * If it is the latest pacakge
+     1. Click "Code" and then click "Download ZIP"
+     ![sw_pkg_latest](/images/sw_pkg_latest.png)
+     1. Check the filename: nrc7292_sw_pkg-master.zip
+1. Replace your old package directory with the one you downloaded.
+#### Method #2: pull down a branch
+This needs your cloned repository and the internet connection.
+1. Move to the repository directory
+   ```
+   cd repo/nrc7292_sw_pkg
+   ```
+1. Pull down a branch
+   * If you want to pull down the latest one from master branch
+   ```
+   git pull
+   ```
+   * If you want to change into a specific branch by using tag version
+   ```
+   git tag -l
+   git checkout v1.3.1
+   ```
 ### Run NRC7292 Software Package
 #### Configure start script
 There are a couple of configurable parameters as below.
