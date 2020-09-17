@@ -75,17 +75,18 @@ static void * nrc_dump_load(int len)
 	int ret;
 	mm_segment_t old_fs;
 	int i;
-	char str[64];
+	char filepath[64];
 
-	sprintf(str, "/lib/firmware/%s", bd_name);
-	filp = filp_open(str, O_RDONLY, 0);
-	if (IS_ERR(filp)) {
-		nrc_dbg(NRC_DBG_STATE,"error:%d",IS_ERR(filp));
-		return NULL;
-	}
-
+	sprintf(filepath, "/lib/firmware/%s", bd_name);
 	old_fs = get_fs();
 	set_fs(KERNEL_DS);
+
+	filp = filp_open(filepath, O_RDONLY, 0);
+	if (IS_ERR(filp)) {
+		pr_err("Failed to load borad data, error:%d",IS_ERR(filp));
+		set_fs(old_fs);
+		return NULL;
+	}
 
 #if KERNEL_VERSION(4, 14, 0) <= NRC_TARGET_KERNEL_VERSION
 	ret = kernel_read(filp, g_bd_buf, length, &pos);
@@ -93,17 +94,25 @@ static void * nrc_dump_load(int len)
 	ret = kernel_read(filp, g_bd_buf, length, pos);
 #endif
 
+	filp_close(filp, NULL);
+	set_fs(old_fs);
+
+	if(ret < NRC_BD_HEADER_LENGTH) {
+		pr_err("Invalid data size(%d)", ret);
+		return NULL;
+	}
+
 	for(i=0; i < ret;) {
 		nrc_dbg(NRC_DBG_STATE,"%02X %02X %02X %02X %02X %02X %02X %02X ",
-	                         g_bd_buf[i],
-	                         g_bd_buf[i+1],
-	                         g_bd_buf[i+2],
-	                         g_bd_buf[i+3],
-	                         g_bd_buf[i+4],
-	                         g_bd_buf[i+5],
-	                         g_bd_buf[i+6],
-	                         g_bd_buf[i+7]
-	                         );
+							 g_bd_buf[i],
+							 g_bd_buf[i+1],
+							 g_bd_buf[i+2],
+							 g_bd_buf[i+3],
+							 g_bd_buf[i+4],
+							 g_bd_buf[i+5],
+							 g_bd_buf[i+6],
+							 g_bd_buf[i+7]
+							 );
 		i += 8;
 	}
 
@@ -117,17 +126,13 @@ static void * nrc_dump_load(int len)
 				g_bd_buf, &g_bd_buf[0]);	
 	}
 #endif
-
-	filp_close(filp, NULL);
-	set_fs(old_fs);
 	
 	return &g_bd_buf[0];
-
 }
 
 struct wim_bd_param * nrc_read_bd_tx_pwr(uint8_t *country_code)
 {
-	uint8_t cc_index = CC_US;
+	uint8_t cc_index = CC_MAX;
 	uint16_t ret = 0;
 	uint16_t len = 0;
 	uint8_t type = 0;

@@ -7,28 +7,30 @@ import commands
 
 ##################################################################################
 # Default Configuration (you can change value you want here)
-model       = 7292     # 7292 or 7192
-hif_speed   = 16000000 # HSPI Clock
-gain_type   = 'phy'    # 'phy' or 'nrf(legacy)'
-txpwr_val   = 17       # TX Power
-maxagg_num  = 8        # 0(AMPDU off) or  >2(AMPDU on)
-cqm_off     = 0        # 0(CQM on) or 1(CQM off)
-fw_download = 1        # 0(FW Download off) or 1(FW Download on)
+model       = 7292      # 7292 or 7192
+hif_speed   = 16000000  # HSPI Clock
+gain_type   = 'phy'     # 'phy' or 'nrf(legacy)'
+txpwr_val   = 17        # TX Power
+maxagg_num  = 8         # 0(AMPDU off) or  >2(AMPDU on)
+cqm_off     = 0         # 0(CQM on) or 1(CQM off)
+fw_download = 1         # 0(FW Download off) or 1(FW Download on)
 fw_name     = 'uni_s1g.bin'
-bd_download = 0        # 0(Board Data Download off) or 1(Board Data Download on)
+bd_download = 0         # 0(Board Data Download off) or 1(Board Data Download on)
 bd_name     = 'nrc7292_bd.dat'
-guard_int   = 'long'   # 'long'(LGI) or 'short'(SGI)
-concurrent  = 0        # 0(Concurrent Mode off) or 1(Coucurrent Mode on)
+guard_int   = 'long'    # 'long'(LGI) or 'short'(SGI)
+concurrent  = 0         # 0(Concurrent Mode off) or 1(Coucurrent Mode on)
 interface_11ah   = 'wlan1'  # 11ah driver interface : 'wlan0' or 'wlan1'
-supplicant_debug = 0   # WPA Supplicant debug option : 0(off) or 1(on)
-hostapd_debug    = 0   # Hostapd debug option    : 0(off) or 1(on)
-max_cpuclock     = 1   # RPi Max CPU Clock : 0(off) or 1(on)
+supplicant_debug = 0    # WPA Supplicant debug option : 0(off) or 1(on)
+hostapd_debug    = 0    # Hostapd debug option    : 0(off) or 1(on)
+max_cpuclock     = 1    # RPi Max CPU Clock : 0(off) or 1(on)
 # Optional Configuration for dual-band (11N + 11AH)
 enable_11n        = 1        # Enable Dual-Band (11ah + 11n)
 role_11n          = 'AP'     # Role of 11N ('AP' or 'STA')
 interface_11n     = 'wlan0'  # 11n driver interface : 'wlan0'
-disable_NAT       = 0  # 1(NAT disable) 0(NAT enable)
-power_save        = 0  # power save : 0(off) or 1(on)
+disable_NAT       = 0   # 1(NAT disable) 0(NAT enable)
+power_save        = 0   # power save : 0(off) or 1(on)
+bss_max_idle_enable = 0 # 0(bss_max_idle off) or 1(bss_max_idle on)
+bss_max_idle = 10       # number of keepalives (0 ~ 65535)
 ##################################################################################
 
 def check(interface):
@@ -108,6 +110,8 @@ def argv_print():
         print ("Download Board Data      : " + bd_name)
     print ("Interface        : " + interface_11ah)
     print ("TX Power         : " + str(txpwr_val))
+    if int(bss_max_idle_enable) == 1 and strSTA() == 'AP':
+        print ("bss_max_idle     : " + str(bss_max_idle))
     print ("------------------------------")
     if int(enable_11n):
         print ("11n Interface    : " + interface_11n)
@@ -115,7 +119,7 @@ def argv_print():
         print ("------------------------------")
 
 def copyConf():
-    os.system("sudo /home/pi/nrc_pkg/sw/firmware/copy " + str(model))
+    os.system("sudo /home/pi/nrc_pkg/sw/firmware/copy " + str(model) + " " + str(bd_name))
     if strSTA() == 'AP':
         os.system("sudo cp /home/pi/nrc_pkg/etc/dhcpcd/dhcpcd_ap.conf /etc/dhcpcd.conf")
         os.system("sudo cp /home/pi/nrc_pkg/etc/dhcpcd/dnsmasq/dnsmasq_ap.conf /etc/dnsmasq.conf")
@@ -187,7 +191,12 @@ def run_common():
     else:
         power_save_arg = " power_save=0"
 
-    insmod_arg = fw_arg + alt_mode_arg + power_save_arg + " disable_cqm=" + str(cqm_off) + " hifspeed=" + str(hif_speed)
+    if int(bss_max_idle_enable) == 1 and strSTA() == 'AP':
+        bss_max_idle_arg = " bss_max_idle=" + str(bss_max_idle)
+    else:
+        bss_max_idle_arg = ""
+
+    insmod_arg = fw_arg + bd_arg + alt_mode_arg + power_save_arg + bss_max_idle_arg + " disable_cqm=" + str(cqm_off) + " hifspeed=" + str(hif_speed)
     print "[2] Loading module"
     print "sudo insmod /home/pi/nrc_pkg/sw/driver/nrc.ko " + insmod_arg
     os.system("sudo insmod /home/pi/nrc_pkg/sw/driver/nrc.ko " + insmod_arg + "")

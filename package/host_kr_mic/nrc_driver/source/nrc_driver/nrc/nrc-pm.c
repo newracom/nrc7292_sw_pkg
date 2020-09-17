@@ -289,6 +289,7 @@ static void sta_max_idle_period_expire(struct timer_list *t)
 	struct sk_buff *skb;
 	int band;
 	struct ieee80211_hdr_3addr_qos *qosnullfunc;
+	int idle_offset;
 
 	nrc_mac_dbg("%s: sending a keep-alive", __func__);
 	/* Send a Null frame as a keep alive frame */
@@ -325,9 +326,14 @@ static void sta_max_idle_period_expire(struct timer_list *t)
 	nrc_mac_tx(hw, skb);
 #endif
 
+	if (bss_max_idle_offset == 0)
+		idle_offset = -768;
+	else
+		idle_offset = bss_max_idle_offset;
+
 	/* Re-arm the timer */
 	mod_timer(&i_sta->max_idle.timer,
-		  jiffies + i_sta->max_idle.idle_period + bss_max_idle_offset);
+		  jiffies + i_sta->max_idle.idle_period + idle_offset);
 
 	return;
  drop:
@@ -350,6 +356,7 @@ static int sta_h_bss_max_idle_period(struct ieee80211_hw *hw,
 {
 	struct nrc_sta *i_sta = to_i_sta(sta);
 	u32 max_idle_period = 0;
+	int idle_offset;
 #if KERNEL_VERSION(4, 15, 0) > LINUX_VERSION_CODE
 	void (*bss_max_idle_period_expire)(unsigned long);
 #else
@@ -403,8 +410,17 @@ static int sta_h_bss_max_idle_period(struct ieee80211_hw *hw,
 	i_sta->max_idle.idle_period = msecs_to_jiffies(max_idle_period * 1024);
 
 	/* Start STA inactivity monitoring */
+	if (vif->type == NL80211_IFTYPE_STATION) {
+		if (bss_max_idle_offset == 0)
+			idle_offset = -768;
+		else
+			idle_offset = bss_max_idle_offset;
+	} else {
+		idle_offset = bss_max_idle_offset;
+	}
+
 	mod_timer(&i_sta->max_idle.timer,
-		  jiffies + i_sta->max_idle.idle_period + bss_max_idle_offset);
+		  jiffies + i_sta->max_idle.idle_period + idle_offset);
 
 	return 0;
 }

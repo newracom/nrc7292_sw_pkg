@@ -783,8 +783,8 @@ nrc_add_rx_s1g_radiotap_header(struct nrc *nw, struct sk_buff *skb)
 			0x0 << 6 |		/* NSS */
 			((rxi->bandwidth & 0x0f) << 8) | /* BW */
 			((mcs & 0x0f) << 12);		/* MCS */
-		rt_hdr_agg.rt_s1g_data2 = cpu_to_le16((color & 0x0f) |
-			   ((uplink_ind & 0x01) << 4) |
+		rt_hdr_agg.rt_s1g_data2 = cpu_to_le16((color & 0x07) |
+			   ((uplink_ind & 0x01) << 3) |
 			   (rxi->rcpi << 8));
 	} else {
 		rt_hdr.hdr.it_version = PKTHDR_RADIOTAP_VERSION;
@@ -817,8 +817,8 @@ nrc_add_rx_s1g_radiotap_header(struct nrc *nw, struct sk_buff *skb)
 			((rxi->bandwidth & 0x0f) << 8) | /* BW */
 			((mcs & 0x0f) << 12);			 /* MCS */
 		rt_hdr.rt_s1g_data2 =
-				 cpu_to_le16((color & 0x0f) |
-				 ((uplink_ind & 0x01) << 4) |
+				 cpu_to_le16((color & 0x07) |
+				 ((uplink_ind & 0x01) << 3) |
 				 (rxi->rcpi << 8));
 	}
 

@@ -113,6 +113,11 @@ int bss_max_idle;
 module_param(bss_max_idle, int, 0600);
 MODULE_PARM_DESC(bss_max_idle, "BSS Max Idle");
 
+/* bss_max_idle_usf_format */
+bool bss_max_idle_usf_format;
+module_param(bss_max_idle_usf_format, bool, 0600);
+MODULE_PARM_DESC(bss_max_idle_usf_format, "BSS Max Idle specified in units of usf");
+
 /* default enable_short_bi */
 bool enable_short_bi;
 module_param(enable_short_bi, bool, 0600);
@@ -159,6 +164,13 @@ bool ndp_preq = false;
 module_param(ndp_preq, bool, 0600);
 MODULE_PARM_DESC(ndp_preq, "Enable NDP Probe Request");
 
+/*
+ * Enable HSPI init
+ */
+bool enable_hspi_init = false;
+module_param(enable_hspi_init, bool, S_IRUSR | S_IWUSR);
+MODULE_PARM_DESC(enable_hspi_init, "Enable HSPI Initialization");
+
 static bool has_macaddr_param(uint8_t *dev_mac)
 {
 	int res;
@@ -171,6 +183,34 @@ static bool has_macaddr_param(uint8_t *dev_mac)
 			   &dev_mac[3], &dev_mac[4], &dev_mac[5]);
 
 	return (res == 6);
+}
+
+
+static int s1g_unscaled_interval_max = 0x3fff;
+static int convert_usf(int interval) 
+{
+	int ui, usf = 0, interval_usf;
+
+	if (interval <= s1g_unscaled_interval_max) {
+		ui = interval;
+		usf = 0;	
+	} else if (interval / 10 <= s1g_unscaled_interval_max) {
+		ui= interval / 10;
+		usf = 1;
+	} else if (interval / 1000 <= s1g_unscaled_interval_max) {
+		ui = interval / 1000;
+		usf = 2;
+	} else if (interval / 10000 <= s1g_unscaled_interval_max) {
+		ui = interval / 10000;
+		usf = 3;
+	} else {
+		ui = 0;
+		usf = 0;
+	}
+
+	interval_usf = (usf << 14) + ui;
+
+	return interval_usf;
 }
 
 /****************************************************************************
@@ -260,6 +300,7 @@ static void nrc_on_fw_ready(struct sk_buff *skb, struct nrc *nw)
 			ready->v.cap.listen_interval, listen_interval);
 	nrc_dbg(NRC_DBG_HIF, "  -- cap_idle: %d, %d",
 			ready->v.cap.bss_max_idle, bss_max_idle);
+
 	nw->cap.cap_mask = ready->v.cap.cap;
 	nw->cap.listen_interval = ready->v.cap.listen_interval;
 	nw->cap.bss_max_idle = ready->v.cap.bss_max_idle;
@@ -292,10 +333,23 @@ static void nrc_on_fw_ready(struct sk_buff *skb, struct nrc *nw)
 		nw->cap.listen_interval = listen_interval;
 	}
 
-	if (bss_max_idle > 0)
-		nw->cap.bss_max_idle = bss_max_idle;
-	else
-		nw->cap.bss_max_idle = 0;
+	if (bss_max_idle_usf_format) {
+		if (bss_max_idle > 65535 || bss_max_idle <= 0) {
+			nw->cap.bss_max_idle = 0;
+		} else {
+			nw->cap.bss_max_idle = bss_max_idle;
+		}
+	} else {
+		long max_idle = bss_max_idle * 1000 / 1024;
+		bss_max_idle = max_idle;
+
+		/* usf convert */
+		if (bss_max_idle > 16383 * 10000 || bss_max_idle <= 0) {
+			nw->cap.bss_max_idle = 0;
+		} else {
+			nw->cap.bss_max_idle = convert_usf(bss_max_idle);
+		}
+	}
 
 	dev_kfree_skb(skb);
 }

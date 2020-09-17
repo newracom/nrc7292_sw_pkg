@@ -422,6 +422,8 @@ extern int bss_max_idle_offset;
 extern int power_save;
 extern bool wlantest;
 extern bool ndp_preq;
+extern bool enable_hspi_init;
+
 void nrc_set_bss_max_idle_offset(int value);
 
 #endif

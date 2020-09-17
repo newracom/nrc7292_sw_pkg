@@ -324,6 +324,23 @@ failed:
 	return -EIO;
 }
 
+static int _c_spi_write_dummy(struct spi_device *spi)
+{
+	struct spi_transfer xfer[2] = {{0},};
+	u32 dummy=0xffffffff;
+	u8 tx[8], rx[8];
+	ssize_t status;
+
+	memset(tx, 0xff, sizeof(tx));
+	spi_set_transfer(&xfer[0], tx, rx, 8);
+	dummy = 0xffffffff;
+	spi_set_transfer(&xfer[1], &dummy, NULL, sizeof(dummy));
+
+	status = spi_sync_transfer(spi, xfer, 2);
+
+	return 0;
+}
+
 static int _c_spi_write_reg_alt(struct spi_device *spi, u8 addr, u8 data)
 {
 	struct nrc_hif_device *hdev = spi->dev.platform_data;
@@ -1402,7 +1419,12 @@ void spi_reset(struct nrc_hif_device *hdev)
 {
 	struct nrc_spi_priv *priv = hdev->priv;
 	struct spi_device *spi = priv->spi;
+        int i;
 
+	if (enable_hspi_init) {
+		for(i=0; i<180; i++)
+			_c_spi_write_dummy(spi);
+	}
 	/* 0xC8 is magic number for reset the device */
 	c_spi_write_reg(spi, C_SPI_DEVICE_STATUS, 0xC8);
 }
@@ -1643,6 +1665,9 @@ static int c_spi_probe(struct spi_device *spi)
 		priv->spi_r.mode = SPI_MODE_1;
 		priv->ops = &cspi_ops_alt;
 	}
+
+	if (fw_name && enable_hspi_init)
+		spi_reset(hdev);
 
 	/* Read the register */
 	ret = c_spi_read_regs(spi, C_SPI_WAKE_UP, (void *)sys, sizeof(*sys));

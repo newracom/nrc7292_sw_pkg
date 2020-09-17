@@ -2024,8 +2024,7 @@ static int nrc_mac_set_key(struct ieee80211_hw *hw, enum set_key_cmd cmd,
 			}
 		} else
 			WARN_ON(!(vif->type == NL80211_IFTYPE_AP ||
-				  vif->type == NL80211_IFTYPE_P2P_GO ||
-				  vif->type == NL80211_IFTYPE_MESH_POINT));
+				  vif->type == NL80211_IFTYPE_P2P_GO));
 	}
 
 	ret = nrc_wim_install_key(nw, cmd, vif, sta, key);
@@ -2442,8 +2441,10 @@ static int nrc_reg_notifier(struct wiphy *wiphy,
 				sizeof(u16), request->alpha2);
 
 #if defined(CONFIG_SUPPORT_BD)
- 		if(bd_param)
+ 		if(bd_param) {
 			nrc_wim_skb_add_tlv(skb, WIM_TLV_BD, sizeof(*bd_param), bd_param);
+			kfree(bd_param);
+ 		}
  #endif /* defined(CONFIG_SUPPORT_BD) */
 
 		nrc_xmit_wim_request(nw, skb);
@@ -2460,10 +2461,11 @@ static int nrc_vendor_update(struct nrc *nw, u8 subcmd,
 				const u8 *data, int data_len)
 {
 	const int OUI_LEN = 3;
+	const int MAX_DATALEN = 255;
 	int new_elem_len = data_len + 2 /* EID + LEN */ + OUI_LEN + 1;
 	u8 *pos;
 
-	if (!data || data_len < 1)
+	if (!data || data_len < 1 || (data_len + OUI_LEN + 1) > MAX_DATALEN)
 		return -EINVAL;
 
 	if (!nw->vendor_skb)
