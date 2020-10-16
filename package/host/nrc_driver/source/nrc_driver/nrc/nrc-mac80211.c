@@ -878,7 +878,7 @@ static int nrc_mac_add_interface(struct ieee80211_hw *hw,
 	 *	Consideration: There is an WFA test case about WMM-PS but
 	 *  it will be related to Wi-Fi P2P
 	 */
-	/* vif->driver_flags |= IEEE80211_VIF_SUPPORTS_UAPSD; */
+     /* vif->driver_flags |= IEEE80211_VIF_SUPPORTS_UAPSD; */
 #endif
 
 	memset(i_vif, 0, sizeof(*i_vif));
@@ -2164,7 +2164,11 @@ static int nrc_mac_roc(struct ieee80211_hw *hw, struct ieee80211_channel *chan,
 	return 0;
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0) 
+static int nrc_mac_cancel_roc(struct ieee80211_hw *hw, struct ieee80211_vif *vif)
+#else
 static int nrc_mac_cancel_roc(struct ieee80211_hw *hw)
+#endif
 {
 	struct nrc *nw = hw->priv;
 
@@ -2554,33 +2558,48 @@ static int nrc_vendor_cmd_announce5(struct wiphy *wiphy,
 static struct wiphy_vendor_command nrc_vendor_cmds[] = {
 	{
 		.info = { .vendor_id = OUI_NRC,
-			  .subcmd = NRC_OUI_SUBCMD_ANNOUNCE1 },
+		.subcmd = NRC_OUI_SUBCMD_ANNOUNCE1 },
 		.flags = WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = nrc_vendor_cmd_announce1
+		.doit = nrc_vendor_cmd_announce1,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0)
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
 	},
 	{
 		.info = { .vendor_id = OUI_NRC,
-			  .subcmd = NRC_OUI_SUBCMD_ANNOUNCE2 },
+		.subcmd = NRC_OUI_SUBCMD_ANNOUNCE2 },
 		.flags = WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = nrc_vendor_cmd_announce2
+		.doit = nrc_vendor_cmd_announce2,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0)
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif		
 	},
 	{
 		.info = { .vendor_id = OUI_NRC,
-			  .subcmd = NRC_OUI_SUBCMD_ANNOUNCE3 },
+		.subcmd = NRC_OUI_SUBCMD_ANNOUNCE3 },
 		.flags = WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = nrc_vendor_cmd_announce3
+		.doit = nrc_vendor_cmd_announce3,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0)
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif        
 	},
 	{
 		.info = { .vendor_id = OUI_NRC,
-			  .subcmd = NRC_OUI_SUBCMD_ANNOUNCE4 },
+		.subcmd = NRC_OUI_SUBCMD_ANNOUNCE4 },
 		.flags = WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = nrc_vendor_cmd_announce4
+		.doit = nrc_vendor_cmd_announce4,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0)
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif        
 	},
 	{
 		.info = { .vendor_id = OUI_NRC,
-			  .subcmd = NRC_OUI_SUBCMD_ANNOUNCE5 },
+		.subcmd = NRC_OUI_SUBCMD_ANNOUNCE5 },
 		.flags = WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = nrc_vendor_cmd_announce5
+		.doit = nrc_vendor_cmd_announce5,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0)
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif        
 	},
 
 };
@@ -2838,7 +2857,7 @@ int nrc_register_hw(struct nrc *nw)
 		hw = NULL;
 		return -EINVAL;
 	}
-
+	
 	/* debugfs */
 	nrc_init_debugfs(nw);
 

@@ -112,10 +112,13 @@ static struct genl_family nrc_nl_fam = {
 	.name		= NRC_NETLINK_FAMILY_NAME,
 	.version	= 1,
 	.maxattr	= MAX_NL_WFA_CAPI_ATTR,
+	.netnsok	= true,    
 #ifdef CONFIG_SUPPORT_NEW_NETLINK
 	.parallel_ops	= false,
 #endif
-	.netnsok	= true,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 2, 0)         
+    .policy = nl_umac_policy,
+#endif      
 	.pre_doit	= nrc_nl_pre_doit,
 	.post_doit	= nrc_nl_post_doit,
 #ifdef CONFIG_SUPPORT_AFTER_KERNEL_3_0_36
@@ -129,7 +132,7 @@ int nrc_netlink_rx(struct nrc *nw, struct sk_buff *skb, u8 subtype)
 {
 	struct sk_buff *mcast_skb;
 	void *data;
-
+    
 #ifdef CONFIG_SUPPORT_GENLMSG_DEFAULT
 	mcast_skb = genlmsg_new(GENLMSG_DEFAULT_SIZE, GFP_KERNEL);
 #else
@@ -170,7 +173,7 @@ int nrc_netlink_trigger_recovery(struct nrc *nw)
 {
 	struct sk_buff *mcast_skb;
 	void *data;
-
+    
 #ifdef CONFIG_SUPPORT_GENLMSG_DEFAULT
 	mcast_skb = genlmsg_new(GENLMSG_DEFAULT_SIZE, GFP_KERNEL);
 #else
@@ -1083,7 +1086,7 @@ static int nrc_shell_run_simple(struct sk_buff *skb, struct genl_info *info)
 {
 	char *cmd = NULL;
 	struct sk_buff *wim_skb;
-
+    
 	if (!nrc_access_vif(nrc_nw)) {
 		nrc_dbg(NRC_DBG_CAPI, "%s Can't send command", __func__);
 		return -EIO;
@@ -1129,7 +1132,7 @@ static int nrc_shell_run(struct sk_buff *skb, struct genl_info *info)
 	char cmd_resp[512];
 	struct sk_buff *msg, *wim_skb, *wim_resp;
 	void *hdr;
-
+    
 	if (!nrc_access_vif(nrc_nw)) {
 		nrc_dbg(NRC_DBG_CAPI, "%s Can't send command", __func__);
 		return -EIO;
@@ -1208,7 +1211,7 @@ static int cli_app_get_info(struct sk_buff *skb, struct genl_info *info)
 	const int max_number_per_response = 20;
 	char *str = NULL;
 	int i = 0;
-
+    
 	memset(cmd_resp, 0x0, sizeof(cmd_resp));
 
 	if (!nrc_access_vif(nrc_nw)) {
@@ -1345,77 +1348,137 @@ static struct genl_ops nl_umac_nl_ops[] = {
 	{
 		.cmd	= NL_WFA_CAPI_STA_GET_INFO,
 		.doit	= capi_sta_get_info,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0) 
 		.policy = nl_umac_policy,
+#else
+		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
+#endif
 	},
 	{
 		.cmd	= NL_WFA_CAPI_STA_SET_11N,
 		.doit	= capi_sta_set_11n,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0) 
 		.policy = nl_umac_policy,
+#else
+		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
+#endif
 	},
 	{
 		.cmd	= NL_WFA_CAPI_SEND_ADDBA,
 		.doit	= capi_sta_send_addba,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0) 
 		.policy = nl_umac_policy,
+#else
+		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
+#endif
 	},
 	{
 		.cmd	= NL_WFA_CAPI_SEND_DELBA,
 		.doit	= capi_sta_send_delba,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0) 
 		.policy = nl_umac_policy,
+#else
+		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
+#endif
 	},
 	{
 		.cmd	= NL_WFA_CAPI_BSS_MAX_IDLE,
 		.doit	= capi_bss_max_idle,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0) 
 		.policy = nl_umac_policy,
+#else
+		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
+#endif
 	},
 	{
 		.cmd	= NL_WFA_CAPI_BSS_MAX_IDLE_OFFSET,
 		.doit	= capi_bss_max_idle_offset,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0) 
 		.policy = nl_umac_policy,
+#else
+		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
+#endif
 	},
 	{
 		.cmd	= NL_TEST_MMIC_FAILURE,
 		.doit	= test_mmic_failure,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0) 
 		.policy = nl_umac_policy,
+#else
+		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
+#endif
 	},
 	{
 		.cmd	= NL_SHELL_RUN,
 		.doit	= nrc_shell_run,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0) 
 		.policy = nl_umac_policy,
+#else
+		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
+#endif
 	},
 	{
 		.cmd	= NL_SHELL_RUN_SIMPLE,
 		.doit	= nrc_shell_run_simple,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0) 
 		.policy = nl_umac_policy,
+#else
+		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
+#endif
 	},
 	{
 		.cmd	= NL_MGMT_FRAME_INJECTION,
 		.doit	= nrc_inject_mgmt_frame,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0) 
 		.policy = nl_umac_policy,
+#else
+		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
+#endif
 	},
 	{
 		.cmd	= NL_HALOW_SET_DUT,
 		.doit	= halow_set_dut,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0) 
 		.policy = nl_umac_policy,
+#else
+		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
+#endif
 	},
 	{
 		.cmd	= NL_CLI_APP_GET_INFO,
 		.doit	= cli_app_get_info,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0) 
 		.policy = nl_umac_policy,
+#else
+		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
+#endif
 	},
 	{
 		.cmd	= NL_MIC_SCAN,
 		.doit	= nrc_mic_scan,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0) 
 		.policy = nl_umac_policy,
+#else
+		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
+#endif
 	},
 	{
 		.cmd	= NL_FRAME_INJECTION,
 		.doit	= nrc_inject_frame,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0) 
 		.policy = nl_umac_policy,
+#else
+		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
+#endif
 	},
 	{
 		.cmd	= NL_SET_IE,
 		.doit	= nrc_set_ie,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0) 
 		.policy = nl_umac_policy,
+#else
+		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
+#endif
 	},
 };
 

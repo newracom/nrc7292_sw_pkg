@@ -1695,6 +1695,8 @@ static int c_spi_probe(struct spi_device *spi)
 		priv->credit_max[8] = CREDIT_AC2;
 		priv->credit_max[9] = CREDIT_AC3_7291;
 		priv->fastboot = false;
+        break;
+        
 	case 0x7292:
 		priv->credit_max[0] = CREDIT_AC0;
 		priv->credit_max[1] = CREDIT_AC1;
