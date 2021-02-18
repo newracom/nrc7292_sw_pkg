@@ -4,6 +4,7 @@ import sys
 import os
 import time
 import commands
+import subprocess
 
 ##################################################################################
 # Default Configuration (you can change value you want here)
@@ -208,7 +209,10 @@ def run_common():
         os.system("sudo iw dev wlan1 interface add wlan2 type managed");
         os.system("sudo ifconfig wlan1 up");
 
-    os.system("sudo ifconfig wlan0 up");
+    ret = subprocess.call(["sudo", "ifconfig", "wlan0", "up"])
+    if ret == 255:
+        os.system('sudo rmmod nrc.ko')
+        sys.exit()
 
     print "[3] Set tx power"
     os.system('python /home/pi/nrc_pkg/etc/python/shell.py run --cmd="nrf txpwr ' + str(txpwr_val) + '"')

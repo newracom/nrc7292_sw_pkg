@@ -1673,6 +1673,7 @@ static int c_spi_probe(struct spi_device *spi)
 	ret = c_spi_read_regs(spi, C_SPI_WAKE_UP, (void *)sys, sizeof(*sys));
 	if (ret < 0) {
 		nrc_dbg(NRC_DBG_HIF, "failed to read register 0x0\n");
+		priv->spi = NULL;
 		goto fail;
 	}
 
@@ -1695,6 +1696,8 @@ static int c_spi_probe(struct spi_device *spi)
 		priv->credit_max[8] = CREDIT_AC2;
 		priv->credit_max[9] = CREDIT_AC3_7291;
 		priv->fastboot = false;
+        break;
+        
 	case 0x7292:
 		priv->credit_max[0] = CREDIT_AC0;
 		priv->credit_max[1] = CREDIT_AC1;
@@ -1801,7 +1804,6 @@ struct nrc_hif_device *nrc_hif_cspi_init(struct nrc *nw)
 	struct nrc_spi_priv *priv;
 	struct spi_device *spi;
 	struct spi_master *master;
-	int ret;
 
 	hdev = kzalloc(sizeof(*hdev) + sizeof(*priv), GFP_KERNEL);
 	if (!hdev) {
@@ -1844,8 +1846,8 @@ struct nrc_hif_device *nrc_hif_cspi_init(struct nrc *nw)
 	}
 
 	/* Register spi driver */
-	ret = spi_register_driver(&spi_driver);
-	if (ret < 0) {
+	spi_register_driver(&spi_driver);
+	if (!priv->spi) {
 		nrc_dbg(NRC_DBG_HIF, "failed to register driver %s\n",
 			spi_driver.driver.name);
 		goto unregister_device;
@@ -1858,6 +1860,7 @@ struct nrc_hif_device *nrc_hif_cspi_init(struct nrc *nw)
 
 unregister_device:
 	spi_unregister_device(spi);
+	spi_unregister_driver(&spi_driver);
 fail:
 	kfree(hdev);
 
