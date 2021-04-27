@@ -4,10 +4,7 @@
 cd /home/pi/nrc_pkg
 chmod -R 755 *
 
-#Please refer the README file under ~/nrc_pkg
+#Please refer the README file under ~/nrc_pkg for more information
 
-#apply single-band (Sub1G) to EVK
+#update package
 ./update.sh
-
-#apply dual-band (Sub1G + 2.4GHz) 1.3.0 to EVK
-./update.sh dual

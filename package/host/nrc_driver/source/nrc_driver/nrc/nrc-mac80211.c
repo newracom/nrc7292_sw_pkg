@@ -39,6 +39,7 @@
 #include <linux/ktime.h>
 #include <net/genetlink.h>
 #include <linux/spi/spi.h>
+#include <linux/gpio.h>
 #include "compat.h"
 #if defined(CONFIG_SUPPORT_BD)
 #include <linux/kernel.h>
@@ -290,6 +291,13 @@ static const struct ieee80211_iface_combination if_comb_multi[] = {
 	},
 };
 
+#if KERNEL_VERSION(5, 3, 0) <= NRC_TARGET_KERNEL_VERSION
+static const struct
+nla_policy nrc_vendor_command_policy[NUM_VENDOR_ATTR] = {
+	[NRC_VENDOR_ATTR_DATA]	= {.type = NLA_NUL_STRING},
+};
+#endif
+
 static bool get_intf_addr(const char *intf_name, char *addr)
 {
 	struct socket *sock	= NULL;
@@ -371,7 +379,7 @@ static __u32 nrc_txq_pending(struct ieee80211_hw *hw)
 	int len = 0;
 	u64 now = 0, diff = 0;
 
-	if (nw->drv_state != NRC_DRV_RUNNING)
+	if (nw->drv_state < NRC_DRV_RUNNING)
 		return 0;
 
 	now = ktime_to_us(ktime_get_real());
@@ -488,8 +496,15 @@ void nrc_wake_tx_queue(struct ieee80211_hw *hw, struct ieee80211_txq *txq)
 {
 	struct nrc *nw = hw->priv;
 	struct nrc_txq *local, *priv_ntxq = (void *)txq->drv_priv;
-	struct sk_buff *skb;
+	struct sk_buff *skb = NULL;
 	int max = 16;
+
+	if (nw->drv_state == NRC_DRV_PS && power_save >= NRC_PS_DEEPSLEEP_TIM) {
+		max = 1;
+		gpio_set_value(RPI_GPIO_FOR_PS, 1);
+		nrc_ps_dbg("[%s,L%d] Set GPIO high for wakeup(%d)\n", __func__, __LINE__, nw->drv_state);
+		ieee80211_stop_queue(hw, priv_ntxq->hw_queue);
+	}
 
 	local = &nw->ntxq[priv_ntxq->hw_queue];
 
@@ -501,6 +516,10 @@ void nrc_wake_tx_queue(struct ieee80211_hw *hw, struct ieee80211_txq *txq)
 		spin_lock_bh(&nw->txq_lock);
 		skb_queue_tail(&local->queue, skb);
 		spin_unlock_bh(&nw->txq_lock);
+	}
+
+	if (nw->drv_state == NRC_DRV_PS && power_save >= NRC_PS_DEEPSLEEP_TIM) {
+		return;
 	}
 
 	ieee80211_stop_queue(hw, priv_ntxq->hw_queue);
@@ -523,7 +542,8 @@ void nrc_kick_txq(struct ieee80211_hw *hw)
 	struct nrc_txq *cur;
 	int res, cnt = 0, i = 0;
 
-	if (nw->drv_state != NRC_DRV_RUNNING)
+	if ((nw->drv_state != NRC_DRV_RUNNING && power_save >= NRC_PS_DEEPSLEEP_TIM) ||
+		(nw->drv_state < NRC_DRV_RUNNING))
 		return;
 
 	/* Before pushing frame to HIF, check pending TXQs exits.
@@ -759,15 +779,20 @@ static int nrc_mac_start(struct ieee80211_hw *hw)
 	return 0;
 }
 
-static void nrc_mac_stop(struct ieee80211_hw *hw)
+void nrc_mac_stop(struct ieee80211_hw *hw)
 {
 	struct nrc *nw = hw->priv;
+	int ret = 0;
 
+	if (atomic_read(&nw->d_deauth.delayed_deauth))
+		return;
 	nw->drv_state = NRC_DRV_STOP;
 	nrc_recovery_wdt_stop(nw);
-	nrc_xmit_wim_simple_request(nw, WIM_CMD_STOP);
-
-	nrc_hif_suspend(nw->hif);
+	ret = nrc_hif_check_target(nw->hif);
+	if (ret != 1) {
+		nrc_xmit_wim_simple_request(nw, WIM_CMD_STOP);
+	}
+	nrc_hif_suspend_rx_thread(nw->hif);
 }
 
 /**
@@ -878,7 +903,7 @@ static int nrc_mac_add_interface(struct ieee80211_hw *hw,
 	 *	Consideration: There is an WFA test case about WMM-PS but
 	 *  it will be related to Wi-Fi P2P
 	 */
-     /* vif->driver_flags |= IEEE80211_VIF_SUPPORTS_UAPSD; */
+	/* vif->driver_flags |= IEEE80211_VIF_SUPPORTS_UAPSD; */
 #endif
 
 	memset(i_vif, 0, sizeof(*i_vif));
@@ -891,7 +916,6 @@ static int nrc_mac_add_interface(struct ieee80211_hw *hw,
 		nw->promisc = true;
 
 		nrc_mac_dbg("promiscuous mode on");
-
 		goto out;
 	}
 
@@ -956,6 +980,7 @@ static int nrc_mac_add_interface(struct ieee80211_hw *hw,
 		nrc_wim_set_mac_addr(nw, vif);
 
 	nrc_wim_set_sta_type(nw, vif);
+	nrc_hif_resume_rx_thread(nw->hif);
 
 	return 0;
 }
@@ -1001,9 +1026,17 @@ static void nrc_mac_remove_interface(struct ieee80211_hw *hw,
 #ifdef CONFIG_USE_SCAN_TIMEOUT
 	cancel_delayed_work_sync(&i_vif->scan_timeout);
 #endif
-	nrc_wim_unset_sta_type(nw, vif);
-	nrc_free_vif_index(hw->priv, vif);
-	i_vif->dev = NULL;
+	if (!atomic_read(&nw->d_deauth.delayed_deauth)) {
+		int ret = 0;
+		ret = nrc_hif_check_target(nw->hif);
+		if (ret != 1) {
+			nrc_wim_unset_sta_type(nw, vif);
+		}
+		nrc_free_vif_index(hw->priv, vif);
+		i_vif->dev = NULL;
+	} else {
+		nw->d_deauth.removed = true;
+}
 }
 
 static enum WIM_CHANNEL_PARAM_WIDTH
@@ -1044,7 +1077,7 @@ get_wim_channel_width(enum nl80211_chan_width width)
 }
 
 #ifdef CONFIG_SUPPORT_CHANNEL_INFO
-static void nrc_mac_add_tlv_channel(struct sk_buff *skb,
+void nrc_mac_add_tlv_channel(struct sk_buff *skb,
 					struct cfg80211_chan_def *chandef)
 {
 #if !defined(CONFIG_S1G_CHANNEL)
@@ -1077,7 +1110,7 @@ static void nrc_mac_add_tlv_channel(struct sk_buff *skb,
 #endif
 }
 #else
-static void nrc_mac_add_tlv_channel(struct sk_buff *skb,
+void nrc_mac_add_tlv_channel(struct sk_buff *skb,
 			struct ieee80211_conf *chandef)
 {
 	enum nl80211_channel_type ch_type = chandef->channel_type;
@@ -1098,9 +1131,9 @@ static void nrc_mac_add_tlv_channel(struct sk_buff *skb,
 static int nrc_mac_config(struct ieee80211_hw *hw, u32 changed)
 {
 	struct nrc *nw = hw->priv;
-	int ret = 0;
 	struct sk_buff *skb;
-	bool ps_enable = false;
+	int ret = 0;
+	bool is_tx = false;
 
 	skb = nrc_wim_alloc_skb(nw, WIM_CMD_SET, WIM_MAX_SIZE);
 
@@ -1114,36 +1147,92 @@ static int nrc_mac_config(struct ieee80211_hw *hw, u32 changed)
 		nw->center_freq = hw->conf.channel->center_freq;
 #endif
 
+		if (!atomic_read(&nw->d_deauth.delayed_deauth)) {
 #ifdef CONFIG_SUPPORT_CHANNEL_INFO
 		nrc_mac_add_tlv_channel(skb, &hw->conf.chandef);
 #else
 		nrc_mac_add_tlv_channel(skb, &hw->conf);
 #endif
+		} else {
+#ifdef CONFIG_SUPPORT_CHANNEL_INFO
+			memcpy(&nw->d_deauth.c, &hw->conf.chandef, sizeof(struct cfg80211_chan_def));
+			memcpy(&nw->d_deauth.ch, hw->conf.chandef.chan, sizeof(struct ieee80211_channel));
+			nw->d_deauth.c.chan = &nw->d_deauth.ch;
+#else
+			memcpy(&nw->d_deauth.c, &hw->conf, sizeof(struct ieee80211_conf));
+#endif
+		}
 		/* TODO: band (2G, 5G, etc) and bandwidth (20MHz, 40MHz, etc) */
 	}
 
 	if (changed & IEEE80211_CONF_CHANGE_PS) {
-		if (hw->conf.flags & IEEE80211_CONF_PS) {
-			ps_enable = true;
-			nw->ps_enabled = true;
-		} else {
-			ps_enable = false;
-			nw->ps_enabled = false;
+		nw->ps_enabled = (hw->conf.flags & IEEE80211_CONF_PS);
+		//nrc_ps_dbg("[%s,L%d] ps_enable:%d dynamic_ps_timeout:%d\n", __func__, __LINE__, nw->ps_enabled, hw->conf.dynamic_ps_timeout);
+
+		if (nw->drv_state == NRC_DRV_PS) {
+			/**
+			 * if the current state is already NRC_DRV_PS,
+			 * there's nothing to do in here even if mac80211 notifies wake-up.
+			 * the actual action to wake up for target will be done by
+			 * nrc_wake_tx_queue() with changing gpio signal.
+			 * (when driver receives a data frame.)
+			 */
+			if (nw->ps_enabled)
+				nrc_ps_dbg("Target is already in sleep...\n");
+			else
+				nrc_ps_dbg("Target will wake-up after frame type check.\n");
+
+			goto finish;
 		}
 
-		nrc_wim_skb_add_tlv(skb,
-				WIM_TLV_PS_ENABLE,
-				sizeof(ps_enable),
-				&ps_enable);
-
-		nrc_ps_dbg("WIM_TLV_PS_ENABLE(%d)", ps_enable);
-
+		if (ieee80211_hw_check(hw, SUPPORTS_DYNAMIC_PS)) {
+			if (nw->ps_enabled && (hw->conf.dynamic_ps_timeout > 0)) {
+				mod_timer(&nw->dynamic_ps_timer,
+					jiffies + msecs_to_jiffies(hw->conf.dynamic_ps_timeout));
+				goto finish;
+			}
+		} else {
+			if(power_save == NRC_PS_MODEMSLEEP)
+			{
+				// nw->drv_state = nw->ps_enabled ? NRC_DRV_PS : NRC_DRV_RUNNING;
+				if(nw->ps_enabled)
+				{
+					is_tx = true;
+					ret = nrc_xmit_wim_powersave(nw, skb, nw->ps_enabled, 0);
+					schedule_delayed_work(&nw->fake_bcn, msecs_to_jiffies(1024));
+					nrc_ps_dbg("[%s,L%d] Set To DRV_PS drv_state:%d\n", __func__, __LINE__, nw->drv_state);
+				}
+			}
+			else if(power_save >= NRC_PS_DEEPSLEEP_TIM)
+			{
+				if(nw->ps_enabled)
+				{
+					is_tx = true;
+					ret = nrc_xmit_wim_powersave(nw, skb, nw->ps_enabled, sleep_duration[0] * (sleep_duration[1] ? 1000 : 1));
+					nrc_ps_dbg("[%s,L%d] Enter DEEPSLEEP(%d)!!!\n", __func__, __LINE__, ret);
+				}
+			}
+		}
 	}
 
+finish:
 	/* i.e., if we added at least one tlv */
-	if (skb->len > sizeof(struct wim))
-		ret = nrc_xmit_wim_request(nw, skb);
-
+	//if(!skb_queue_is_last(&nw->hif->queue[((struct hif *)skb->data)->type], skb))
+	if(!is_tx)
+	{
+		if (skb->len <= sizeof(struct wim)) 
+		{
+			dev_kfree_skb(skb);
+			// nrc_ps_dbg("!!-- SKBUF FREE --!!\n");
+			return -1;
+		}
+		else
+		{
+			ret = nrc_xmit_wim_request(nw, skb);
+			// nrc_ps_dbg("!!-- SEND WIM WITHOUT PS --!!\n");
+		}
+	}
+	
 	return ret;
 }
 
@@ -1206,7 +1295,7 @@ static void nrc_mac_update_p2p_ps(struct sk_buff *skb,
 /* S1G Short Beacon Interval (in TU) */
 #define DEF_CFG_S1G_SHORT_BEACON_COUNT	10
 
-static void nrc_mac_bss_info_changed(struct ieee80211_hw *hw,
+void nrc_mac_bss_info_changed(struct ieee80211_hw *hw,
 				     struct ieee80211_vif *vif,
 				     struct ieee80211_bss_conf *info,
 				     u32 changed)
@@ -1216,6 +1305,13 @@ static void nrc_mac_bss_info_changed(struct ieee80211_hw *hw,
 	int ret;
 
 	nrc_mac_dbg("%s: changed=0x%x", __func__, changed);
+
+	if (nw->drv_state == NRC_DRV_PS) {
+		if (changed == 0x80309f && atomic_read(&nw->d_deauth.delayed_deauth))
+			memcpy(&nw->d_deauth.b, info, sizeof(struct ieee80211_bss_conf));
+
+		return;
+	}
 
 	skb = nrc_wim_alloc_skb_vif(nw, vif, WIM_CMD_SET, WIM_MAX_SIZE);
 
@@ -1296,6 +1392,7 @@ static void nrc_mac_bss_info_changed(struct ieee80211_hw *hw,
 
 	if (changed & BSS_CHANGED_BEACON)
 		nrc_vendor_update_beacon(hw, vif);
+
 #ifdef CONFIG_SUPPORT_AFTER_KERNEL_3_0_36
 	if (changed & BSS_CHANGED_SSID) {
 		nrc_mac_dbg("ssid=%s", info->ssid);
@@ -1304,6 +1401,7 @@ static void nrc_mac_bss_info_changed(struct ieee80211_hw *hw,
 				info->ssid);
 	}
 #endif
+
 	if (changed & BSS_CHANGED_ERP) {
 		struct wim_erp_param *p;
 
@@ -1383,7 +1481,6 @@ int nrc_mac_sta_add(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 	return 0;
 }
 
-static
 int nrc_mac_sta_remove(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 		       struct ieee80211_sta *sta)
 {
@@ -1434,6 +1531,7 @@ int nrc_mac_sta_state(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 	struct nrc_sta *i_sta = to_i_sta(sta);
 	unsigned long flags;
 	struct nrc_sta_handler *h;
+	struct nrc *nw = (struct nrc*)hw->priv;
 
 	nrc_dbg(NRC_DBG_STATE, "%s: sta:%pM, %d->%d", __func__, sta->addr,
 		    old_state, new_state);
@@ -1446,7 +1544,7 @@ int nrc_mac_sta_state(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 	if (state_changed(NOTEXIST, NONE)) {
 
 		memset(i_sta, 0, sizeof(*i_sta));
-		i_sta->nw = hw->priv;
+		i_sta->nw = nw;
 		i_sta->vif = vif;
 
 		INIT_LIST_HEAD(&i_sta->list);
@@ -1466,10 +1564,13 @@ int nrc_mac_sta_state(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 		i_sta->vif = vif;
 		nrc_mac_sta_add(hw, vif, sta);
 
-	} else if (state_changed(ASSOC, AUTH))
-		nrc_mac_sta_remove(hw, vif, sta);
+	} else if (state_changed(ASSOC, AUTH)) {
+		if (!atomic_read(&nw->d_deauth.delayed_deauth))
+			nrc_mac_sta_remove(hw, vif, sta);
+	}
 
-	nrc_wim_change_sta_state(hw->priv, vif, sta, new_state);
+	if (!atomic_read(&nw->d_deauth.delayed_deauth))
+		nrc_wim_change_sta_state(nw, vif, sta, new_state);
 
 	for (h = &__sta_h_start; h < &__sta_h_end; h++)
 		h->sta_state(hw, vif, sta, old_state, new_state);
@@ -1536,7 +1637,6 @@ static int nrc_mac_set_tim(struct ieee80211_hw *hw, struct ieee80211_sta *sta,
 }
 
 #ifdef CONFIG_SUPPORT_CHANNEL_INFO
-static
 int nrc_mac_conf_tx(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 		    u16 ac, const struct ieee80211_tx_queue_params *params)
 #else
@@ -1556,22 +1656,29 @@ int nrc_mac_conf_tx(struct ieee80211_hw *hw,
 		    __func__, ac, params->txop, params->cw_min,
 		    params->cw_max, params->aifs, params->uapsd);
 
-	skb = nrc_wim_alloc_skb_vif(nw, vif, WIM_CMD_SET, tlv_len(sizeof(*q)));
+	if (atomic_read(&nw->d_deauth.delayed_deauth))
+		memcpy(&nw->d_deauth.tqp[ac], params, sizeof(struct ieee80211_tx_queue_params));
 
-	q = nrc_wim_skb_add_tlv(skb, WIM_TLV_TXQ_PARAM, sizeof(*q), NULL);
+    if (nw->drv_state >= NRC_DRV_RUNNING) {
+		skb = nrc_wim_alloc_skb_vif(nw, vif, WIM_CMD_SET, tlv_len(sizeof(*q)));
+
+		q = nrc_wim_skb_add_tlv(skb, WIM_TLV_TXQ_PARAM, sizeof(*q), NULL);
 #ifdef CONFIG_SUPPORT_AFTER_KERNEL_3_0_36
-	q->ac = vif->hw_queue[ac];
+		q->ac = vif->hw_queue[ac];
 #else
-	q->ac = (u8)ac;
+		q->ac = (u8)ac;
 #endif
-	q->txop = params->txop;
-	q->cw_min = params->cw_min;
-	q->cw_max = params->cw_max;
-	q->aifsn = params->aifs;
-	q->uapsd = params->uapsd;
-	q->sta_type = 0; /* FIXME */
+		q->txop = params->txop;
+		q->cw_min = params->cw_min;
+		q->cw_max = params->cw_max;
+		q->aifsn = params->aifs;
+		q->uapsd = params->uapsd;
+		q->sta_type = 0; /* FIXME */
 
-	return nrc_xmit_wim_request(nw, skb);
+		return nrc_xmit_wim_request(nw, skb);
+    } else {
+        return 0;
+	}
 }
 
 static int nrc_mac_get_survey(struct ieee80211_hw *hw, int idx,
@@ -1988,6 +2095,14 @@ static int nrc_mac_set_key(struct ieee80211_hw *hw, enum set_key_cmd cmd,
 	int vif_id = i_vif->index;
 	int ret;
 
+	if (atomic_read(&nw->d_deauth.delayed_deauth)) {
+		if (key->flags & IEEE80211_KEY_FLAG_PAIRWISE)
+			memcpy(&nw->d_deauth.p, key, sizeof(struct ieee80211_key_conf));
+		else
+			memcpy(&nw->d_deauth.g, key, sizeof(struct ieee80211_key_conf));
+		return 0;
+	}
+
 	if (!(nw->cap.vif_caps[vif_id].cap_mask & WIM_SYSTEM_CAP_HWSEC)) {
 		pr_err("failed to set caps");
 		return 1;
@@ -1998,15 +2113,36 @@ static int nrc_mac_set_key(struct ieee80211_hw *hw, enum set_key_cmd cmd,
 		sta = ieee80211_find_sta(vif, vif->bss_conf.bssid);
 	}
 
+	if (cmd == DISABLE_KEY) {
+		nrc_mac_dbg("%s delete key (flag:%d, cipher:%d)\n",
+			__func__, key->flags, key->cipher);
+
+		if ((key->flags & IEEE80211_KEY_FLAG_PAIRWISE) && sta == NULL) {
+			nrc_mac_dbg("%s delete ptk but sta is null! (key->flag:%u)\n",
+				__func__, key->flags);
+			return 1;
+		}
+
+		if (key->cipher == WLAN_CIPHER_SUITE_AES_CMAC ||
+			key->cipher == WLAN_CIPHER_SUITE_BIP_GMAC_128 ||
+			key->cipher == WLAN_CIPHER_SUITE_BIP_GMAC_256) {
+			nrc_mac_dbg("%s delete key but not supported key cipher (key->cipher:%u)\n",
+				__func__, key->cipher);
+			return 1;
+		}
+	}
+
 	if (vif->type == NL80211_IFTYPE_MESH_POINT)
 		return 1;
 
 	/* Record key information to per-STA driver data structure for RX */
 	/* TODO: DISABLE_KEY -> later */
 	if (cmd == SET_KEY) {
+		/* HW does NOT Support BIP until now => need to SW-based Crypto => return 1 for this */
 		if (key->cipher == WLAN_CIPHER_SUITE_AES_CMAC ||
 			key->cipher == WLAN_CIPHER_SUITE_BIP_GMAC_128 ||
 			key->cipher == WLAN_CIPHER_SUITE_BIP_GMAC_256) {
+			nw->cipher_pairwise = key->cipher; //for PMF deauth for keep alive on AP
 			key->flags |= IEEE80211_KEY_FLAG_SW_MGMT_TX;
 			return 1;
 		}
@@ -2164,7 +2300,7 @@ static int nrc_mac_roc(struct ieee80211_hw *hw, struct ieee80211_channel *chan,
 	return 0;
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0) 
+#if KERNEL_VERSION(5, 4, 0) <= NRC_TARGET_KERNEL_VERSION
 static int nrc_mac_cancel_roc(struct ieee80211_hw *hw, struct ieee80211_vif *vif)
 #else
 static int nrc_mac_cancel_roc(struct ieee80211_hw *hw)
@@ -2388,19 +2524,21 @@ void nrc_free_hw(struct nrc *nw)
 }
 
 #ifdef CONFIG_NEW_REG_NOTIFIER
-static void nrc_reg_notifier(struct wiphy *wiphy,
+void nrc_reg_notifier(struct wiphy *wiphy,
 		struct regulatory_request *request)
 #else
-static int nrc_reg_notifier(struct wiphy *wiphy,
+int nrc_reg_notifier(struct wiphy *wiphy,
 		struct regulatory_request *request)
 #endif
 {
-	int i;
 	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
 	struct nrc *nw = hw->priv;
 	struct sk_buff *skb;
 	//struct wim_bd_param *tmp;
+#if defined(CONFIG_SUPPORT_BD)
 	struct wim_bd_param *bd_param;
+	int i;
+#endif /* defined(CONFIG_SUPPORT_BD) */
 
 	nrc_mac_dbg("info: cfg80211 regulatory domain callback for %c%c",
 			request->alpha2[0], request->alpha2[1]);
@@ -2558,48 +2696,53 @@ static int nrc_vendor_cmd_announce5(struct wiphy *wiphy,
 static struct wiphy_vendor_command nrc_vendor_cmds[] = {
 	{
 		.info = { .vendor_id = OUI_NRC,
-		.subcmd = NRC_OUI_SUBCMD_ANNOUNCE1 },
+			  .subcmd = NRC_OUI_SUBCMD_ANNOUNCE1 },
 		.flags = WIPHY_VENDOR_CMD_NEED_NETDEV,
 		.doit = nrc_vendor_cmd_announce1,
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0)
-		.policy = VENDOR_CMD_RAW_DATA,
+#if KERNEL_VERSION(5, 3, 0) <= NRC_TARGET_KERNEL_VERSION
+		.policy = nrc_vendor_command_policy,
+		.maxattr = MAX_VENDOR_ATTR,
 #endif
 	},
 	{
 		.info = { .vendor_id = OUI_NRC,
-		.subcmd = NRC_OUI_SUBCMD_ANNOUNCE2 },
+			  .subcmd = NRC_OUI_SUBCMD_ANNOUNCE2 },
 		.flags = WIPHY_VENDOR_CMD_NEED_NETDEV,
 		.doit = nrc_vendor_cmd_announce2,
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0)
-		.policy = VENDOR_CMD_RAW_DATA,
-#endif		
+#if KERNEL_VERSION(5, 3, 0) <= NRC_TARGET_KERNEL_VERSION
+		.policy = nrc_vendor_command_policy,
+		.maxattr = MAX_VENDOR_ATTR,
+#endif
 	},
 	{
 		.info = { .vendor_id = OUI_NRC,
-		.subcmd = NRC_OUI_SUBCMD_ANNOUNCE3 },
+			  .subcmd = NRC_OUI_SUBCMD_ANNOUNCE3 },
 		.flags = WIPHY_VENDOR_CMD_NEED_NETDEV,
 		.doit = nrc_vendor_cmd_announce3,
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0)
-		.policy = VENDOR_CMD_RAW_DATA,
-#endif        
+#if KERNEL_VERSION(5, 3, 0) <= NRC_TARGET_KERNEL_VERSION
+		.policy = nrc_vendor_command_policy,
+		.maxattr = MAX_VENDOR_ATTR,
+#endif
 	},
 	{
 		.info = { .vendor_id = OUI_NRC,
-		.subcmd = NRC_OUI_SUBCMD_ANNOUNCE4 },
+			  .subcmd = NRC_OUI_SUBCMD_ANNOUNCE4 },
 		.flags = WIPHY_VENDOR_CMD_NEED_NETDEV,
 		.doit = nrc_vendor_cmd_announce4,
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0)
-		.policy = VENDOR_CMD_RAW_DATA,
-#endif        
+#if KERNEL_VERSION(5, 3, 0) <= NRC_TARGET_KERNEL_VERSION
+		.policy = nrc_vendor_command_policy,
+		.maxattr = MAX_VENDOR_ATTR,
+#endif
 	},
 	{
 		.info = { .vendor_id = OUI_NRC,
-		.subcmd = NRC_OUI_SUBCMD_ANNOUNCE5 },
+			  .subcmd = NRC_OUI_SUBCMD_ANNOUNCE5 },
 		.flags = WIPHY_VENDOR_CMD_NEED_NETDEV,
 		.doit = nrc_vendor_cmd_announce5,
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0)
-		.policy = VENDOR_CMD_RAW_DATA,
-#endif        
+#if KERNEL_VERSION(5, 3, 0) <= NRC_TARGET_KERNEL_VERSION
+		.policy = nrc_vendor_command_policy,
+		.maxattr = MAX_VENDOR_ATTR,
+#endif
 	},
 
 };
@@ -2611,6 +2754,93 @@ static const struct nl80211_vendor_cmd_info nrc_vendor_events[] = {
 	},
 };
 
+#define MAC_FRAME_HEADER_LENGTH 24
+#define TIMESTAMP_LENGTH 8
+static void nrc_processing_fake_beacon(struct work_struct *work)
+{
+	struct nrc *nw = container_of(work, struct nrc, fake_bcn.work);
+
+	if (nw->drv_state == NRC_DRV_PS) {
+		struct ieee80211_hdr *mh;
+        if (nw->c_bcn) {
+			u8 *p = (void*)nw->c_bcn->data;
+			u64 *tstamp = (u64*)(p + MAC_FRAME_HEADER_LENGTH);
+			u64 t = *tstamp;
+			u16 bi = *(u16*)(p + MAC_FRAME_HEADER_LENGTH + TIMESTAMP_LENGTH);
+			struct sk_buff* cskb;
+			mh = (void*)p;
+			t = (t << 32) + (t >> 32);
+			mh->seq_ctrl += 0x10;
+			t += bi * 1000;
+			t = (t << 32) + (t >> 32);
+			*tstamp = t;
+			cskb = skb_copy(nw->c_bcn, GFP_ATOMIC);
+			if (cskb && !atomic_read(&nw->d_deauth.delayed_deauth)) {
+				ieee80211_rx_irqsafe(nw->hw, cskb);
+				schedule_delayed_work(&nw->fake_bcn, msecs_to_jiffies(bi));
+			}
+		}
+	}
+}
+
+static void nrc_processing_fake_probe_response(struct work_struct *work)
+{
+	struct nrc *nw = container_of(work, struct nrc, fake_prb_resp.work);
+	struct ieee80211_hdr *mh;
+
+	if (nw->c_prb_resp) {
+		u8 *p = (void*)nw->c_prb_resp->data;
+		u64 *tstamp = (u64*)(p + MAC_FRAME_HEADER_LENGTH);
+		u64 *tstamp2;
+		u64 t = *tstamp;
+		struct sk_buff* cskb;
+		mh = (void*)p;
+		mh->seq_ctrl += 0x10;
+		p = (void*)nw->c_bcn->data;
+		tstamp2 = (u64*)(p + MAC_FRAME_HEADER_LENGTH);
+		/* add an arbitrary time gap(100ms) into the timestamp of the current fake beacon */
+		t += *tstamp2 + 100;
+		*tstamp = t;
+		cskb = skb_copy(nw->c_prb_resp, GFP_ATOMIC);
+		if (cskb) {
+			ieee80211_rx_irqsafe(nw->hw, cskb);
+		}
+	}
+}
+
+#if defined(ENABLE_DYNAMIC_PS)
+#if KERNEL_VERSION(4, 15, 0) > LINUX_VERSION_CODE
+static void nrc_ps_timeout_timer(unsigned long data)
+{
+	struct nrc *nw = (struct nrc *)data;
+#else
+static void nrc_ps_timeout_timer(struct timer_list *t)
+{
+	struct nrc *nw = from_timer(nw, t, dynamic_ps_timer);
+#endif
+	struct nrc_hif_device *hdev = nw->hif;
+
+	nrc_ps_dbg("[%s,L%d] ps_enable:%d dynamic_ps_timeout:%d\n",
+				__func__, __LINE__, nw->ps_enabled, nw->hw->conf.dynamic_ps_timeout);
+
+	if (nw->ps_enabled) {
+		if (nw->drv_state == NRC_DRV_PS) {
+			/*
+			 * if the current state is already NRC_DRV_PS,
+			 * there's nothing to do in here even if mac80211 notifies wake-up.
+			 * the actual action to wake up for target will be done by
+			 * nrc_wake_tx_queue() with changing gpio signal.
+			 * (when driver receives a data frame.)
+			 */
+			nrc_ps_dbg("Target is already in deepsleep...\n");
+
+			return;
+		}
+		if (nw->ps_wq != NULL)
+			queue_work(nw->ps_wq, &hdev->ps_work);
+	}
+}
+#endif /* if defined(ENABLE_DYNAMIC_PS) */
 
 /**
  * nrc_hw_register - initialize struct ieee80211_hw instance
@@ -2693,12 +2923,24 @@ int nrc_register_hw(struct nrc *nw)
 		ieee80211_hw_set(hw, CONNECTION_MONITOR);
 	}
 
-	if (power_save) {
+	if (power_save >= NRC_PS_MODEMSLEEP) {
 		ieee80211_hw_set(hw, SUPPORTS_PS);
+#if defined(ENABLE_DYNAMIC_PS)
+		if (power_save >= NRC_PS_DEEPSLEEP_TIM) {
+			ieee80211_hw_set(hw, SUPPORTS_DYNAMIC_PS);
+#if KERNEL_VERSION(4, 15, 0) > LINUX_VERSION_CODE
+			setup_timer(&nw->dynamic_ps_timer,
+				nrc_ps_timeout_timer, (unsigned long)nw);
+#else
+			timer_setup(&nw->dynamic_ps_timer, nrc_ps_timeout_timer, 0);
+#endif
+		}
+#endif
 		/* README - yj.kim 06/05/2020
 		 * Target FW handles qos_null frame for power save mode
 		 */
-		/* ieee80211_hw_set(hw, PS_NULLFUNC_STACK); */
+		if (nullfunc_enable)
+			ieee80211_hw_set(hw, PS_NULLFUNC_STACK);
 		/* ieee80211_hw_set(hw, HOST_BROADCAST_PS_BUFFERING); */
 	}
 
@@ -2840,6 +3082,8 @@ int nrc_register_hw(struct nrc *nw)
 	nw->ampdu_reject = false;
 
 	INIT_DELAYED_WORK(&nw->roc_finish, nrc_mac_roc_finish);
+	INIT_DELAYED_WORK(&nw->fake_bcn, nrc_processing_fake_beacon);
+	INIT_DELAYED_WORK(&nw->fake_prb_resp, nrc_processing_fake_probe_response);
 
 	/* trx */
 	nrc_mac_trx_init(nw);
@@ -2857,7 +3101,7 @@ int nrc_register_hw(struct nrc *nw)
 		hw = NULL;
 		return -EINVAL;
 	}
-	
+
 	/* debugfs */
 	nrc_init_debugfs(nw);
 
@@ -2868,10 +3112,18 @@ void nrc_unregister_hw(struct nrc *nw)
 {
 	ieee80211_unregister_hw(nw->hw);
 	SET_IEEE80211_DEV(nw->hw, NULL);
-
-	flush_workqueue(nw->workqueue);
-	destroy_workqueue(nw->workqueue);
+	nrc_hif_cleanup(nw->hif);
+	
+	if (nw->workqueue != NULL) {
+		flush_workqueue(nw->workqueue);
+		destroy_workqueue(nw->workqueue);
+	}
 	nw->workqueue = NULL;
+	if (nw->ps_wq != NULL) {
+		flush_workqueue(nw->ps_wq);
+		destroy_workqueue(nw->ps_wq);
+	}
+	nw->ps_wq = NULL;
 	if (nw->vendor_skb) {
 		dev_kfree_skb_any(nw->vendor_skb);
 		nw->vendor_skb = NULL;

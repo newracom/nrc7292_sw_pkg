@@ -95,6 +95,9 @@ struct nrc_hif_ops {
 	bool need_maskrom_war;
 	bool sync_auto;
 	bool (*support_fastboot)(struct nrc_hif_device *dev);
+	int (*suspend_rx_thread)(struct nrc_hif_device *dev);
+	int (*resume_rx_thread)(struct nrc_hif_device *dev);
+	int (*check_target)(struct nrc_hif_device *dev);
 };
 
 /* struct nrc_hif_device - host interface driver
@@ -118,6 +121,7 @@ struct nrc_hif_device {
 
 	struct sk_buff_head queue[2]; /* 0: frame, 1: wim */
 	struct work_struct work;
+	struct work_struct ps_work;
 };
 
 /* struct nrc_hif_rx_info - additional information on rx
@@ -324,6 +328,36 @@ static inline bool nrc_hif_support_fastboot(struct nrc_hif_device *dev)
 	return false;
 }
 
+static inline void nrc_hif_config(struct nrc_hif_device *dev)
+{
+	if (dev->hif_ops->config)
+		dev->hif_ops->config(dev);
+}
+
+static inline int nrc_hif_suspend_rx_thread(struct nrc_hif_device *dev)
+{
+	if (dev->hif_ops->suspend_rx_thread)
+		return dev->hif_ops->suspend_rx_thread(dev);
+
+	return 0;
+}
+
+static inline int nrc_hif_resume_rx_thread(struct nrc_hif_device *dev)
+{
+	if (dev->hif_ops->resume_rx_thread)
+		return dev->hif_ops->resume_rx_thread(dev);
+
+	return 0;
+}
+
+static inline int nrc_hif_check_target(struct nrc_hif_device *dev)
+{
+	if (dev->hif_ops->check_target)
+		return dev->hif_ops->check_target(dev);
+
+	return -1;
+}
+
 struct hif {
 	u8 type;
 	u8 subtype;
@@ -353,14 +387,13 @@ int nrc_xmit_wim_request(struct nrc *nw, struct sk_buff *skb);
  *
  * Return: WIM RESPONSE message, null if timeout reached.
  */
+
+int nrc_xmit_wim_powersave(struct nrc *nw, struct sk_buff *skb_src, uint16_t ps_enable, uint64_t duration);
 struct sk_buff *nrc_xmit_wim_request_wait(struct nrc *nw,
 		struct sk_buff *skb, int timeout);
 int nrc_xmit_wim_response(struct nrc *nw, struct sk_buff *skb);
 int nrc_xmit_wim_simple_request(struct nrc *nw, int cmd);
-int nrc_xmit_frame(struct nrc *nw,
-		   struct ieee80211_vif *vif,
-		   struct ieee80211_sta *sta,
-		   struct sk_buff *skb);
+int nrc_xmit_frame(struct nrc *nw, s8 vif_index, u16 aid, struct sk_buff *skb);
 int nrc_xmit_injected_frame(struct nrc *nw,
 		   struct ieee80211_vif *vif,
 		   struct ieee80211_sta *sta,
@@ -376,4 +409,5 @@ void nrc_hif_down(struct nrc *nw);
 void nrc_hif_up(struct nrc *nw);
 void nrc_hif_sync_lock(struct nrc_hif_device *dev);
 void nrc_hif_sync_unlock(struct nrc_hif_device *dev);
+void nrc_hif_flush_wq(struct nrc_hif_device *dev);
 #endif

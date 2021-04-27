@@ -24,6 +24,9 @@
 #define NRC_OUI_SUBCMD_ANNOUNCE4			0xF3
 #define NRC_OUI_SUBCMD_ANNOUNCE5			0xF4
 
+#define RPI_GPIO_FOR_PS		(26)
+#define RPI_GPIO_FOR_RST	(4)
+
 enum nrc_vendor_event {
 	NRC_VENDOR_EVENT_ANNOUNCE = 0,
 	NUM_VENDOR_EVENT,

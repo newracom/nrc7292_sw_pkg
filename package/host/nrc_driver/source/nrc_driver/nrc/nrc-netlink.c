@@ -84,6 +84,7 @@ static const struct nla_policy nl_umac_policy[NL_WFA_CAPI_ATTR_LAST] = {
 	[NL_WFA_CAPI_PARAM_VENDOR2]	= {.type = NLA_NUL_STRING},
 	[NL_WFA_CAPI_PARAM_VENDOR3]	= {.type = NLA_NUL_STRING},
 	[NL_WFA_CAPI_PARAM_RESPONSE]	= {.type = NLA_NUL_STRING},
+	[NL_WFA_CAPI_PARAM_VIF_ID]  = {.type = NLA_S32},
 	[NL_WFA_CAPI_PARAM_BSS_MAX_IDLE_OFFSET]	= {.type = NLA_S32},
 	[NL_WFA_CAPI_PARAM_BSS_MAX_IDLE]		= {.type = NLA_S32},
 	[NL_SHELL_RUN_CMD]		= {.type = NLA_NUL_STRING},
@@ -99,6 +100,9 @@ static const struct nla_policy nl_umac_policy[NL_WFA_CAPI_ATTR_LAST] = {
 	[NL_SET_IE_EID] = {.type = NLA_U16},
 	[NL_SET_IE_LENGTH] = {.type = NLA_U8},
 	[NL_SET_IE_DATA] = {.type = NLA_NUL_STRING},
+	[NL_SET_SAE_EID] = {.type = NLA_U16},
+	[NL_SET_SAE_LENGTH] = {.type = NLA_U16},
+	[NL_SET_SAE_DATA] = {.type = NLA_NUL_STRING},
 };
 
 static const struct genl_multicast_group nl_umac_mcast_grps[] = {
@@ -112,13 +116,13 @@ static struct genl_family nrc_nl_fam = {
 	.name		= NRC_NETLINK_FAMILY_NAME,
 	.version	= 1,
 	.maxattr	= MAX_NL_WFA_CAPI_ATTR,
-	.netnsok	= true,    
+#if KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION
+	.policy = nl_umac_policy,
+#endif
 #ifdef CONFIG_SUPPORT_NEW_NETLINK
 	.parallel_ops	= false,
 #endif
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 2, 0)         
-    .policy = nl_umac_policy,
-#endif      
+	.netnsok	= true,
 	.pre_doit	= nrc_nl_pre_doit,
 	.post_doit	= nrc_nl_post_doit,
 #ifdef CONFIG_SUPPORT_AFTER_KERNEL_3_0_36
@@ -132,7 +136,7 @@ int nrc_netlink_rx(struct nrc *nw, struct sk_buff *skb, u8 subtype)
 {
 	struct sk_buff *mcast_skb;
 	void *data;
-    
+
 #ifdef CONFIG_SUPPORT_GENLMSG_DEFAULT
 	mcast_skb = genlmsg_new(GENLMSG_DEFAULT_SIZE, GFP_KERNEL);
 #else
@@ -173,7 +177,7 @@ int nrc_netlink_trigger_recovery(struct nrc *nw)
 {
 	struct sk_buff *mcast_skb;
 	void *data;
-    
+
 #ifdef CONFIG_SUPPORT_GENLMSG_DEFAULT
 	mcast_skb = genlmsg_new(GENLMSG_DEFAULT_SIZE, GFP_KERNEL);
 #else
@@ -452,7 +456,7 @@ static int halow_set_dut(struct sk_buff *skb, struct genl_info *info)
 			chanctx_conf = &nrc_nw->hw->conf;
 			band = chanctx_conf->channel->band;
 #endif
-			nrc_xmit_frame(nrc_nw, vif, control.sta, b);
+			nrc_xmit_frame(nrc_nw, hw_vifindex(vif), (!!control.sta ? control.sta->aid : 0), b);
 		} else
 			goto halow_not_supported;
 
@@ -736,6 +740,8 @@ static void capi_send_addba(void *data, u8 *mac, struct ieee80211_vif *vif)
 
 		sta = ieee80211_find_sta(vif, vif->bss_conf.bssid);
 	} else {
+		if (!c->addr)
+			goto out;
 		sta = ieee80211_find_sta(vif, c->addr);
 	}
 
@@ -788,7 +794,7 @@ static int capi_sta_send_addba(struct sk_buff *skb, struct genl_info *info)
 
 	return capi_sta_reply(NL_WFA_CAPI_SEND_ADDBA, info,
 			      param.done ?
-			      NL_WFA_CAPI_RESP_NONE : NL_WFA_CAPI_RESP_ERR);
+			      NL_WFA_CAPI_RESP_OK : NL_WFA_CAPI_RESP_ERR);
 }
 
 static void capi_send_delba(void *data, u8 *mac, struct ieee80211_vif *vif)
@@ -809,6 +815,8 @@ static void capi_send_delba(void *data, u8 *mac, struct ieee80211_vif *vif)
 
 		sta = ieee80211_find_sta(vif, vif->bss_conf.bssid);
 	} else {
+		if (!c->addr)
+			goto out;
 		sta = ieee80211_find_sta(vif, c->addr);
 	}
 
@@ -855,7 +863,7 @@ static int capi_sta_send_delba(struct sk_buff *skb, struct genl_info *info)
 
 	return capi_sta_reply(NL_WFA_CAPI_SEND_DELBA, info,
 			      param.done ?
-			      NL_WFA_CAPI_RESP_NONE : NL_WFA_CAPI_RESP_ERR);
+			      NL_WFA_CAPI_RESP_OK : NL_WFA_CAPI_RESP_ERR);
 }
 
 /**************************************************************************//**
@@ -885,19 +893,47 @@ static int capi_bss_max_idle_offset(struct sk_buff *skb, struct genl_info *info)
 			NL_WFA_CAPI_RESP_NONE);
 }
 
+static int s1g_unscaled_interval_max = 0x3fff;
+static int convert_usf(int interval)
+{
+	int ui, usf = 0, interval_usf;
+
+	if (interval <= s1g_unscaled_interval_max) {
+		ui = interval;
+		usf = 0;
+	} else if (interval / 10 <= s1g_unscaled_interval_max) {
+		ui= interval / 10;
+		usf = 1;
+	} else if (interval / 1000 <= s1g_unscaled_interval_max) {
+		ui = interval / 1000;
+		usf = 2;
+        } else if (interval / 10000 <= s1g_unscaled_interval_max) {
+		ui = interval / 10000;
+		usf = 3;
+	} else {
+		ui = 0;
+		usf = 0;
+        }
+
+	interval_usf = (usf << 14) + ui;
+
+	return interval_usf;
+}
+
 /*
  * FunctionName	: capi_bss_max_idle
  * Description	: Set the max bss idle through netlink.
  *					Use below parameter passed via Netlink
  *					NL_WFA_CAPI_PARAM_BSS_MAX_IDLE: S32
  *					NL_WFA_CAPI_PARAM_VIF_ID: S32
+ *					NL_WFA_CAPI_PARAM_BSS_MAX_IDLE_OFFSET: S32 //AUTO_USF Setting
  * Parameters	: skb(struct sk_buff*)
  *				: info(struct genl_info*)
  * Returns		: int(capi_sta_reply)
  */
 static int capi_bss_max_idle(struct sk_buff *skb, struct genl_info *info)
 {
-	int32_t max_idle, vif_id;
+	int32_t max_idle, vif_id, no_usf_auto_convert;
 	struct ieee80211_vif *vif;
 
 	if ((!info->attrs[NL_WFA_CAPI_PARAM_BSS_MAX_IDLE]) ||
@@ -908,14 +944,36 @@ static int capi_bss_max_idle(struct sk_buff *skb, struct genl_info *info)
 
 	max_idle = nla_get_s32(info->attrs[NL_WFA_CAPI_PARAM_BSS_MAX_IDLE]);
 	vif_id = nla_get_s32(info->attrs[NL_WFA_CAPI_PARAM_VIF_ID]);
+	no_usf_auto_convert = nla_get_s32(info->attrs[NL_WFA_CAPI_PARAM_BSS_MAX_IDLE_OFFSET]);
+
 	vif = nrc_nw->vif[vif_id];
-	nrc_dbg(NRC_DBG_CAPI, "%s(%d)", __func__, max_idle);
+
+	nrc_dbg(NRC_DBG_CAPI, "%s (no_usf_auto_convert:%d) (max_idle:%d)",
+		__func__, no_usf_auto_convert, max_idle);
 
 	if (vif) {
 		struct nrc_vif *i_vif;
-
 		i_vif = to_i_vif(vif);
-		i_vif->max_idle_period = max_idle;
+		if (nrc_mac_is_s1g(nrc_nw->hw->priv) && max_idle) {
+			/* bss_max_idle: in unit of 1000 TUs (1024ms = 1.024 seconds) */
+			if (max_idle > 16383 * 10000 || max_idle <= 0) {
+				i_vif->max_idle_period = 0;
+			} else {
+				/* (Default) Convert in USF Format (Value (14bit) * USF(2bit)) and save it */
+				if (no_usf_auto_convert) {
+					i_vif->max_idle_period = max_idle;
+				} else {
+					i_vif->max_idle_period = convert_usf(max_idle);
+				}
+			}
+		} else {
+			if (max_idle > 65535 || max_idle <= 0) {
+				i_vif->max_idle_period = 0;
+			} else {
+				i_vif->max_idle_period = max_idle;
+			}
+		}
+		nrc_dbg(NRC_DBG_CAPI, "%s max_idle(%d) vs converted_max_idle(%d)", __func__, max_idle, i_vif->max_idle_period);
 	}
 
 	return capi_sta_reply(NL_WFA_CAPI_BSS_MAX_IDLE, info,
@@ -1086,7 +1144,7 @@ static int nrc_shell_run_simple(struct sk_buff *skb, struct genl_info *info)
 {
 	char *cmd = NULL;
 	struct sk_buff *wim_skb;
-    
+
 	if (!nrc_access_vif(nrc_nw)) {
 		nrc_dbg(NRC_DBG_CAPI, "%s Can't send command", __func__);
 		return -EIO;
@@ -1132,7 +1190,7 @@ static int nrc_shell_run(struct sk_buff *skb, struct genl_info *info)
 	char cmd_resp[512];
 	struct sk_buff *msg, *wim_skb, *wim_resp;
 	void *hdr;
-    
+
 	if (!nrc_access_vif(nrc_nw)) {
 		nrc_dbg(NRC_DBG_CAPI, "%s Can't send command", __func__);
 		return -EIO;
@@ -1211,7 +1269,7 @@ static int cli_app_get_info(struct sk_buff *skb, struct genl_info *info)
 	const int max_number_per_response = 20;
 	char *str = NULL;
 	int i = 0;
-    
+
 	memset(cmd_resp, 0x0, sizeof(cmd_resp));
 
 	if (!nrc_access_vif(nrc_nw)) {
@@ -1340,6 +1398,52 @@ static int nrc_set_ie(struct sk_buff *skb, struct genl_info *info)
 	return 0;
 }
 
+static int nrc_set_sae(struct sk_buff *skb, struct genl_info *info)
+{
+	// 10/27/2020 Shinwoo Lee
+	// Annotated debug messages out, but left them for future debugging
+
+	struct sk_buff *wim_skb;
+	struct wim_set_sae_param sae;
+	int i;
+	// nrc_dbg(NRC_DBG_WIM, "nrc-netlink driver Log (before copying eid)\n");
+	sae.eid = nla_get_u16(info->attrs[NL_SET_SAE_EID]);
+	// nrc_dbg(NRC_DBG_WIM, "nrc-netlink driver Log (before copying length)\n");
+	sae.length = nla_get_u16(info->attrs[NL_SET_SAE_LENGTH]);
+
+	for (i=0; i< sae.length; i++) {
+		if (i==0) nrc_dbg(NRC_DBG_WIM, "Data: %x", *(info->attrs[NL_SET_SAE_DATA]));
+		else nrc_dbg(NRC_DBG_WIM, "%x", *(info->attrs[NL_SET_SAE_DATA]+i));
+	}
+	// nrc_dbg(NRC_DBG_WIM, "nrc-netlink driver Log (before copying data)\n");
+	nla_strlcpy(sae.data, info->attrs[NL_SET_SAE_DATA], sae.length+1);
+	wim_skb = nrc_wim_alloc_skb(nrc_nw, WIM_CMD_SET_SAE,
+		sizeof(struct wim_set_sae_param));
+
+	// nrc_dbg_enable(NRC_DBG_WIM);
+	// nrc_dbg(NRC_DBG_WIM, "nrc-netlink driver log (after copying data)\n");
+	// nrc_dbg(NRC_DBG_WIM, "----------------------\n");
+	// nrc_dbg(NRC_DBG_WIM, "EID: %d\n", sae.eid);
+	// nrc_dbg(NRC_DBG_WIM, "Length: %d\n", sae.length);
+	// for (i=0; i<sae.length; i++) {
+	// 	if (i==0) nrc_dbg(NRC_DBG_WIM, "Data: %x", *(sae.data+i));
+	// 	else nrc_dbg(NRC_DBG_WIM, "%x", *(sae.data+i));
+	// }
+	// nrc_dbg(NRC_DBG_WIM, "\n----------------------\n");
+
+	if (!wim_skb)
+		return -EINVAL;
+
+	// nrc_dbg(NRC_DBG_WIM, "nrc-netlink driver log (add tlv)\n");
+	// nrc_dbg(NRC_DBG_WIM, "----------------------\n");
+	// nrc_dbg(NRC_DBG_WIM, "size of tlv : %d\n", sizeof(struct wim_set_sae_param));
+
+	nrc_wim_skb_add_tlv(wim_skb, WIM_TLV_SAE_PARAM, sizeof(struct wim_set_sae_param), &sae);
+	nrc_xmit_wim_request(nrc_nw, wim_skb);
+
+	return 0;
+}
+
 #ifdef CONFIG_SUPPORT_GENLMSG_DEFAULT
 static const struct genl_ops nl_umac_nl_ops[] = {
 #else
@@ -1348,136 +1452,113 @@ static struct genl_ops nl_umac_nl_ops[] = {
 	{
 		.cmd	= NL_WFA_CAPI_STA_GET_INFO,
 		.doit	= capi_sta_get_info,
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0) 
+#if KERNEL_VERSION(5, 2, 0) > NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
-#else
-		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 #endif
 	},
 	{
 		.cmd	= NL_WFA_CAPI_STA_SET_11N,
 		.doit	= capi_sta_set_11n,
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0) 
+#if KERNEL_VERSION(5, 2, 0) > NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
-#else
-		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 #endif
 	},
 	{
 		.cmd	= NL_WFA_CAPI_SEND_ADDBA,
 		.doit	= capi_sta_send_addba,
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0) 
+#if KERNEL_VERSION(5, 2, 0) > NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
-#else
-		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 #endif
 	},
 	{
 		.cmd	= NL_WFA_CAPI_SEND_DELBA,
 		.doit	= capi_sta_send_delba,
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0) 
+#if KERNEL_VERSION(5, 2, 0) > NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
-#else
-		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 #endif
 	},
 	{
 		.cmd	= NL_WFA_CAPI_BSS_MAX_IDLE,
 		.doit	= capi_bss_max_idle,
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0) 
+#if KERNEL_VERSION(5, 2, 0) > NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
-#else
-		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 #endif
 	},
 	{
 		.cmd	= NL_WFA_CAPI_BSS_MAX_IDLE_OFFSET,
 		.doit	= capi_bss_max_idle_offset,
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0) 
+#if KERNEL_VERSION(5, 2, 0) > NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
-#else
-		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 #endif
 	},
 	{
 		.cmd	= NL_TEST_MMIC_FAILURE,
 		.doit	= test_mmic_failure,
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0) 
+#if KERNEL_VERSION(5, 2, 0) > NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
-#else
-		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 #endif
 	},
 	{
 		.cmd	= NL_SHELL_RUN,
 		.doit	= nrc_shell_run,
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0) 
+#if KERNEL_VERSION(5, 2, 0) > NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
-#else
-		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 #endif
 	},
 	{
 		.cmd	= NL_SHELL_RUN_SIMPLE,
 		.doit	= nrc_shell_run_simple,
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0) 
+#if KERNEL_VERSION(5, 2, 0) > NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
-#else
-		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 #endif
 	},
 	{
 		.cmd	= NL_MGMT_FRAME_INJECTION,
 		.doit	= nrc_inject_mgmt_frame,
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0) 
+#if KERNEL_VERSION(5, 2, 0) > NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
-#else
-		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 #endif
 	},
 	{
 		.cmd	= NL_HALOW_SET_DUT,
 		.doit	= halow_set_dut,
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0) 
+#if KERNEL_VERSION(5, 2, 0) > NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
-#else
-		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 #endif
 	},
 	{
 		.cmd	= NL_CLI_APP_GET_INFO,
 		.doit	= cli_app_get_info,
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0) 
+#if KERNEL_VERSION(5, 2, 0) > NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
-#else
-		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 #endif
 	},
 	{
 		.cmd	= NL_MIC_SCAN,
 		.doit	= nrc_mic_scan,
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0) 
+#if KERNEL_VERSION(5, 2, 0) > NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
-#else
-		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 #endif
 	},
 	{
 		.cmd	= NL_FRAME_INJECTION,
 		.doit	= nrc_inject_frame,
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0) 
+#if KERNEL_VERSION(5, 2, 0) > NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
-#else
-		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 #endif
 	},
 	{
 		.cmd	= NL_SET_IE,
 		.doit	= nrc_set_ie,
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0) 
+#if KERNEL_VERSION(5, 2, 0) > NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
-#else
-		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
+#endif
+	},
+	{
+		.cmd	= NL_SET_SAE_DATA,
+		.doit	= nrc_set_sae,
+#if KERNEL_VERSION(5, 2, 0) > NRC_TARGET_KERNEL_VERSION
+		.policy = nl_umac_policy,
 #endif
 	},
 };

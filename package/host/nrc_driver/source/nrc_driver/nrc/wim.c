@@ -219,6 +219,28 @@ int nrc_wim_hw_scan(struct nrc *nw, struct ieee80211_vif *vif,
 	return nrc_xmit_wim_request(nw, skb);
 }
 
+#if 0
+int nrc_wim_pm_req(struct nrc *nw, uint32_t cmd, uint64_t arg)
+{
+	struct sk_buff *skb, *skb_resp;
+	struct wim_pm_param *p;
+	int size = tlv_len(sizeof(struct wim_pm_param));
+	skb = nrc_wim_alloc_skb(nw, WIM_CMD_PM, size);
+	p = nrc_wim_skb_add_tlv(skb, WIM_TLV_PM, sizeof(*p), NULL);
+	memset(p, 0, sizeof(*p));
+	p->cmd = cmd;
+	p->boot_mode = (nw->fw_priv->num_chunks > 0) ? 1 : 0;
+	p->arg0 = arg;
+
+	atomic_set(&nw->fw_state, NRC_FW_ACTIVE);
+	skb_resp = nrc_xmit_wim_request_wait(nw, skb, (WIM_RESP_TIMEOUT * 5));
+	nrc_ps_dbg("[%s,L%d] cmd:%d boot_mode:%d arg:%lld\n", __func__, __LINE__, cmd, p->boot_mode, arg);
+	if (skb_resp)
+		nrc_hif_free_skb(nw, skb_resp);
+
+	return 0;
+}
+#endif
 
 static char *ieee80211_cipher_str(u32 cipher)
 {
@@ -450,32 +472,102 @@ bool nrc_wim_request_keep_alive(struct nrc *nw)
 
 void nrc_wim_handle_fw_ready(struct nrc *nw)
 {
-	struct sk_buff *skb_resp;
+#if defined(CONFIG_SUPPORT_BD)
+	struct nrc_hif_device *hdev = nw->hif;
+	struct regulatory_request request;
 
+	request.alpha2[0] = nw->alpha2[0];
+	request.alpha2[1] = nw->alpha2[1];
+#endif
+	nrc_ps_dbg("[%s,L%d]\n", __func__, __LINE__);
 	atomic_set(&nw->fw_state, NRC_FW_ACTIVE);
-	skb_resp = nrc_xmit_wim_simple_request_wait(nw,
-						WIM_CMD_START,
-						(WIM_RESP_TIMEOUT * 30));
+	nrc_hif_resume(hdev);
+#if defined(CONFIG_SUPPORT_BD)
+	nrc_reg_notifier(nw->hw->wiphy, &request);
+#endif
+	if (!ieee80211_hw_check(nw->hw, SUPPORTS_DYNAMIC_PS)) {
+		if (power_save >= NRC_PS_DEEPSLEEP_NONTIM) {
+			if (!atomic_read(&nw->d_deauth.delayed_deauth))
+				ieee80211_beacon_loss(nw->vif[0]);
+		}
+		else
+			nw->invoke_beacon_loss = true;
+	} else {
+		mod_timer(&nw->dynamic_ps_timer,
+			jiffies + msecs_to_jiffies(nw->hw->conf.dynamic_ps_timeout));
+	}
+
+	if (atomic_read(&nw->d_deauth.delayed_deauth)) {
+		struct ieee80211_tx_info *txi = IEEE80211_SKB_CB(nw->d_deauth.deauth_frm);
+		struct ieee80211_key_conf *key = txi->control.hw_key;
+		struct sk_buff *skb;
+		int i;
+		
+		/* Send deauth frame */
+		nrc_xmit_frame(nw, nw->d_deauth.vif_index, nw->d_deauth.aid, nw->d_deauth.deauth_frm);
+		nw->d_deauth.deauth_frm = NULL;
+		msleep(50);
+
+		/* Finalize data : Common routine */
+		if (nw->d_deauth.p.flags & IEEE80211_KEY_FLAG_PAIRWISE)
+			nrc_wim_install_key(nw, DISABLE_KEY, &nw->d_deauth.v, &nw->d_deauth.s, &nw->d_deauth.p);
+		else if (key)
+			nrc_wim_install_key(nw, DISABLE_KEY, &nw->d_deauth.v, &nw->d_deauth.s, &nw->d_deauth.g);
+		nrc_mac_sta_remove(nw->hw, &nw->d_deauth.v, &nw->d_deauth.s);
+		nrc_mac_bss_info_changed(nw->hw, &nw->d_deauth.v, &nw->d_deauth.b, 0x80309f);
+		for (i=0; i<4; i++) {
+#ifdef CONFIG_SUPPORT_CHANNEL_INFO
+			nrc_mac_conf_tx(nw->hw, &nw->d_deauth.v, i, &nw->d_deauth.tqp[i]);
+#else
+			nrc_mac_conf_tx(nw->hw, i, &nw->d_deauth.tqp[i]);
+#endif
+		}
+		skb = nrc_wim_alloc_skb(nw, WIM_CMD_SET, WIM_MAX_SIZE);
+#ifdef CONFIG_SUPPORT_CHANNEL_INFO
+		nrc_mac_add_tlv_channel(skb, &nw->d_deauth.c);
+#else
+		nrc_mac_add_tlv_channel(skb, &nw->d_deauth.c);
+#endif
+		nrc_xmit_wim_request(nw, skb);
+		if (nw->d_deauth.p.flags & IEEE80211_KEY_FLAG_PAIRWISE && key)
+			nrc_wim_install_key(nw, DISABLE_KEY, &nw->d_deauth.v, &nw->d_deauth.s, &nw->d_deauth.g);
+
+		/* Remove interface : when 'ifconfig wlan0 down' or 'rmmod' */
+		if (nw->d_deauth.removed) {
+			nrc_wim_unset_sta_type(nw, &nw->d_deauth.v);
+			nw->vif[nw->d_deauth.vif_index] = NULL;
+			nw->enable_vif[nw->d_deauth.vif_index] = false;
+			atomic_set(&nw->d_deauth.delayed_deauth, 0);
+			nrc_mac_stop(nw->hw);
+		}
+		while (atomic_read(&nw->d_deauth.delayed_deauth)) {
+			atomic_set(&nw->d_deauth.delayed_deauth, 0);
+		}
+	}
 }
 
 #define MAC_ADDR_LEN 6
 void nrc_wim_handle_fw_reload(struct nrc *nw)
 {
+	nrc_ps_dbg("[%s,L%d]\n", __func__, __LINE__);
 	atomic_set(&nw->fw_state, NRC_FW_LOADING);
 	nrc_recovery_wdt_stop(nw);
-	if (!nrc_hif_reset_device(nw->hif)) {
-		nrc_hif_cleanup(nw->hif);
-		if (nrc_check_fw_file(nw)) {
-			nrc_download_fw(nw);
-			msleep(3000);
-			nrc_release_fw(nw);
-			nw->hif->hif_ops->config(nw->hif);
-			nrc_hif_resume(nw->hif);
-		}
-	} else {
-		nrc_dbg(NRC_DBG_WIM, "fw reload failed");
+	nrc_hif_cleanup(nw->hif);
+	msleep(200);
+	if (nrc_check_fw_file(nw)) {
+		nrc_download_fw(nw);
+		nw->hif->hif_ops->config(nw->hif);
+		msleep(500);
+		nrc_release_fw(nw);
 	}
-	nrc_recovery_wdt_kick(nw);
+}
+
+void nrc_wim_handle_req_deauth(struct nrc *nw)
+{
+	nrc_ps_dbg("[%s,L%d]\n", __func__, __LINE__);
+
+	if (power_save >= NRC_PS_DEEPSLEEP_TIM)
+		ieee80211_connection_loss(nw->vif[0]);
 }
 
 static int nrc_wim_request_handler(struct nrc *nw,
@@ -549,8 +641,10 @@ static int nrc_wim_event_handler(struct nrc *nw,
 	if (hif->vifindex != -1)
 		vif = nw->vif[hif->vifindex];
 
-	if (!vif || vif->type == NL80211_IFTYPE_MONITOR)
+	if ((!atomic_read(&nw->d_deauth.delayed_deauth) && !vif) || 
+		  vif->type == NL80211_IFTYPE_MONITOR) {
 		return 0;
+	}
 
 	switch (wim->event) {
 	case WIM_EVENT_SCAN_COMPLETED:
@@ -588,6 +682,9 @@ static int nrc_wim_event_handler(struct nrc *nw,
 		break;
 
 	case WIM_EVENT_KEEP_ALIVE:
+		break;
+	case WIM_EVENT_REQ_DEAUTH:
+		nrc_wim_handle_req_deauth(nw);
 		break;
 	}
 

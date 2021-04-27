@@ -170,5 +170,6 @@ int nrc_wim_ampdu_action(struct nrc *nw, struct ieee80211_vif *vif,
  * and negative value on failure.
  */
 int nrc_wim_rx(struct nrc *nw, struct sk_buff *skb, u8 subtype);
+int nrc_wim_pm_req(struct nrc *nw, uint32_t cmd, uint64_t arg);
 
 #endif

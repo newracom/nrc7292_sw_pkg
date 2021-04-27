@@ -67,11 +67,38 @@ void nrc_mac_tx(struct ieee80211_hw *hw, struct ieee80211_tx_control *control,
 void nrc_mac_tx(struct ieee80211_hw *hw,
 		struct sk_buff *skb);
 #endif
+#ifdef CONFIG_SUPPORT_CHANNEL_INFO
+int nrc_mac_conf_tx(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
+		    u16 ac, const struct ieee80211_tx_queue_params *params);
+#else
+int nrc_mac_conf_tx(struct ieee80211_hw *hw,
+		    u16 ac, const struct ieee80211_tx_queue_params *params);
+#endif
+void nrc_mac_bss_info_changed(struct ieee80211_hw *hw,
+				     struct ieee80211_vif *vif,
+				     struct ieee80211_bss_conf *info,
+				     u32 changed);
+#ifdef CONFIG_SUPPORT_CHANNEL_INFO
+void nrc_mac_add_tlv_channel(struct sk_buff *skb,
+					struct cfg80211_chan_def *chandef);
+#else
+void nrc_mac_add_tlv_channel(struct sk_buff *skb,
+			struct ieee80211_conf *chandef);
+#endif
+int nrc_mac_sta_remove(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
+		       struct ieee80211_sta *sta);
+void nrc_mac_stop(struct ieee80211_hw *hw);
 
 int nrc_mac_rx(struct nrc *nw, struct sk_buff *skb);
 void nrc_mac_trx_init(struct nrc *nw);
 
 bool nrc_mac_is_s1g(struct nrc *nw);
 bool nrc_access_vif(struct nrc *nw);
+
+#ifdef CONFIG_NEW_REG_NOTIFIER
+void nrc_reg_notifier(struct wiphy *wiphy, struct regulatory_request *request);
+#else
+int nrc_reg_notifier(struct wiphy *wiphy, struct regulatory_request *request);
+#endif
 
 #endif

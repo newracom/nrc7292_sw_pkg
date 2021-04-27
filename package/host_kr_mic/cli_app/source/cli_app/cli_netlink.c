@@ -33,9 +33,13 @@
 #include <sys/socket.h>
 #include <linux/genetlink.h>
 
+#include "cli_cmd.h"
+#include "cli_util.h"
 #include "cli_netlink.h"
 
 #define NL_MSG_BUFFER_SIZE	1024
+#define NL_TID_BYTE_SIZE	1
+#define NL_MAC_ADDRESS_BYTE_SIZE	6
 
 #define GENLMSG_DATA(glh) ((void *)(NLMSG_DATA(glh) + GENL_HDRLEN))
 #define GENLMSG_PAYLOAD(glh) (NLMSG_PAYLOAD(glh, 0) - GENL_HDRLEN)
@@ -56,13 +60,16 @@ int netlink_send_data(char cmd_type, char* param, char* response)
 	int nl_rxtx_length; //Number of bytes sent or received via send() or recv()
 	struct nlattr *nl_na; //pointer to netlink attributes structure within the payload
 	nl_msg_t nl_request_msg, nl_response_msg;
-	int param_len = strlen(param);
 	int parse_data_length=0;
+	char *argv[10] = { NULL, };
+	int argc = 0;
+	int len = 0;
+	char tid;
+	char string[16];
 
 	if ((pos = strchr(param, '\n')) != NULL){
 		*pos = '\0';
 	}
-	param_len = strlen(param)+ 1; // including '\0'
 
 	//Step 0: reset response data
 	memset(response, 0x0, NL_MSG_MAX_RESPONSE_SIZE);
@@ -70,7 +77,7 @@ int netlink_send_data(char cmd_type, char* param, char* response)
 	//Step 1: Open the socket. Note that protocol = NETLINK_GENERIC
 	nl_fd = socket(AF_NETLINK, SOCK_RAW, NETLINK_GENERIC);
 	if (nl_fd < 0) {
-		printf("socket()");
+		printf("Error socket() :%d\n",  nl_rxtx_length);
 		return -1;
 	}
 
@@ -80,7 +87,7 @@ int netlink_send_data(char cmd_type, char* param, char* response)
 	nl_address.nl_groups = 0;
 
 	if (bind(nl_fd, (struct sockaddr *) &nl_address, sizeof(nl_address)) < 0) {
-		printf("bind()");
+		printf("Error bind()\n");
 		close(nl_fd);
 		return -1;
 	}
@@ -111,7 +118,7 @@ int netlink_send_data(char cmd_type, char* param, char* response)
 						0, (struct sockaddr *) &nl_address, sizeof(nl_address));
 
 	if (nl_rxtx_length != nl_request_msg.n.nlmsg_len) {
-		printf("sendto()");
+		printf("Error sendto() :%d\n",  nl_rxtx_length);
 		close(nl_fd);
 		return -1;
 	}
@@ -120,7 +127,7 @@ int netlink_send_data(char cmd_type, char* param, char* response)
 	nl_rxtx_length = recv(nl_fd, &nl_response_msg, sizeof(nl_response_msg), 0);
 
 	if (nl_rxtx_length < 0) {
-		printf("recv()");
+		printf("Error recv() :%d\n",  nl_rxtx_length);
 		return -1;
 	}
 
@@ -152,14 +159,35 @@ int netlink_send_data(char cmd_type, char* param, char* response)
 	nl_request_msg.n.nlmsg_flags = NLM_F_REQUEST;
 	nl_request_msg.n.nlmsg_seq = 60;
 	nl_request_msg.n.nlmsg_pid = getpid();
+	nl_request_msg.g.cmd = cmd_type;
 
 	nl_na = (struct nlattr *) GENLMSG_DATA(&nl_request_msg);
 
-	nl_request_msg.g.cmd = cmd_type; //corresponds to NL_SHELL_RUN
-	nl_na->nla_type = 12; // corresponds to NL_SHELL_RUN_CMD
-	nl_na->nla_len =  param_len + NLA_HDRLEN; //Message length
-	memcpy(NLA_DATA(nl_na), param, param_len);
-	nl_request_msg.n.nlmsg_len += NLMSG_ALIGN(nl_na->nla_len);
+	if(cmd_type == NL_SHELL_RUN  || cmd_type == NL_CLI_APP_GET_INFO){
+		nl_na->nla_type = NL_SHELL_RUN_CMD;
+		len = strlen(param)+ 1; // including '\0'
+		nl_na->nla_len =  len + NLA_HDRLEN; //Message length
+		memcpy(NLA_DATA(nl_na), param, len);
+		nl_request_msg.n.nlmsg_len += NLMSG_ALIGN(nl_na->nla_len);
+	} else if(cmd_type == NL_WFA_CAPI_SEND_ADDBA || cmd_type == NL_WFA_CAPI_SEND_DELBA){
+		argc = util_cmd_parse_line(param, argv);
+		memset(string, 0x0, sizeof(string));
+		nl_na->nla_type = NL_WFA_CAPI_PARAM_TID;
+		memcpy(string, argv[0], 1);
+		tid = hex_to_int(string[0]);
+		nl_na->nla_len =  NL_TID_BYTE_SIZE  +  NLA_HDRLEN;
+		memcpy(NLA_DATA(nl_na), &tid,  NL_TID_BYTE_SIZE);
+		nl_request_msg.n.nlmsg_len += NLMSG_ALIGN(nl_na->nla_len);
+		if(argc == 2){
+			nl_na = (struct nlattr *)((char*)nl_na + NLMSG_ALIGN(nl_na->nla_len));
+			nl_na->nla_type = NL_WFA_CAPI_PARAM_DESTADDR;
+			memset(string, 0x0, sizeof(string));
+			macaddr_to_ascii(argv[1], string);
+			nl_na->nla_len =  NL_MAC_ADDRESS_BYTE_SIZE + NLA_HDRLEN;
+			memcpy(NLA_DATA(nl_na), string, NL_MAC_ADDRESS_BYTE_SIZE);
+			nl_request_msg.n.nlmsg_len += NLMSG_ALIGN(nl_na->nla_len);
+		}
+	}
 	memset(&nl_address, 0, sizeof(nl_address));
 	nl_address.nl_family = AF_NETLINK;
 
@@ -168,58 +196,61 @@ int netlink_send_data(char cmd_type, char* param, char* response)
 						0, (struct sockaddr *) &nl_address, sizeof(nl_address));
 
 	if (nl_rxtx_length != nl_request_msg.n.nlmsg_len) {
-		printf("sendto()");
+		printf("Error sendto() :%d\n",  nl_rxtx_length);
 		close(nl_fd);
 		return -1;
 	}
 
-	//Receive reply from kernel
-	nl_rxtx_length = recv(nl_fd, &nl_response_msg, sizeof(nl_response_msg), 0);
+	if(cmd_type == NL_SHELL_RUN  || cmd_type == NL_CLI_APP_GET_INFO){
+		//Receive reply from kernel
+		nl_rxtx_length = recv(nl_fd, &nl_response_msg, sizeof(nl_response_msg), 0);
 
-	if (nl_rxtx_length < 0) {
-		printf("recv()");
-		return -1;
-	}
-
-	//Validate response message
-	if (nl_response_msg.n.nlmsg_type == NLMSG_ERROR) { //Error
-		printf("Error while receiving reply from kernel: NACK Received\n");
-		close(nl_fd);
-		return -1;
-	}
-	if (nl_rxtx_length < 0) {
-		printf("Error while receiving reply from kernel\n");
-		close(nl_fd);
-		return -1;
-	}
-	if (!NLMSG_OK((&nl_response_msg.n), nl_rxtx_length)) {
-		printf("Error while receiving reply from kernel: Invalid Message\n");
-		close(nl_fd);
-		return -1;
-	}
-
-	//Parse the reply message
-	nl_rxtx_length = GENLMSG_PAYLOAD(&nl_response_msg.n);
-	nl_na = (struct nlattr *) GENLMSG_DATA(&nl_response_msg);
-	int str_len = 0;
-	int copy_pos = 0;
-
-	while(1)	{
-		//printf("Kernel replied: %s %d\n",(char *)NLA_DATA(nl_na), strlen((char *)NLA_DATA(nl_na)));
-		str_len =  strlen((char *)NLA_DATA(nl_na));
-		strncpy((response+copy_pos),(char *)NLA_DATA(nl_na), str_len);
-		parse_data_length += NLA_ALIGN(nl_na->nla_len);
-
-		copy_pos += (str_len );
-		if(parse_data_length < nl_rxtx_length){
-			*(response+copy_pos)=',';
-			copy_pos++;
-			nl_na = (struct nlattr *) ((char *) nl_na + NLA_ALIGN(nl_na->nla_len));
+		if (nl_rxtx_length < 0) {
+			printf("Error recv() :%d\n",  nl_rxtx_length);
+			return -1;
 		}
-		else{
-			break;
+
+		//Validate response message
+		if (nl_response_msg.n.nlmsg_type == NLMSG_ERROR) { //Error
+			printf("Error while receiving reply from kernel: NACK Received\n");
+			close(nl_fd);
+			return -1;
+		}
+		if (nl_rxtx_length < 0) {
+			printf("Error while receiving reply from kernel\n");
+			close(nl_fd);
+			return -1;
+		}
+		if (!NLMSG_OK((&nl_response_msg.n), nl_rxtx_length)) {
+			printf("Error while receiving reply from kernel: Invalid Message\n");
+			close(nl_fd);
+			return -1;
+		}
+
+		//Parse the reply message
+		nl_rxtx_length = GENLMSG_PAYLOAD(&nl_response_msg.n);
+		nl_na = (struct nlattr *) GENLMSG_DATA(&nl_response_msg);
+		int str_len = 0;
+		int copy_pos = 0;
+
+		while(1)	{
+			//printf("Kernel replied: %s %d\n",(char *)NLA_DATA(nl_na), strlen((char *)NLA_DATA(nl_na)));
+			str_len =  strlen((char *)NLA_DATA(nl_na));
+			strncpy((response+copy_pos),(char *)NLA_DATA(nl_na), str_len);
+			parse_data_length += NLA_ALIGN(nl_na->nla_len);
+
+			copy_pos += (str_len );
+			if(parse_data_length < nl_rxtx_length){
+				*(response+copy_pos)=',';
+				copy_pos++;
+				nl_na = (struct nlattr *) ((char *) nl_na + NLA_ALIGN(nl_na->nla_len));
+			}
+			else{
+				break;
+			}
 		}
 	}
+
 	//Step 5. Close the socket and quit
 	close(nl_fd);
 	return 0;

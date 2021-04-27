@@ -30,6 +30,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <ctype.h>
 #include <sys/time.h>
 #include <unistd.h>
 #include <math.h>
@@ -54,7 +55,7 @@ static int isblank2(char c)
 	return ((c == ' ') || (c == '\t'));
 }
 
-static int util_cmd_parse_line(char *s, char *argv[])
+int util_cmd_parse_line(char *s, char *argv[])
 {
 	int argc = 0;
 
@@ -506,13 +507,14 @@ void print_line(char c, int size, char* string, int upper_newline, int lower_new
 
 int  strlen_last_line(char* string)
 {
-	char* str;
+	char* str = NULL;
+	char* s1 = NULL;
 
 	if(!string)
 		return 0;
 
 	str = string;
-	for (char* s1 = str; ; s1++){
+	for (s1 = str; ; s1++){
  		if (!(*s1)){
 			 return s1 - str;
 		}else if(*s1=='\n'){
@@ -661,4 +663,53 @@ double calculate_std_dev(int sum, int sum_sqrs, int n)
 	return std_dev;
 }
 
+void eliminate_char(char *str, char ch)
+{
+	for (; *str != '\0'; str++) {
+		if (*str == ch){
+			strcpy(str, str + 1);
+			str--;
+		}
+	}
+}
+
+void string_to_hexString(char* input, char* output)
+{
+	int loop = 0;
+	int i = 0;
+
+	while(input[loop] != '\0') {
+		sprintf((char*)(output+i),"%02X", input[loop]);
+		loop+=1;
+		i+=2;
+	}
+	output[i++] = '\0';
+}
+
+char hex_to_int(char c)
+{
+	if (c <= '9') return c - '0';
+	c = tolower(c);
+	if (c == 'a') return 10;
+	if (c == 'b') return 11;
+	if (c == 'c') return 12;
+	if (c == 'd') return 13;
+	if (c == 'e') return 14;
+	if (c == 'f') return 15;
+	return 0;
+}
+
+void macaddr_to_ascii(char* input, char* output)
+{
+	int i = 0;
+	char* src = input;
+	char* dst = output;
+
+	for(i=0; i<6; i++) {
+		const unsigned char high = hex_to_int(*src++);
+		const unsigned char low  = hex_to_int(*src++);
+		*dst++ = (high << 4) | low;
+	}
+	*dst = '\0';
+}
 #endif /* _CLI_UTIL_ */

@@ -1,1 +1,0 @@
-built on Linux kernel 4.14.70

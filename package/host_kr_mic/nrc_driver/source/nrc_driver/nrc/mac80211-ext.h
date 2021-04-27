@@ -74,7 +74,7 @@ struct ieee80211_sta *ieee80211_find_all_sta(struct ieee80211_vif *vif,
 u8 *ieee80211_append_ie(struct sk_buff *skb, u8 eid, u8 len);
 
 struct sk_buff *ieee80211_deauth_get(struct ieee80211_hw *hw, u8 *da, u8 *sa,
-				     u8 *bssid, __le16 reason);
+				     u8 *bssid, __le16 reason, struct ieee80211_sta *sta, bool tosta);
 
 void ieee80211_iterate_active_netdev(struct ieee80211_hw *hw,
 				     void (*iterator)(void *data,

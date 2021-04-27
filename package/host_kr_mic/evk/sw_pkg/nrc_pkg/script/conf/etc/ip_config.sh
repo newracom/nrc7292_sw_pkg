@@ -4,7 +4,7 @@
 source /home/pi/nrc_pkg/script/conf/etc/CONFIG_IP
 
 if [ $# -eq 0 ]; then
-	echo "Usage: ./set_dhcpcd [STA|AP|RELAY|SNIFFER]"
+	echo "Usage: ./ip_config.sh [STA|AP|RELAY|SNIFFER]"
 	exit
 fi
 
@@ -117,9 +117,12 @@ if [ -d "/home/pi/nrc_pkg" ]; then
 			sed -i "66s/.*/#metric 100/g" $DHCPCD_CONF_FILE
 			sed -i "67s/.*/static ip_address=$HALOW_RELAY_AP_IP\/$HALOW_RELAY_AP_NETMASK/g" $DHCPCD_CONF_FILE
 			sed -i "68s/.*/#static routers=$HALOW_AP_IP/g" $DHCPCD_CONF_FILE
+			# dhcp client on STA (wlan0) => Used
+			sed -i "3s/.*/#interface=wlan0/g" $DNSMASQ_CONF_FILE
+			sed -i "4s/.*/#dhcp-range=$HALOW_RELAY_AP_DHCPS_CONFIG/g" $DNSMASQ_CONF_FILE
 			# dhcp server on AP (wlan1) => Used
-			sed -i "3s/.*/interface=wlan1/g" $DNSMASQ_CONF_FILE
-			sed -i "4s/.*/dhcp-range=$HALOW_RELAY_AP_DHCPS_CONFIG/g" $DNSMASQ_CONF_FILE
+			sed -i "5s/.*/interface=wlan1/g" $DNSMASQ_CONF_FILE
+			sed -i "6s/.*/dhcp-range=$HALOW_RELAY_AP_DHCPS_CONFIG/g" $DNSMASQ_CONF_FILE
 		else
 			#Type 1: interface wlan0 AP and wlan1 STA
 			# wlan0 - AP
@@ -140,6 +143,9 @@ if [ -d "/home/pi/nrc_pkg" ]; then
 			#dhcp server on AP (wlan0) => Used
 			sed -i "3s/.*/interface=wlan0/g" $DNSMASQ_CONF_FILE
 			sed -i "4s/.*/dhcp-range=$HALOW_RELAY_AP_DHCPS_CONFIG/g" $DNSMASQ_CONF_FILE
+			#dhcp client on STA (wlan1) => Used
+			sed -i "5s/.*/#interface=wlan1/g" $DNSMASQ_CONF_FILE
+			sed -i "6s/.*/#dhcp-range=$HALOW_RELAY_AP_DHCPS_CONFIG/g" $DNSMASQ_CONF_FILE
 		fi
 
 		echo "Config for RELAY is done!"

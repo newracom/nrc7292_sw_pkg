@@ -25,7 +25,7 @@
 
 #ifndef _CLI_CONFIG_H_
 
-const char* nrc_cli_app_ver=  "2.0";
+const char* nrc_cli_app_ver=  "2.4";
 const char* app_name = "Newracom Command Line Application";
 const char* exit_msg = "Exit Newracom Command Line Application";
 const char* prompt_name = "NRC";

@@ -106,6 +106,10 @@ max mpdu_len,ampdu_len_exp,min mpdu_start_spacing,rx_s1gmcs_map,color"
  ndp_pspoll, traveling pilot, short gi\n  -1mhz,  -2mhz,  -4mhz,max mpdu_len,\
 ampdu_len_exp,min mpdu_start_spacing,rx_s1gmcs_map"
 
+// test country jp show
+#define TEST_COUNTRY_KEY_DISP	"%ldus,%ldus"
+#define TEST_COUNTRY_KEY_LIST	"CS time,TX delay"
+
 /* set config <ack[0,1]> <agg[0,1]> <mcs> */
 #define SET_CONFIG_KEY_DISP	"%s,%s,%d"
 #define SET_CONFIG_KEY_LIST	"Ack,Aggregation,Mcs"
@@ -131,6 +135,13 @@ Tx power index for MCS 6,Tx power index for MCS 7,Tx power index for MCS 10"
 /* show cal_use */
 #define SHOW_CAL_USE_KEY_DISP	"%s,%s"
 #define SHOW_CAL_USE_KEY_LIST	"Calibration_use,Country"
+
+// show sta {vif_id} all
+#define SHOW_STA_AID_DISP	"%02x:%02x:%02x:%02x:%02x:%02x,%d,%s"
+#define SHOW_STA_AID_KEY_LIST	"mac_addr,aid,state"
+
+#define SHOW_STA_ALL_DISP	"%d,%02x:%02x:%02x:%02x:%02x:%02x,%d,%s"
+#define SHOW_STA_ALL_KEY_LIST	"num,mac_addr,aid,state"
 
 /* set cal_use */
 #define SET_CAL_USE_KEY_DISP	"%s,%s"

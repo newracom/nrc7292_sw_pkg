@@ -1,0 +1,19 @@
+V1.0
+- First version
+
+v1.1.0
+- Flash read/write functionalities
+- UI Improvement
+
+v1.1.1
+- CRC16 calculation casting bug fix.
+
+v1.2.0
+- Board data delete functionality.
+
+v1.3.0
+- BW 1,2,4MHz MCS10 power level synchronization.
+
+v1.3.1
+- Removed: KR legacy channel
+- Fixed:   TW MCS10 mapping

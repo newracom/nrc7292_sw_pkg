@@ -19,6 +19,7 @@
 #include <linux/module.h>
 #include <linux/device.h>
 #include <linux/platform_device.h>
+#include <linux/gpio.h>
 #include "nrc.h"
 #include "nrc-hif.h"
 #include "nrc-debug.h"
@@ -28,6 +29,7 @@
 #include "nrc-stats.h"
 #include "wim.h"
 #include "nrc-recovery.h"
+#include "nrc-vendor.h"
 
 char *fw_name;
 
@@ -89,10 +91,6 @@ int spi_gdma_irq = 6;
 module_param(spi_gdma_irq, int, 0600);
 MODULE_PARM_DESC(spi_gdma_irq, "SPI gdma irq");
 
-bool alternate_mode;
-module_param(alternate_mode, bool, 0600);
-MODULE_PARM_DESC(alternate_mode, "SPI mode alternated");
-
 bool loopback;
 module_param(loopback, bool, 0600);
 MODULE_PARM_DESC(loopback, "HIF loopback");
@@ -101,20 +99,21 @@ int lb_count = 1;
 module_param(lb_count, int, 0600);
 MODULE_PARM_DESC(lb_count, "HIF loopback Buffer count");
 
-int disable_cqm;
+int disable_cqm = 0;
 module_param(disable_cqm, int, 0600);
-MODULE_PARM_DESC(disable_cqm, "Disable CQM (0: disable, 1:enable)");
+MODULE_PARM_DESC(disable_cqm, "Disable CQM (0: enable, 1: disable)");
 
-int listen_interval;
+int listen_interval = 100;
 module_param(listen_interval, int, 0600);
 MODULE_PARM_DESC(listen_interval, "Listen Interval");
 
+/* bss_max_idle (in unit of 1000TUs(1024ms) */
 int bss_max_idle;
 module_param(bss_max_idle, int, 0600);
 MODULE_PARM_DESC(bss_max_idle, "BSS Max Idle");
 
 /* bss_max_idle_usf_format */
-bool bss_max_idle_usf_format;
+bool bss_max_idle_usf_format=true;
 module_param(bss_max_idle_usf_format, bool, 0600);
 MODULE_PARM_DESC(bss_max_idle_usf_format, "BSS Max Idle specified in units of usf");
 
@@ -146,9 +145,16 @@ MODULE_PARM_DESC(macaddr, "MAC Address");
 /*
  * enable/disable the power save mode by default
  */
-int power_save = 1;
+int power_save = NRC_PS_NONE;;
 module_param(power_save, int, 0600);
 MODULE_PARM_DESC(power_save, "power save");
+
+/*
+ * deepsleep duration of non-TIM mode power save
+ */
+int sleep_duration[2] = {0,};
+module_param_array(sleep_duration, int, NULL, 0600);
+MODULE_PARM_DESC(sleep_duration, "deepsleep duration of non-TIM mode power save");
 
 /*
  * wlantest mode
@@ -170,6 +176,13 @@ MODULE_PARM_DESC(ndp_preq, "Enable NDP Probe Request");
 bool enable_hspi_init = false;
 module_param(enable_hspi_init, bool, S_IRUSR | S_IWUSR);
 MODULE_PARM_DESC(enable_hspi_init, "Enable HSPI Initialization");
+
+/*
+ * Enable handling null func (ps-poll) on mac80211
+ */
+bool nullfunc_enable = false;
+module_param(nullfunc_enable, bool, S_IRUSR | S_IWUSR);
+MODULE_PARM_DESC(nullfunc_enable, "Enable null func on mac80211");
 
 static bool has_macaddr_param(uint8_t *dev_mac)
 {
@@ -333,21 +346,19 @@ static void nrc_on_fw_ready(struct sk_buff *skb, struct nrc *nw)
 		nw->cap.listen_interval = listen_interval;
 	}
 
-	if (bss_max_idle_usf_format) {
+	if (nrc_mac_is_s1g(hw->priv) && bss_max_idle_usf_format) {
+		/* bss_max_idle: in unit of 1000 TUs (1024ms = 1.024 seconds) */
+		if (bss_max_idle > 16383 * 10000 || bss_max_idle <= 0) {
+			nw->cap.bss_max_idle = 0;
+		} else {
+			/* Convert in USF Format (Value (14bit) * USF(2bit)) and save it */
+			nw->cap.bss_max_idle = convert_usf(bss_max_idle);
+		}
+	} else {
 		if (bss_max_idle > 65535 || bss_max_idle <= 0) {
 			nw->cap.bss_max_idle = 0;
 		} else {
 			nw->cap.bss_max_idle = bss_max_idle;
-		}
-	} else {
-		long max_idle = bss_max_idle * 1000 / 1024;
-		bss_max_idle = max_idle;
-
-		/* usf convert */
-		if (bss_max_idle > 16383 * 10000 || bss_max_idle <= 0) {
-			nw->cap.bss_max_idle = 0;
-		} else {
-			nw->cap.bss_max_idle = convert_usf(bss_max_idle);
 		}
 	}
 
@@ -358,7 +369,8 @@ static void nrc_check_start(struct work_struct *work)
 {
 	struct nrc *nw = container_of(work, struct nrc, check_start.work);
 	int ret;
-	struct sk_buff *skb_resp;
+	struct sk_buff *skb_req, *skb_resp;
+	int boot_mode = 0;
 
 	if (nw->drv_state == NRC_DRV_CLOSING)
 		return;
@@ -386,15 +398,22 @@ static void nrc_check_start(struct work_struct *work)
 	}
 
 	nw->drv_state = NRC_DRV_START;
+	nw->c_bcn = NULL;
+	nw->c_prb_resp = NULL;
 
 	nrc_hif_resume(nw->hif);
 
 	init_completion(&nw->wim_responded);
 	nw->workqueue = create_singlethread_workqueue("nrc_wq");
+	nw->ps_wq = create_singlethread_workqueue("nrc_ps_wq");
 
-	skb_resp = nrc_xmit_wim_simple_request_wait(nw,
-			WIM_CMD_START,
-			(WIM_RESP_TIMEOUT * 30));
+	skb_req = nrc_wim_alloc_skb(nw, WIM_CMD_START, sizeof(int));
+	if (!skb_req)
+		goto fail_start;
+	boot_mode = (nw->fw_priv->num_chunks > 0) ? 1 : 0;
+	nrc_wim_skb_add_tlv(skb_req, WIM_TLV_BOOT_MODE,
+			sizeof(int), &boot_mode);
+	skb_resp = nrc_xmit_wim_request_wait(nw, skb_req, (WIM_RESP_TIMEOUT * 30));
 	if (skb_resp)
 		nrc_on_fw_ready(skb_resp, nw);
 	else
@@ -473,11 +492,38 @@ static int nrc_platform_probe(struct platform_device *pdev)
 static int nrc_platform_remove(struct platform_device *pdev)
 {
 	struct nrc *nw = platform_get_drvdata(pdev);
+	int counter = 0;
+
+	while(atomic_read(&nw->d_deauth.delayed_deauth)) {
+		msleep(100);
+		if (counter++ > 10) {
+			atomic_set(&nw->d_deauth.delayed_deauth, 0);
+			gpio_set_value(RPI_GPIO_FOR_PS, 0);
+			break;
+	}
+		}
 
 	nw->drv_state = NRC_DRV_CLOSING;
 	cancel_delayed_work(&nw->check_start);
 
 	nrc_recovery_wdt_clear(nw);
+
+	cancel_delayed_work(&nw->fake_bcn);
+	flush_delayed_work(&nw->fake_bcn);
+	cancel_delayed_work(&nw->fake_prb_resp);
+	flush_delayed_work(&nw->fake_prb_resp);
+	if (nw->c_bcn) {
+		dev_kfree_skb_any(nw->c_bcn);
+		nw->c_bcn = NULL;
+	}
+	if (nw->c_prb_resp) {
+		dev_kfree_skb_any(nw->c_prb_resp);
+		nw->c_prb_resp = NULL;
+	}
+
+	if (ieee80211_hw_check(nw->hw, SUPPORTS_DYNAMIC_PS)) {
+		del_timer_sync(&nw->dynamic_ps_timer);
+	}
 
 	if (!loopback) {
 		nrc_netlink_exit();
@@ -493,6 +539,10 @@ static int nrc_platform_remove(struct platform_device *pdev)
 	platform_set_drvdata(pdev, NULL);
 	nw->drv_state = NRC_DRV_CLOSED;
 	nw->pdev = NULL;
+#if defined(ENABLE_HW_RESET)
+	gpio_set_value(RPI_GPIO_FOR_RST, 0);
+	gpio_free(RPI_GPIO_FOR_RST);
+#endif
 
 	return 0;
 }
@@ -517,9 +567,7 @@ static struct platform_device nrc_device = {
 
 void nrc_set_bss_max_idle_offset(int value)
 {
-	int temp = msecs_to_jiffies(abs(value));
-
-	bss_max_idle_offset = value > 0 ? temp : temp * -1;
+	bss_max_idle_offset = value;
 }
 
 static int __init nrc_init(void)

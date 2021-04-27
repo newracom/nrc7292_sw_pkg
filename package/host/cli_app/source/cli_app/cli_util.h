@@ -48,4 +48,9 @@ int signal_log_update(int device_number, char* mac_addr, int rssi, int snr);
 void cli_delay_ms(int ms);
 double calculate_avergage(int sum, int n);
 double calculate_std_dev(int sum, int sum_sqrs, int n);
+int util_cmd_parse_line(char *s, char *argv[]);
+void eliminate_char(char *str, char ch);
+void string_to_hexString(char* input, char* output);
+char hex_to_int(char c);
+void macaddr_to_ascii(char* input, char* output);
 #endif /* _CLI_UTIL_H_ */

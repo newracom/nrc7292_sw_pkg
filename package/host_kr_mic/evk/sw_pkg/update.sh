@@ -11,13 +11,8 @@ fi
 sleep 1
 
 echo "Copy new package"
-if [ "$1" == "dual" ]; then
- echo "apply nrc_pkg_dual "
- cp -r ./nrc_pkg_dual/  /home/pi/nrc_pkg/
-else
- echo "apply nrc_pkg "
- cp -r ./nrc_pkg/  /home/pi/nrc_pkg/
-fi
+echo "apply nrc_pkg "
+cp -r ./nrc_pkg/  /home/pi/nrc_pkg/
 
 echo "Change mode"
 cd /home/pi/nrc_pkg

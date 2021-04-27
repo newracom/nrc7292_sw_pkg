@@ -61,9 +61,7 @@ enum cmd_list_type {
 	NRF_SUB_CMD,
 	SET_SUB_CMD,
 	TEST_SUB_CMD,
-	GPIO_SUB_CMD,
-	GPRF_SUB_CMD,
-	MAX_CMD_LIST
+ 	MAX_CMD_LIST
 };
 
 enum umac_info_type {
@@ -118,7 +116,7 @@ typedef struct _umac_stainfo {
 	char	maximum_mpdu_length;
 	char	maximum_ampdu_length_exp;
 	char	minimum_mpdu_start_spacing;
-	int	rx_s1gmcs_map[6];
+	char	rx_s1gmcs_map[6];
 }umac_stainfo;
 
 cmd_tbl_t * get_cmd_list(enum cmd_list_type type, int *list_size, int *list_depth);

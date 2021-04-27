@@ -15,6 +15,7 @@
  */
 
 #include <net/mac80211.h>
+#include <linux/gpio.h>
 
 #include "nrc-hif.h"
 #include "nrc-recovery.h"
@@ -36,11 +37,12 @@
 #include "nrc-netlink.h"
 #include "wim.h"
 #include "nrc-dump.h"
+#include "nrc-vendor.h"
 
 #define to_nw(dev)	((dev)->nw)
 
 static void nrc_hif_work(struct work_struct *work);
-
+static void nrc_hif_ps_work(struct work_struct *work);
 static int hif_receive_skb(struct nrc_hif_device *dev, struct sk_buff *skb);
 
 struct nrc_hif_device *nrc_hif_init(struct nrc *nw)
@@ -71,6 +73,7 @@ struct nrc_hif_device *nrc_hif_init(struct nrc *nw)
 		skb_queue_head_init(&dev->queue[i]);
 
 	INIT_WORK(&dev->work, nrc_hif_work);
+	INIT_WORK(&dev->ps_work, nrc_hif_ps_work);
 
 	dev->hif_ops->receive = hif_receive_skb;
 
@@ -177,7 +180,7 @@ static void nrc_hif_work(struct work_struct *work)
 
 			if (hdev->hif_ops->xmit) {
 				if (nrc_hif_wait_for_xmit(hdev, skb) < 0) {
-					nrc_hif_free_skb(to_nw(hdev), skb);
+					nrc_hif_free_skb(nw, skb);
 					return;
 				}
 				SYNC_LOCK(hdev);
@@ -192,7 +195,36 @@ static void nrc_hif_work(struct work_struct *work)
 			WARN_ON(ret < 0);
 
 			if (ret != HIF_TX_QUEUED)
-				nrc_hif_free_skb(to_nw(hdev), skb);
+				nrc_hif_free_skb(nw, skb);
+		}
+	}
+}
+
+static void nrc_hif_ps_work(struct work_struct *work)
+{
+	struct nrc *nw;
+	struct nrc_hif_device *hdev;
+	int ret = 0;
+
+	hdev = container_of(work, struct nrc_hif_device, ps_work);
+	nw = to_nw(hdev);
+
+	if (nw->ps_enabled) {
+		if (nw->drv_state == NRC_DRV_PS && power_save >= NRC_PS_DEEPSLEEP_TIM) {
+			/*
+			 * if the current state is already NRC_DRV_PS,
+			 * there's nothing to do in here even if mac80211 notifies wake-up.
+			 * the actual action to wake up for target will be done by
+			 * nrc_wake_tx_queue() with changing gpio signal.
+			 * (when driver receives a data frame.)
+			 */
+			nrc_ps_dbg("Target is already in deepsleep...\n");
+			return;
+		}
+
+		if (power_save >= NRC_PS_DEEPSLEEP_TIM) {
+			nrc_ps_dbg("[%s,L%d] Enter DEEPSLEEP!!!\n", __func__, __LINE__);
+			ret = nrc_xmit_wim_powersave(nw, NULL, true, sleep_duration[0] * (sleep_duration[1] ? 1000 : 1));
 		}
 	}
 }
@@ -228,13 +260,21 @@ int nrc_xmit_wim(struct nrc *nw, struct sk_buff *skb, enum HIF_SUBTYPE stype)
 	int len = skb->len;
 	int ret = 0;
 
+	if ((nw->drv_state == NRC_DRV_PS) && atomic_read(&nw->d_deauth.delayed_deauth)) {
+		dev_kfree_skb(skb);
+		return 0;
+	}
+
 	/* Prepend HIF header */
 	hif = (struct hif *)skb_push(skb, sizeof(struct hif));
 	memset(hif, 0, sizeof(*hif));
 	hif->type = HIF_TYPE_WIM;
 	hif->subtype = stype;
 	hif->len = len;
-	hif->vifindex = hw_vifindex(vif);
+	if (atomic_read(&nw->d_deauth.delayed_deauth))
+		hif->vifindex = nw->d_deauth.vif_index;
+	else
+		hif->vifindex = hw_vifindex(vif);
 
 #if defined(CONFIG_NRC_HIF_PRINT_TX_DATA)
 	nrc_dump_wim(skb);
@@ -256,6 +296,63 @@ int nrc_xmit_wim(struct nrc *nw, struct sk_buff *skb, enum HIF_SUBTYPE stype)
 int nrc_xmit_wim_request(struct nrc *nw, struct sk_buff *skb)
 {
 	return nrc_xmit_wim(nw, skb, HIF_WIM_SUB_REQUEST);
+}
+
+int nrc_xmit_wim_powersave(struct nrc *nw, struct sk_buff *skb_src, uint16_t ps_enable, uint64_t duration)
+{
+	int res = 0, i;
+	struct sk_buff *skb = skb_src;
+	struct wim_pm_param *p;
+	struct nrc_txq *ntxq;
+
+	if(skb == NULL)
+	{
+		skb = nrc_wim_alloc_skb(nw, WIM_CMD_SET, WIM_MAX_SIZE);
+	}
+	
+	p = nrc_wim_skb_add_tlv(skb, WIM_TLV_PS_ENABLE,
+				sizeof(struct wim_pm_param), NULL);
+	p->ps_mode = power_save;
+	p->ps_enable = ps_enable;
+	p->ps_duration = duration;
+
+	if(power_save == NRC_PS_MODEMSLEEP)
+	{
+		nw->drv_state = (nw->drv_state >= NRC_DRV_RUNNING && ps_enable) ? NRC_DRV_PS : NRC_DRV_RUNNING;
+	}
+	else if(power_save >= NRC_PS_DEEPSLEEP_TIM)
+	{
+		gpio_set_value(RPI_GPIO_FOR_PS, 0);
+		nrc_ps_dbg("sleep_duration: %lld ms\n", duration);
+	}
+
+	/* Stop rx queue */
+	ieee80211_stop_queues(nw->hw);
+	for (i = 0; i < NRC_QUEUE_MAX; i++) 
+	{
+		ntxq = &nw->ntxq[i];
+		skb_queue_purge(&ntxq->queue);
+	}
+	nrc_hif_suspend_rx_thread(nw->hif);
+
+	/* TX WIM  */
+	res = nrc_xmit_wim_request(nw, skb);
+
+	/* SPI suspend for deepsleep  */
+	if (!ieee80211_hw_check(nw->hw, SUPPORTS_DYNAMIC_PS)) 
+	{
+		if	(power_save >= NRC_PS_DEEPSLEEP_TIM &&
+			(nw->drv_state != NRC_DRV_PS) && nw->ps_enabled)
+			{
+				nrc_hif_suspend(nw->hif);
+				msleep(100);
+			}
+	}
+	/* Resume rx queue */
+	nrc_hif_resume_rx_thread(nw->hif);
+	ieee80211_wake_queues(nw->hw);
+
+	return res;
 }
 
 struct sk_buff *nrc_xmit_wim_request_wait(struct nrc *nw,
@@ -288,9 +385,7 @@ int nrc_xmit_wim_response(struct nrc *nw, struct sk_buff *skb)
  * nrc_skb_append_tx_info - Appends tx meta data to the end of skb
  *
  */
-static u32 nrc_skb_append_tx_info(struct nrc *nw,
-		   struct ieee80211_vif *vif,
-		   struct ieee80211_sta *sta,
+static u32 nrc_skb_append_tx_info(struct nrc *nw, u16 aid,
 		   struct sk_buff *skb,
 		   bool frame_injection)
 {
@@ -314,7 +409,7 @@ static u32 nrc_skb_append_tx_info(struct nrc *nw,
 	p->no_ack = !!(txi->flags & IEEE80211_TX_CTL_NO_ACK);
 	p->eosp = 0;
 	p->inject = !!(frame_injection || wlantest);
-	p->aid = !!sta ? sta->aid : 0;
+	p->aid = aid;
 
 #if defined(CONFIG_NRC_HIF_PRINT_TX_INFO)
 	nrc_dbg(NRC_DBG_TX,
@@ -342,7 +437,7 @@ int nrc_xmit_injected_frame(struct nrc *nw,
 	int extra_len, ret = 0;
 	int credit;
 
-	extra_len = nrc_skb_append_tx_info(nw, vif, sta, skb, true);
+	extra_len = nrc_skb_append_tx_info(nw, (!!sta ? sta->aid : 0), skb, true);
 
 	/* Prepend a HIF and frame header */
 	hif = (void *)skb_push(skb, nw->fwinfo.tx_head_size);
@@ -388,9 +483,7 @@ int nrc_xmit_injected_frame(struct nrc *nw,
 /**
  * nrc_xmit_frame - transmit a 802.11 frame
  */
-int nrc_xmit_frame(struct nrc *nw,
-		   struct ieee80211_vif *vif,
-		   struct ieee80211_sta *sta,
+int nrc_xmit_frame(struct nrc *nw, s8 vif_index, u16 aid,
 		   struct sk_buff *skb)
 {
 	struct ieee80211_hdr *hdr = (void *)skb->data;
@@ -401,10 +494,17 @@ int nrc_xmit_frame(struct nrc *nw,
 	struct ieee80211_key_conf *key = txi->control.hw_key;
 	int extra_len, ret = 0;
 	int credit;
-
 #if defined(CONFIG_SUPPORT_KEY_RESERVE_TAILROOM)
 	int crypto_tail_len = 0;
+#endif
 
+	if (atomic_read(&nw->d_deauth.delayed_deauth)) {
+		if (key) {
+			key->cipher = nw->d_deauth.p.cipher;
+		}
+	}
+
+#if defined(CONFIG_SUPPORT_KEY_RESERVE_TAILROOM)
 	if ((key && (key->flags & IEEE80211_KEY_FLAG_RESERVE_TAILROOM))
 			&& (nw->cap.cap_mask & WIM_SYSTEM_CAP_HWSEC_OFFL)) {
 		switch (key->cipher) {
@@ -432,14 +532,14 @@ int nrc_xmit_frame(struct nrc *nw,
 	}
 #endif
 
-	extra_len = nrc_skb_append_tx_info(nw, vif, sta, skb, false);
+	extra_len = nrc_skb_append_tx_info(nw, aid, skb, false);
 
 	/* Prepend a HIF and frame header */
 	hif = (void *)skb_push(skb, nw->fwinfo.tx_head_size);
 	memset(hif, 0, nw->fwinfo.tx_head_size);
 	hif->type = HIF_TYPE_FRAME;
 	hif->len = skb->len - sizeof(*hif);
-	hif->vifindex = hw_vifindex(vif);
+	hif->vifindex = vif_index;
 
 	/* Frame header */
 	fh = (void *)(hif + 1);
@@ -480,6 +580,12 @@ int nrc_xmit_frame(struct nrc *nw,
 		WARN_ON(true);
 	}
 
+    if (nullfunc_enable) {
+        if (ieee80211_is_pspoll(fc)) {
+            print_hex_dump(KERN_DEBUG, "tx ps-poll ", DUMP_PREFIX_NONE, 16, 1,
+                    fh, 20, false);
+        }
+    }
 #if defined(CONFIG_NRC_HIF_PRINT_TX_DATA)
 	print_hex_dump(KERN_DEBUG, "frame: ", DUMP_PREFIX_NONE, 16, 1,
 		       skb->data, skb->len, false);
@@ -651,11 +757,8 @@ void nrc_hif_sync_unlock(struct nrc_hif_device *dev)
 
 void nrc_hif_cleanup(struct nrc_hif_device *dev)
 {
-	struct nrc *nw;
 	struct sk_buff *skb;
 	int i;
-
-	nw = to_nw(dev);
 
 	for (i = ARRAY_SIZE(dev->queue)-1; i >= 0; i--) {
 		for (;;) {
@@ -665,6 +768,19 @@ void nrc_hif_cleanup(struct nrc_hif_device *dev)
 			dev_kfree_skb(skb);
 		}
 	}
+}
+
+void nrc_hif_flush_wq(struct nrc_hif_device *dev)
+{
+	struct nrc *nw;
+
+	BUG_ON(dev == NULL);
+	nw = to_nw(dev);
+	BUG_ON(nw == NULL);
+
+	nrc_hif_cleanup(dev);
+	if (nw->workqueue != NULL)
+		flush_work(&dev->work);
 }
 
 int nrc_hif_close(struct nrc_hif_device *dev)
@@ -677,6 +793,8 @@ int nrc_hif_close(struct nrc_hif_device *dev)
 int nrc_hif_exit(struct nrc_hif_device *dev)
 {
 	struct nrc *nw;
+	struct nrc_txq *ntxq;
+	int i;
 
 	if (dev == NULL)
 		return 0;
@@ -685,6 +803,11 @@ int nrc_hif_exit(struct nrc_hif_device *dev)
 
 	BUG_ON(dev == NULL);
 	BUG_ON(nw == NULL);
+
+	for (i = 0; i < NRC_QUEUE_MAX; i++) {
+		ntxq = &nw->ntxq[i];
+		skb_queue_purge(&ntxq->queue);
+	}
 
 	if (nw->workqueue != NULL)
 		flush_work(&dev->work);

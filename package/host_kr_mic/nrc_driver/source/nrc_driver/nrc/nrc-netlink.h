@@ -42,6 +42,7 @@ enum nrc_nl_op_cmds {
 	NL_CMD_RECOVERY						= 15,
 	NL_FRAME_INJECTION					= 16,
 	NL_SET_IE							= 17,
+	NL_SET_SAE							= 18,
 };
 
 enum nrc_nl_op_attrs {
@@ -77,6 +78,9 @@ enum nrc_nl_op_attrs {
 	NL_SET_IE_EID						= 29,
 	NL_SET_IE_LENGTH					= 30,
 	NL_SET_IE_DATA						= 31,
+	NL_SET_SAE_EID						= 32,
+	NL_SET_SAE_LENGTH					= 33,
+	NL_SET_SAE_DATA						= 34,
 	NL_WFA_CAPI_ATTR_LAST,
 	MAX_NL_WFA_CAPI_ATTR = NL_WFA_CAPI_ATTR_LAST-1,
 };

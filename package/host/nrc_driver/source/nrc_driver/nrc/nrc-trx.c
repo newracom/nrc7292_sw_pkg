@@ -32,6 +32,7 @@
 #include <linux/ktime.h>
 #include <net/genetlink.h>
 #include <linux/spi/spi.h>
+#include <linux/gpio.h>
 
 #include "nrc-mac80211.h"
 #include "nrc-hif.h"
@@ -41,6 +42,8 @@
 #include "compat.h"
 #include "nrc-vendor.h"
 
+#define WLAN_FC_GET_TYPE(fc)	(((fc) & 0x000c) >> 2)
+#define WLAN_FC_GET_STYPE(fc)	(((fc) & 0x00f0) >> 4)
 
 /* TX */
 
@@ -75,6 +78,52 @@ void nrc_mac_tx(struct ieee80211_hw *hw,
 		.result = 0,
 	};
 
+	struct ieee80211_hdr *mh = (void*)skb->data;
+	s8 vif_id = hw_vifindex(tx.vif);
+
+	/* Only for PS STA */
+	if (tx.nw->vif[vif_id]->type == NL80211_IFTYPE_STATION) {
+		if (power_save >= NRC_PS_DEEPSLEEP_TIM) {
+			if (tx.nw->drv_state == NRC_DRV_PS) {
+				memset(&tx.nw->d_deauth, 0, sizeof(struct nrc_delayed_deauth));
+				if (ieee80211_is_deauth(mh->frame_control)) {
+					memcpy(&tx.nw->d_deauth.v, tx.vif, sizeof(struct ieee80211_vif));
+					memcpy(&tx.nw->d_deauth.s, tx.sta, sizeof(struct ieee80211_sta));
+					gpio_set_value(RPI_GPIO_FOR_PS, 1);
+					nrc_hif_cleanup(tx.nw->hif);
+					tx.nw->d_deauth.deauth_frm = skb_copy(skb, GFP_ATOMIC);
+					atomic_set(&tx.nw->d_deauth.delayed_deauth, 1);
+					tx.nw->d_deauth.vif_index = hw_vifindex(tx.vif);
+					tx.nw->d_deauth.aid = tx.sta->aid;
+				}
+				if (ieee80211_is_probe_req(mh->frame_control)) {
+					nrc_ps_dbg("[%s,L%d][prob_req] drv_state:%d\n", __func__, __LINE__, tx.nw->drv_state);
+					schedule_delayed_work(&tx.nw->fake_prb_resp, msecs_to_jiffies(100));
+				}
+				if (ieee80211_is_qos_nullfunc(mh->frame_control)) {
+					nrc_ps_dbg("[%s,L%d][qos_null] make target wake for keep-alive\n", __func__, __LINE__);
+					gpio_set_value(RPI_GPIO_FOR_PS, 1);
+				}
+				goto txh_out;
+			}
+		}else if(power_save == NRC_PS_MODEMSLEEP) {
+			//nrc_ps_dbg("[%s,L%d] fc:0x%04x drv_state:%d\n", __func__, __LINE__, mh->frame_control, tx.nw->drv_state);
+			if (tx.nw->drv_state == NRC_DRV_PS) {
+				if (ieee80211_is_probe_req(mh->frame_control)) {
+					schedule_delayed_work(&tx.nw->fake_prb_resp, msecs_to_jiffies(100));
+					//nrc_ps_dbg("[%s,L%d] ProbeREQ  fc:0x%04x drv_state:%d\n", __func__, __LINE__, mh->frame_control, tx.nw->drv_state);
+					goto txh_out;
+				}
+				nrc_xmit_wim_powersave(tx.nw, NULL, 0, 0);
+			}
+		}
+
+		if (ieee80211_hw_check(hw, SUPPORTS_DYNAMIC_PS)) {
+			mod_timer(&tx.nw->dynamic_ps_timer,
+				jiffies + msecs_to_jiffies(hw->conf.dynamic_ps_timeout));
+		}
+	 }//if (tx.nw->vif[vif_id]->type == NL80211_IFTYPE_STATION)
+
 	/* Iterate over tx handlers */
 	for (h = &__tx_h_start; h < &__tx_h_end; h++) {
 
@@ -86,7 +135,9 @@ void nrc_mac_tx(struct ieee80211_hw *hw,
 			goto txh_out;
 	}
 
-	nrc_xmit_frame(tx.nw, tx.vif, tx.sta, tx.skb);
+	if (!atomic_read(&tx.nw->d_deauth.delayed_deauth))
+		nrc_xmit_frame(tx.nw, vif_id, (!!tx.sta ? tx.sta->aid : 0), tx.skb);
+
 	return;
 
 txh_out:
@@ -127,6 +178,63 @@ to_state(enum ieee80211_sta_state state)
 	};
 
 }
+
+
+#if NRC_DBG_PRINT_FRAME
+static int tx_h_debug_print(struct nrc_trx_data *tx)
+{
+	struct ieee80211_sta *sta;
+    struct nrc_vif *i_vif;
+	struct nrc_sta *i_sta;
+	const struct ieee80211_hdr *hdr;
+	__le16 fc;
+
+	if (!tx) {
+		nrc_mac_dbg("[%s] tx is NULL", __func__);
+		return 0;
+	}
+
+    i_vif = to_i_vif(tx->vif);
+	if (!i_vif) {
+		nrc_mac_dbg("[%s] vif is NULL", __func__);
+		return 0;
+	}
+
+	hdr = (const struct ieee80211_hdr *) tx->skb->data;
+	fc = hdr->frame_control;
+
+	nrc_mac_dbg("[%s] %s vif:%d type:%d sype:%d, protected:%d\n",
+		__func__, (tx->vif->type == NL80211_IFTYPE_STATION)?"STA":
+		(tx->vif->type == NL80211_IFTYPE_AP)?"AP":"MONITORP",
+		i_vif->index, WLAN_FC_GET_TYPE(fc), WLAN_FC_GET_STYPE(fc),
+		ieee80211_has_protected(fc));
+
+	if (is_unicast_ether_addr(hdr->addr1)) {
+		sta = ieee80211_find_sta(tx->vif, hdr->addr1);
+		if (!sta) {
+			nrc_mac_dbg("[%s] Unable to find %pM in mac80211",__func__, hdr->addr1);
+		return 0;
+		}
+	}
+
+	i_sta = to_i_sta(sta);
+	if (!i_sta) {
+		nrc_mac_dbg("[%s] Unable to find %pM in nrc drv",
+			__func__, hdr->addr1);
+		return 0;
+	}
+
+	// set filter here : add filter as you wish
+	//eg. ieee80211_is_data(fc) ieee80211_is_mgmt(fc)
+	//eg. ieee80211_is_assoc_req
+	if (ieee80211_is_deauth(fc)) {
+		print_hex_dump(KERN_DEBUG, "tx deauth frame: ", DUMP_PREFIX_NONE, 16, 1,
+			tx->skb->data, tx->skb->len, false);
+	}
+	return 0;
+}
+TXH(tx_h_debug_print, NL80211_IFTYPE_ALL);
+#endif //#if NRC_DBG_PRINT_FRAME
 
 static int tx_h_debug_state(struct nrc_trx_data *tx)
 {
@@ -300,6 +408,34 @@ static void nrc_mac_rx_h_status(struct nrc *nw, struct sk_buff *skb)
 	//nrc_stats_print();
 }
 
+static int nrc_skb_copy(struct nrc *nw, struct sk_buff *skb)
+{
+	struct ieee80211_hdr *mh = (void*)skb->data;
+	__le16 fc;
+
+	fc = mh->frame_control;
+	if (nw->drv_state == NRC_DRV_RUNNING) {
+		/* Clone probe response frame */
+		if (fc & 0x50) {
+			if (nw->c_prb_resp) {
+				dev_kfree_skb(nw->c_prb_resp);
+				nw->c_prb_resp = NULL;
+			}
+			nw->c_prb_resp = skb_copy(skb, GFP_ATOMIC);
+		}
+
+		/* Clone beacon frame */
+		if (fc & 0x80) {
+			if (nw->c_bcn) {
+				dev_kfree_skb(nw->c_bcn);
+				nw->c_bcn = NULL;
+			}
+			nw->c_bcn = skb_copy(skb, GFP_ATOMIC);
+		}
+	}
+
+	return 1;
+}
 
 static void nrc_rx_handler(void *data, u8 *mac, struct ieee80211_vif *vif)
 {
@@ -329,6 +465,9 @@ static void nrc_rx_handler(void *data, u8 *mac, struct ieee80211_vif *vif)
 			goto rxh_out;
 	}
 
+	if (!disable_cqm && (power_save >= NRC_PS_DEEPSLEEP_TIM))
+		nrc_skb_copy(rx->nw, rx->skb);
+
 rxh_out:
 	rcu_read_unlock();
 	rx->result = res;
@@ -348,7 +487,8 @@ int nrc_mac_rx(struct nrc *nw, struct sk_buff *skb)
 	int ret = 0;
 	u64 now = 0, diff = 0;
 
-	if (nw->drv_state != NRC_DRV_RUNNING) {
+	if (!((nw->drv_state == NRC_DRV_RUNNING) || (nw->drv_state == NRC_DRV_PS)) ||
+		atomic_read(&nw->d_deauth.delayed_deauth)) {
 		nrc_mac_dbg("Target not ready, discarding frame)");
 		dev_kfree_skb(skb);
 		return 0;
@@ -380,8 +520,29 @@ int nrc_mac_rx(struct nrc *nw, struct sk_buff *skb)
 	if ((!diff) || (diff > NRC_MAC80211_RCU_LOCK_THRESHOLD))
 		nrc_mac_dbg("%s, diff=%lu", __func__, (unsigned long)diff);
 
-	if (!rx.result)
+	if (!rx.result) {
+		struct ieee80211_hdr *mh = (void*)skb->data;
+		__le16 fc = mh->frame_control;
+#if 0
+		//printk("[%s, L%d] 0x%08x\n", __func__, __LINE__, fc);
+		if ((fc & 0xf0) == 0x50) {
+			nrc_mac_dbg("[%s,L%d] Probe Response received!!\n", __func__, __LINE__);
+		}
+#endif
 		ieee80211_rx_irqsafe(nw->hw, rx.skb);
+		if (ieee80211_hw_check(nw->hw, SUPPORTS_DYNAMIC_PS)) {
+			if (ieee80211_is_data(fc) && nw->ps_enabled &&
+				(nw->hw->conf.dynamic_ps_timeout > 0)) {
+				mod_timer(&nw->dynamic_ps_timer,
+					jiffies + msecs_to_jiffies(nw->hw->conf.dynamic_ps_timeout));
+			}
+		} else {
+			if (nw->invoke_beacon_loss) {
+				nw->invoke_beacon_loss = false;
+				ieee80211_beacon_loss(nw->vif[0]);
+			}
+		}
+	}
 
 	return 0;
 }
@@ -512,6 +673,64 @@ static int rx_h_vendor(struct nrc_trx_data *rx)
 }
 
 RXH(rx_h_vendor, NL80211_IFTYPE_ALL);
+
+#if NRC_DBG_PRINT_FRAME
+static int rx_h_debug_print(struct nrc_trx_data *rx)
+{
+	struct ieee80211_sta *sta;
+	struct ieee80211_hdr *hdr;
+	//struct ieee80211_rx_status *status;
+	struct nrc_sta *i_sta;
+	struct nrc_vif *i_vif;
+	__le16 fc;
+
+	if (!rx) {
+		nrc_mac_dbg("[%s] rx is NULL", __func__);
+		return 0;
+	}
+
+	i_sta = to_i_sta(rx->sta);
+	i_vif = to_i_vif(rx->vif);
+	hdr = (struct ieee80211_hdr *) rx->skb->data;
+	fc = hdr->frame_control;
+
+	nrc_mac_dbg("[%s] %s vif:%d type:%d sype:%d, protected:%d\n",
+		__func__, (rx->vif->type == NL80211_IFTYPE_STATION)?"STA":
+        (rx->vif->type == NL80211_IFTYPE_AP)?"AP":"MONITORP",
+        i_vif->index, WLAN_FC_GET_TYPE(fc), WLAN_FC_GET_STYPE(fc),
+        ieee80211_has_protected(fc));
+
+
+    if (is_unicast_ether_addr(hdr->addr2)) {
+        sta = ieee80211_find_sta(rx->vif, hdr->addr2);
+        if (!sta) {
+            nrc_mac_dbg("[%s] Unable to find %pM in mac80211",
+                    __func__, hdr->addr2);
+            return 0;
+        }
+    }
+
+	i_sta = to_i_sta(sta);
+	if (!i_sta) {
+		nrc_mac_dbg("[%s] Unable to find %pM in nrc drv",
+			__func__, hdr->addr2);
+		return 0;
+	}
+
+	// set filter here : add filter as you wish
+	//eg. ieee80211_is_data(fc) ieee80211_is_mgmt(fc)
+	//eg. ieee80211_is_assoc_req
+	if (ieee80211_is_deauth(fc)) {
+		print_hex_dump(KERN_DEBUG, "rx deauth frame: ", DUMP_PREFIX_NONE, 16, 1,
+			rx->skb->data, rx->skb->len, false);
+	}
+
+	return 0;
+}
+RXH(rx_h_debug_print, NL80211_IFTYPE_ALL);
+#endif //#if NRC_DBG_PRINT_FRAME
+
+
 /**
  * nrc_mac_trx_init() - Initialize TRX data path
  *
@@ -520,7 +739,6 @@ RXH(rx_h_vendor, NL80211_IFTYPE_ALL);
  * Handlers are registered during compile time, not
  * via nrc_mac_{tx,rx}_h_register().
  */
-
 void nrc_mac_trx_init(struct nrc *nw)
 {
 	int i;
@@ -530,6 +748,15 @@ void nrc_mac_trx_init(struct nrc *nw)
 	for (i = 0; i < ARRAY_SIZE(nw->tx_credit); i++) {
 		atomic_set(&nw->tx_credit[i], 0);
 		atomic_set(&nw->tx_pend[i], 0);
+	}
+
+	if (power_save >= NRC_PS_DEEPSLEEP_TIM) {
+		if (gpio_request(RPI_GPIO_FOR_PS, "nrc-wakeup") < 0) {
+			nrc_ps_dbg("gpio_reqeust(nrc-wakeup) is failed\n");
+			gpio_free(RPI_GPIO_FOR_PS);
+			return;
+		}
+		gpio_direction_output(RPI_GPIO_FOR_PS, 0);
 	}
 }
 
@@ -660,12 +887,10 @@ nrc_add_rx_s1g_radiotap_header(struct nrc *nw, struct sk_buff *skb)
 	bool ndp_ind, agg = false;
 	uint32_t fcs;
 	uint8_t *p;
-#ifdef RADIOTAP_S1G
 	struct nrc_radiotap_hdr_agg rt_hdr_agg, *prt_hdr_agg;
 	struct nrc_radiotap_hdr_ndp rt_hdr_ndp, *prt_hdr_ndp;
 	uint8_t color = 0;
 	uint8_t uplink_ind = 0;
-#endif
 
 #ifdef CONFIG_NRC_HIF_DUMP_S1G_RXINFO
 	nrc_dump_s1g_sig_rxinfo(skb);
@@ -695,10 +920,8 @@ nrc_add_rx_s1g_radiotap_header(struct nrc *nw, struct sk_buff *skb)
 			response_ind =
 				sig_s1g->flags.s1gShort.response_ind & 0x3;
 			agg = sig_s1g->flags.s1gShort.aggregation;
-#ifdef RADIOTAP_S1G
 			color = sig_s1g->flags.s1gShort.id & 0x7;
 			uplink_ind = sig_s1g->flags.s1gShort.uplink_ind;
-#endif
 		}
 	} else {
 		/* NDP frame */
@@ -717,8 +940,6 @@ nrc_add_rx_s1g_radiotap_header(struct nrc *nw, struct sk_buff *skb)
 
 		*(p + 5) = (*(p + 5) & 0x3F) | ((s1g_1m_ppdu) ? 0 : (0x2 << 6));
 	}
-
-#ifdef RADIOTAP_S1G
 
 	/**
 	 * README: Change RSSI value refernce - Aaron - 2019-0531
@@ -846,77 +1067,6 @@ nrc_add_rx_s1g_radiotap_header(struct nrc *nw, struct sk_buff *skb)
 		// add FCS
 	    memcpy((void *)skb_put(skb, 4), (void *)&fcs, 4);
 	}
-
-#else
-	rt_hdr.hdr.it_version = PKTHDR_RADIOTAP_VERSION;
-	rt_hdr.hdr.it_pad = 0;
-
-	if (ndp_ind) {
-		rt_hdr.hdr.it_len = cpu_to_le64(sizeof(rt_hdr)-5);
-		rt_hdr.hdr.it_present =
-			cpu_to_le32(BIT(IEEE80211_RADIOTAP_TSFT) |
-				BIT(IEEE80211_RADIOTAP_FLAGS) |
-				BIT(IEEE80211_RADIOTAP_CHANNEL) |
-				BIT(IEEE80211_RADIOTAP_RTS_RETRIES));
-	} else {
-		rt_hdr.hdr.it_len = cpu_to_le64(sizeof(rt_hdr));
-		rt_hdr.hdr.it_present =
-			cpu_to_le32(BIT(IEEE80211_RADIOTAP_TSFT) |
-				BIT(IEEE80211_RADIOTAP_FLAGS) |
-				BIT(IEEE80211_RADIOTAP_RX_FLAGS) |
-				BIT(IEEE80211_RADIOTAP_CHANNEL) |
-				BIT(IEEE80211_RADIOTAP_RTS_RETRIES) |
-				BIT(IEEE80211_RADIOTAP_MCS));
-	}
-
-	rt_hdr.rt_tsft = cpu_to_le64(rxi->timestamp);
-	rt_hdr.rt_flags = (response_ind |
-		((ndp_ind) ? 0x00:0x10) | /* frame include FCS */
-		((rxi->ndp_ind & 0x01) << 2));
-
-	rt_hdr.rt_rxflags = ((rxi->format & 0x03) << 2) |
-		((rxi->preamble_type & 0x01) << 4) |
-		((rxi->error_crc & 0x01) << 5) |
-		((rxi->okay & 0x01) << 6) |
-		((agg & 0x01) << 7);
-
-	rt_hdr.rt_channel = cpu_to_le16(rxi->center_freq);
-	rt_hdr.rt_chbitmask =
-		cpu_to_le16(IEEE80211_CHAN_OFDM|NRC_CHAN_900MHZ);
-
-	/**
-	 * README: Change RSSI value refernce - Aaron - 2019-0531
-	 *   original: RCPI based calculation - RSSI = (RCPI/2)-122
-	 *   new: replace RCPI with RSSI value of Rx Vector
-	 **/
-	rt_hdr.rt_rssi = rxi->rcpi;
-
-	if (!ndp_ind) {
-		rt_hdr.rt_mcs_present = (IEEE80211_RADIOTAP_MCS_HAVE_BW |
-			IEEE80211_RADIOTAP_MCS_HAVE_MCS |
-			IEEE80211_RADIOTAP_MCS_HAVE_GI);
-
-		rt_hdr.rt_mcs_flags = (rxi->bandwidth & 0x03) | (short_gi << 2);
-		rt_hdr.rt_mcs_index = mcs;
-	}
-
-	skb_pull(skb, nw->fwinfo.rx_head_size - sizeof(struct hif));
-
-	if (ndp_ind) {
-		prt_hdr =
-			(struct nrc_radiotap_hdr *)
-			skb_push(skb, sizeof(rt_hdr)-5);
-		memcpy(prt_hdr, &rt_hdr, sizeof(rt_hdr)-5);
-	} else {
-		prt_hdr =
-			(struct nrc_radiotap_hdr *)
-			skb_push(skb, sizeof(rt_hdr));
-		memcpy(prt_hdr, &rt_hdr, sizeof(rt_hdr));
-
-		// add FCS
-	    memcpy((void *)skb_put(skb, 4), (void *)&fcs, 4);
-	}
-#endif
 
 	skb_set_mac_header(skb, 0);
 	skb->ip_summed = CHECKSUM_UNNECESSARY;

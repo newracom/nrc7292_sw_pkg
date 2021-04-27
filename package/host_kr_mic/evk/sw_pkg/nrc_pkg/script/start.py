@@ -6,26 +6,69 @@ import time
 import commands
 import subprocess
 
-##################################################################################
+
 # Default Configuration (you can change value you want here)
+##################################################################################
+# Raspbery Pi Conf.
+max_cpuclock     = 1    # Overclocking : 0(off) or 1(on)
+##################################################################################
+# Firmware Conf.
 model       = 7292      # 7292 or 7192
-hif_speed   = 16000000  # HSPI Clock
-gain_type   = 'phy'     # 'phy' or 'nrf(legacy)'
-txpwr_val   = 17        # TX Power
-maxagg_num  = 8         # 0(AMPDU off) or  >2(AMPDU on)
-cqm_off     = 0         # 0(CQM on) or 1(CQM off)
 fw_download = 1         # 0(FW Download off) or 1(FW Download on)
 fw_name     = 'uni_s1g.bin'
-bd_download = 0         # 0(Board Data Download off) or 1(Board Data Download on)
-bd_name     = 'nrc7292_bd.dat'
-guard_int   = 'long'    # 'long'(LGI) or 'short'(SGI)
+##################################################################################
+# DEBUG Conf.
+# WPA Supplicant Log (STA Only)
 supplicant_debug = 0    # WPA Supplicant debug option : 0(off) or 1(on)
+#--------------------------------------------------------------------------------#
+# HOSTAPD Log (AP Only)
 hostapd_debug    = 0    # Hostapd debug option    : 0(off) or 1(on)
-max_cpuclock     = 1    # RPi Max CPU Clock : 0(off) or 1(on)
-relay_type       = 0    # 0 (wlan0: STA, wlan1: AP) 1 (wlan0: AP, wlan1: STA)
-power_save       = 0    # power save : 0(off) or 1(on)
-bss_max_idle_enable = 0 # 0(bss_max_idle off) or 1(bss_max_idle on)
-bss_max_idle = 10       # number of keepalives (0 ~ 65535)
+#################################################################################
+# CSPI Conf.
+hif_speed   = 16000000  # HSPI Clock Speed
+#################################################################################
+# RF Conf.
+# Board Data includes TX Power per MCS and CH
+txpwr_val   = 17        # TX Power
+bd_download = 0         # 0(Board Data Download off) or 1(Board Data Download on)
+bd_name     = 'nrc7292_bd_kr.dat'
+##################################################################################
+# PHY Conf.
+guard_int   = 'long'    # Guard Interval ('long'(LGI) or 'short'(SGI))
+##################################################################################
+# MAC Conf.
+# AMPDU
+maxagg_num  = 8         # Max MPDU number in AMPDU (0~8) (0:disable)
+#--------------------------------------------------------------------------------#
+# CQM (Channel Quality Manager) (STA Only)
+cqm_off     = 0         # 0(CQM on) or 1(CQM off)
+#--------------------------------------------------------------------------------#
+# RELAY (Do NOT use! it will be deprecated)
+relay_type  = 0    # 0 (wlan0: STA, wlan1: AP) 1 (wlan0: AP, wlan1: STA)
+#--------------------------------------------------------------------------------#
+# NDP Probe Request
+#  For STA, "scan_ssid=1" in wpa_supplicant's conf should be set to use
+ndp_preq    = 1    # 0 (Legacy Probe Req) 1 (NDP Probe Req)
+#--------------------------------------------------------------------------------#
+# Power Save (STA Only)
+#  4-types PS: (0)Always on (1)Modem_Sleep (2)Deep_Sleep(TIM) (3)Deep_Sleep(nonTIM
+#  Modem Sleep : turn off only RF while PS (Fast wake-up but less power save)
+#   Deep Sleep : turn off almost all power (Slow wake-up but much more power save)
+#     TIM Mode : check beacons during PS to receive BU from AP
+#  nonTIM Mode : Not check beacons during PS (just wake up by TX or EXT INT)
+power_save       = 0    # STA (power save type 0~3)
+ps_timeout       = '3s' # STA (timeout before going to sleep (min:1000ms)
+sleep_duration   = '3s' # STA (sleep duration only for nonTIM deepsleep (min:1000ms)
+#--------------------------------------------------------------------------------#
+# BSS MAX IDLE PERIOD (aka. keep alive) (AP Only)
+#  STA should follow (i.e STA should send any frame before period),if enabled on AP
+#  Period is in unit of 1000TU(1024ms, 1TU=1024us)
+bss_max_idle_enable = 0  # 0(disable) or 1(enable)
+bss_max_idle        = 30 # time interval (e.g. 30: 30720ms) (1 ~ 65535)
+#--------------------------------------------------------------------------------#
+# Calibration usage option
+#  If this value is changed, the device should be restarted for applying the value
+cal_use = 1  # 0(disable) or 1(enable)
 ##################################################################################
 
 def check(interface):
@@ -78,6 +121,18 @@ def strSecurity():
     else:
         usage_print()
 
+def strPSType():
+    if int(power_save) == 0:
+        return 'Always On'
+    elif int(power_save) == 1:
+        return 'Modem Sleep (TIM)'
+    elif int(power_save) == 2:
+        return 'Deep Sleep (TIM)'
+    elif int(power_save) == 3:
+        return 'Deep Sleep (nonTIM)'
+    else:
+        return 'Invalid Type'
+
 def strSnifferMode():
     if int(sys.argv[5]) == 0:
         return 'LOCAL'
@@ -94,6 +149,7 @@ def isNumber(s):
         return False
 
 def argv_print():
+    global fw_name
     print ("------------------------------")
     print ("Model            : " + str(model))
     print ("STA Type         : " + strSTA())
@@ -109,6 +165,14 @@ def argv_print():
     print ("TX Power         : " + str(txpwr_val))
     if int(bss_max_idle_enable) == 1 and strSTA() == 'AP':
         print ("bss_max_idle     : " + str(bss_max_idle))
+    if int(cal_use) == 1:
+        print ("cal_use          : " + str(cal_use))
+    if strSTA() == 'STA':
+        print ("Power Save Type  : " + strPSType())
+        if int(power_save) > 0:
+            print ("PS Timeout       : " + ps_timeout)
+        if int(power_save) == 3:
+            print ("Sleep Duration   : " + sleep_duration)
     print ("------------------------------")
 
 def copyConf():
@@ -178,17 +242,32 @@ def run_common():
     else:
         alt_mode_arg = ""
 
-    if int(power_save) == 1:
-        power_save_arg = " power_save=1"
+    if strSTA() == 'STA' and int(power_save) > 0:
+        power_save_arg = " power_save=" + str(power_save)
+        if int(power_save) == 3:
+            sleep_duration_arg = " sleep_duration=" + filter(str.isdigit,sleep_duration)
+            unit = sleep_duration[-1]
+            if unit == 'm':
+                sleep_duration_arg += ",0"
+            else:
+                sleep_duration_arg += ",1"
+        else:
+            sleep_duration_arg = " sleep_duration=0,0"
     else:
         power_save_arg = " power_save=0"
+        sleep_duration_arg= ""
 
     if int(bss_max_idle_enable) == 1 and strSTA() == 'AP':
         bss_max_idle_arg = " bss_max_idle=" + str(bss_max_idle)
     else:
         bss_max_idle_arg = ""
 
-    insmod_arg = fw_arg + bd_arg + alt_mode_arg + power_save_arg + bss_max_idle_arg + " disable_cqm=" + str(cqm_off) + " hifspeed=" + str(hif_speed)
+    if int(ndp_preq) == 1:
+        ndp_preq_arg = " ndp_preq=1"
+    else:
+        ndp_preq_arg = ""
+
+    insmod_arg = fw_arg + bd_arg + alt_mode_arg + power_save_arg + sleep_duration_arg + bss_max_idle_arg + ndp_preq_arg + " disable_cqm=" + str(cqm_off) + " hifspeed=" + str(hif_speed)
     print "[2] Loading module"
     print "sudo insmod /home/pi/nrc_pkg/sw/driver/nrc.ko " + insmod_arg
     os.system("sudo insmod /home/pi/nrc_pkg/sw/driver/nrc.ko " + insmod_arg + "")
@@ -202,17 +281,27 @@ def run_common():
         os.system('sudo rmmod nrc.ko')
         sys.exit()
 
-    print "[3] Set tx power"
-    os.system('python /home/pi/nrc_pkg/etc/python/shell.py run --cmd="nrf txpwr ' + str(txpwr_val) + '"')
+    if int(bd_download) == 1:
+        print "[3] Transmission Power Control(TPC) is activated"
+        os.system('/home/pi/nrc_pkg/script/cli_app set bdf_use on')
+    else:
+        print "[3] Set tx power"
+        os.system('/home/pi/nrc_pkg/script/cli_app set txpwr ' + str(txpwr_val))
+        os.system('/home/pi/nrc_pkg/script/cli_app set bdf_use off')
 
     print "[4] Set aggregation number"
     if maxagg_num:
-        os.system('python /home/pi/nrc_pkg/etc/python/test_send_addba.py 0')
-        os.system('python /home/pi/nrc_pkg/etc/python/shell.py run --cmd="set maxagg 1 ' + str(maxagg_num) + '"')
+        os.system('/home/pi/nrc_pkg/script/cli_app set maxagg 1 ' + str(maxagg_num))
+        os.system('/home/pi/nrc_pkg/script/cli_app set maxagg 1 on')
 
     print "[5] Set guard interval"
-    os.system('python /home/pi/nrc_pkg/etc/python/shell.py run --cmd="set gi ' + guard_int + '"')
+    os.system('/home/pi/nrc_pkg/script/cli_app set gi ' + guard_int)
 
+    print "[6] Set cal_use"
+    if int(cal_use) == 1:
+        os.system('/home/pi/nrc_pkg/script/cli_app set cal_use on')
+    else:
+        os.system('/home/pi/nrc_pkg/script/cli_app set cal_use off')
 
     print "[*] Start DHCPCD and DNSMASQ"
     startDHCPCD()
@@ -220,11 +309,16 @@ def run_common():
 
 def run_sta(interface):
     country = str(sys.argv[3])
+    os.system("sudo killall -9 wpa_supplicant")
 
     if int(supplicant_debug) == 1:
         debug = '-dddd'
     else:
         debug = ''
+
+    if int(power_save) > 0:
+        print "[*] Set default power save timeout for " + interface
+        os.system("sudo iwconfig " + interface + " power timeout " + ps_timeout)
 
     print "[6] Start wpa_supplicant on " + interface
     if strSecurity() == 'OPEN':
@@ -293,6 +387,7 @@ def run_sniffer():
     os.system('sudo ifconfig wlan0 down; sudo iw dev wlan0 set type monitor; sudo ifconfig wlan0 up')
     print "[7] Setting Country: " + country
     os.system("sudo iw reg set " + country)
+    time.sleep(3)
     print "[8] Setting Channel: " + str(sys.argv[4])
     os.system("sudo iw dev wlan0 set channel " + str(sys.argv[4]))
     time.sleep(3)
@@ -335,5 +430,5 @@ if __name__ == '__main__':
             run_ap('wlan0')
     else:
         usage_print()
-
+        
 print "Done."

@@ -319,4 +319,5 @@ void nrc_init_debugfs(struct nrc *nw)
 	nrc_debugfs_create_file("reset", &nrc_debugfs_reset_device);
 	nrc_debugfs_create_file("snr", &nrc_debugfs_snr);
 	nrc_debugfs_create_file("rssi", &nrc_debugfs_rssi);
+	//nrc_debugfs_create_file("pm", &nrc_debugfs_pm);
 }

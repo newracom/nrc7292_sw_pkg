@@ -64,6 +64,14 @@ enum NRC_DRV_STATE {
 	NRC_DRV_CLOSED,
 	NRC_DRV_START,
 	NRC_DRV_RUNNING,
+	NRC_DRV_PS,
+};
+
+enum NRC_PS_MODE {
+	NRC_PS_NONE,
+	NRC_PS_MODEMSLEEP,
+	NRC_PS_DEEPSLEEP_TIM,
+	NRC_PS_DEEPSLEEP_NONTIM
 };
 
 #ifdef CONFIG_SUPPORT_AFTER_KERNEL_3_0_36
@@ -100,11 +108,13 @@ struct nrc_capabilities {
 	struct vif_capabilities vif_caps[NR_NRC_VIF];
 };
 
+#define BSS_MAX_ILDE_DEAUTH_LIMIT_COUNT 3 /* Keep Alive Timeout Limit Count on AP */
 struct nrc_max_idle {
 	bool enable;
 	u16 period;
 	u16 scale_factor;
 	u8 options;
+	u16 timeout_cnt;
 	struct timer_list keep_alive_timer;
 
 	unsigned long idle_period; /* jiffies */
@@ -120,6 +130,27 @@ struct nrc_txq {
 	unsigned long nr_push_allowed;
 	struct ieee80211_vif vif;
 	struct ieee80211_sta *sta;
+};
+
+struct nrc_delayed_deauth {
+	atomic_t delayed_deauth;
+	s8 vif_index;
+	u16 aid;
+	bool removed;
+	struct sk_buff *deauth_frm;
+	struct sk_buff *ch_skb;
+	struct ieee80211_vif v;
+	struct ieee80211_sta s;
+	struct ieee80211_key_conf p;
+	struct ieee80211_key_conf g;
+	struct ieee80211_bss_conf b;
+#ifdef CONFIG_SUPPORT_CHANNEL_INFO
+	struct cfg80211_chan_def c;
+	struct ieee80211_channel ch;
+#else
+	struct ieee80211_conf c;
+#endif
+	struct ieee80211_tx_queue_params tqp[4];
 };
 
 struct nrc {
@@ -176,6 +207,9 @@ struct nrc {
 	} ps;
 	bool ps_poll_pending;
 	bool ps_enabled;
+	bool invoke_beacon_loss;
+	struct timer_list dynamic_ps_timer;
+	struct workqueue_struct *ps_wq;
 
 	/* sync power management operation between
 	 * mac80211 config and host interface
@@ -183,6 +217,7 @@ struct nrc {
 	struct completion hif_tx_stopped;
 	struct completion hif_rx_stopped;
 	struct completion hif_irq_stopped;
+	uint32_t vendor_arg;
 
 	struct dentry *debugfs;
 	bool loopback;
@@ -212,6 +247,19 @@ struct nrc {
 
 	/* vendor specific element (AP) */
 	struct sk_buff *vendor_skb;
+
+	/* work for fake frames */
+	struct delayed_work fake_bcn;
+	struct delayed_work fake_prb_resp;
+
+	/* cloned beacon for cqm in deepsleep */
+	struct sk_buff *c_bcn;
+
+	/* cloned probe response for cqm in deepsleep */
+	struct sk_buff *c_prb_resp;
+
+	/* for processing deauth when deepsleep */
+	struct nrc_delayed_deauth d_deauth;
 
 	/* firmware recovery */
 	struct nrc_recovery_wdt *recovery_wdt;
@@ -338,8 +386,6 @@ extern struct nrc_trx_handler __rx_h_start, __rx_h_end;
 #define NL80211_IFTYPE_ALL (BIT(NUM_NL80211_IFTYPES)-1)
 
 /* radio tap */
-#undef RADIOTAP_S1G
-#ifdef RADIOTAP_S1G
 struct nrc_radiotap_hdr {
 	struct ieee80211_radiotap_header hdr;
 	uint64_t rt_tsft;		/* IEEE80211_RADIOTAP_TSFT */
@@ -384,21 +430,6 @@ struct nrc_radiotap_hdr_ndp {
 	uint16_t rt_ch_flags;
 	uint8_t  rt_zero_length_psdu; /* IEEE80211_RADIOTAP_0_LENGTH_PSDU */
 } __packed;
-#else
-struct nrc_radiotap_hdr {
-	struct ieee80211_radiotap_header hdr;
-	__le64 rt_tsft;
-	u8 rt_flags;
-
-	__le16 rt_channel __aligned(2);
-	__le16 rt_chbitmask;
-	u16 rt_rxflags;
-	u8 rt_rssi;
-	u8 rt_mcs_present;
-	u8 rt_mcs_flags;
-	u8 rt_mcs_index;
-} __packed;
-#endif
 
 struct nrc_local_radiotap_hdr {
 	struct ieee80211_radiotap_header hdr;
@@ -416,13 +447,14 @@ extern int spi_bus_num;
 extern int spi_cs_num;
 extern int spi_gpio_irq;
 extern int spi_gdma_irq;
-extern bool alternate_mode;
 extern int disable_cqm;
 extern int bss_max_idle_offset;
 extern int power_save;
+extern int sleep_duration[];
 extern bool wlantest;
 extern bool ndp_preq;
 extern bool enable_hspi_init;
+extern bool nullfunc_enable;
 
 void nrc_set_bss_max_idle_offset(int value);
 
