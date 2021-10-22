@@ -1,0 +1,10 @@
+{
+	"firmware_server" : "http://10.198.1.214",
+	"firmware_info" : "nrc_version.json",
+	"sdk_root" : "/home/pi/nrc_pkg",
+	"installed_sdk_version" : "VERSION-SDK.txt",
+	"schedule" : "-1",
+	"station_type" : "STA",
+	"security_mode" : "Open",
+	"country" : "US"
+}

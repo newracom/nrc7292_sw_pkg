@@ -17,7 +17,7 @@
 # Config for Ethernet with DHCP server
 USE_ETH_DHCP_SERVER=N   # Use DHCP Sever : Y(use DHCP Server) or N(use DHCP Client)
 ETH_DHCPS_IP=192.168.100.1    # only valid when using DHCP Server
-ETH_DHCPS_CONFIG=192.168.100.10,192.168.100.10,255.255.255.0,24h # only valid when using DHCP Server
+ETH_DHCPS_CONFIG=192.168.100.10,192.168.100.15,255.255.255.0,24h # only valid when using DHCP Server
 
 # Config for static IP on Ethernet without DHCP server
 USE_ETH_STATIC_IP=N            # Use ETH STATIC IP : Y(use ETH_IP for static ip) or N(use DHCP Client)
@@ -39,6 +39,11 @@ HALOW_AP_DHCPS_CONFIG=192.168.200.10,192.168.200.50,255.255.255.0,24h
 HALOW_RELAY_AP_IP=192.168.150.1
 HALOW_RELAY_AP_NETMASK=24
 HALOW_RELAY_AP_DHCPS_CONFIG=192.168.150.10,192.168.150.50,255.255.255.0,24h
+
+# Config for HaLow Mesh's IP and DHCPS configuration
+HALOW_MESH_IP=192.168.200.1
+HALOW_MESH_NETMASK=24
+HALOW_MESH_DHCPS_CONFIG=192.168.200.10,192.168.200.250,255.255.255.0,infinite
 
 # Local Confguration files for DHCPCD and DNSMASQ
 # Those files are copied into /etc/dhcpcd.conf and /etc/dnsmaq.conf

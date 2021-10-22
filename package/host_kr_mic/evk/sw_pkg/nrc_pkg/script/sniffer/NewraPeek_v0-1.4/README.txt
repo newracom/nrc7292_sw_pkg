@@ -13,7 +13,7 @@ Installation
 3. Modify /etc/environment and add following line.
    LD_LIBRARY_PATH=/lib:/usr/lib:/usr/local/lib
 4. Reboot
-5. Run NewraPeek: country_code = KR or US or JP or TW
+5. Run NewraPeek: country_code = KR, US, JP, TW , AU, or NZ
    6.1 local running:  ./start.py 2 0 KR channel_number 0 &
    6.2 remote running: ./start.py 2 0 KR channel_number 1 &
    6.3 change channel: ./change_channel.py channel_number

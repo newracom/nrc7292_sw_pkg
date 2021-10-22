@@ -1,0 +1,8 @@
+
+config SPI_FT232H
+	tristate "FTDI FT232H SPI controller"
+	depends on USB || GPIOLIB || COMPILE_TEST
+	help
+	  FT232H supports SPI in MPSSE mode. 
+	  This driver provides MPSSE SPI controller in master mode.
+

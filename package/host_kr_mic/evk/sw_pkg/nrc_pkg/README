@@ -25,7 +25,8 @@ Usage:
 Argument:
         sta_type      [0:STA   |  1:AP  		|  2:SNIFFER  | 3:RELAY]
         security_mode [0:Open  |  1:WPA2-PSK  	|  2:WPA3-OWE | 3:WPA3-SAE]
-        country       [US:USA  |  JP:Japan  |  TW:Taiwan  | KR:Korea 	| EU:EURO 	| CN:China]
+        country       [US:USA  |  JP:Japan  |  TW:Taiwan  | KR:Korea | EU:EURO | CN:China |
+	                   AU:Austrailia  |  NZ:New Zealand]
         -----------------------------------------------------------
         channel       [S1G Channel Number]   * Only for Sniffer
         sniffer_mode  [0:Local | 1:Remote]   * Only for Sniffer
