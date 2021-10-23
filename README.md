@@ -13,7 +13,7 @@
 
 ### Release package contents
 - host: NRC7292 software package for global regulatory domains
-- host_kr_mic: NRC7292 software package for South Korea MIC frequency regualtion
+- host_kr_mic: NRC7292 software package for South Korea MIC frequency regulation
 - host_kr_usn: NRC7292 software package for South Korea USN frequency regulation
 
 ## NRC7292 Software Package User Guide
