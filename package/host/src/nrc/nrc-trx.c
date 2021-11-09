@@ -473,11 +473,12 @@ static void nrc_mac_rx_h_status(struct nrc *nw, struct sk_buff *skb)
 	if (fh->flags.rx.iv_stripped)
 		status->flag |= RX_FLAG_IV_STRIPPED;
 
+#if KERNEL_VERSION(4, 4, 132) <= NRC_TARGET_KERNEL_VERSION
 	if(mh->frame_control & 0x0400)
 	{
 		status->flag |= RX_FLAG_ALLOW_SAME_PN;
 	}
-
+#endif
 	if (signal_monitor) {
 		//update snr and rssi only if signal monitor is enabled
 		nrc_stats_update(mh->addr2, fh->flags.rx.snr, fh->flags.rx.rssi);
