@@ -2601,7 +2601,7 @@ int nrc_mac_suspend(struct ieee80211_hw *hw, struct cfg80211_wowlan *wowlan)
 	struct wim_pm_param *p;
 
 	nrc_ps_dbg("[%s,L%d] any:%d patterns(0x%08x) n_patterns(%d)\n", __func__, __LINE__, 
-			wowlan->any, (int)wowlan->patterns, wowlan->n_patterns);
+			wowlan->any, (long)wowlan->patterns, wowlan->n_patterns);
 
 	/*
 	 * If the target is already in deepsleep state(running uCode),
