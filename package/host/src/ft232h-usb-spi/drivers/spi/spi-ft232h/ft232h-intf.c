@@ -762,7 +762,11 @@ static int ftdi_mpsse_gpio_probe(struct usb_interface *intf)
 		return -ENOMEM;
 
 	for (i = 0; i < priv->mpsse_gpio.ngpio ; i++) {
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(5,7,19)
 		lookup->table[i].chip_label = priv->mpsse_gpio.label;
+#else
+		lookup->table[i].key = priv->mpsse_gpio.label;
+#endif
 		lookup->table[i].chip_hwnum = i;
 		if (i < 4) {
 			lookup->table[i].idx = i;
