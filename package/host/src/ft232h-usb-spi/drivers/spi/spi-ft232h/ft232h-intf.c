@@ -23,6 +23,7 @@
 #include <linux/spi/spi.h>
 #include <linux/usb/ch9.h>
 #include <linux/usb.h>
+#include <linux/version.h>
 
 #include "ft232h-intf.h"
 
