@@ -47,15 +47,15 @@ enum LOOPBACK_MODE {
 
 struct lb_time_info {
 	int _i;
-	ktime_t _txt;
-	ktime_t _rxt;
+	s64 _txt;
+	s64 _rxt;
 };
 
 extern unsigned long nrc_debug_mask;
-extern ktime_t tx_time_first;
-extern ktime_t tx_time_last;
-extern ktime_t rcv_time_first;
-extern ktime_t rcv_time_last;
+extern s64 tx_time_first;
+extern s64 tx_time_last;
+extern s64 rcv_time_first;
+extern s64 rcv_time_last;
 extern u32 arv_time_first;
 extern u32 arv_time_last;
 extern struct lb_time_info *time_info_array;
