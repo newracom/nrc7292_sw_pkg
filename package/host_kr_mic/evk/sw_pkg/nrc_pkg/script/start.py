@@ -36,7 +36,7 @@ ft232h_usb_spi    = 0         # FTDI FT232H USB-SPI bridge : 0(off) or 1(on)
 #################################################################################
 # RF Conf.
 # Board Data includes TX Power per MCS and CH
-txpwr_val         = 18       # TX Power
+txpwr_val         = 17       # TX Power
 txpwr_max_default = 24       # Board Data Max TX Power
 bd_download       = 0        # 0(Board Data Download off) or 1(Board Data Download on)
 bd_name           = 'nrc7292_bd_kr.dat'
@@ -49,6 +49,11 @@ cal_use           = 1        # 0(disable) or 1(enable)
 guard_int         = 'long'   # Guard Interval ('long'(LGI) or 'short'(SGI))
 ##################################################################################
 # MAC Conf.
+# S1G Short Beacon (AP & MESH Only)
+#  If disabled, AP sends only S1G long beacon every BI
+#  Recommend using S1G short beacon for network efficiency (Default: enabled)
+short_bcn_enable  = 1        # 0 (disable) or 1 (enable)
+#--------------------------------------------------------------------------------#
 # AMPDU (Aggregated MPDU)
 #  Enable AMPDU for full channel utilization and throughput enhancement
 ampdu_enable      = 1        # 0 (disable) or 1 (enable)
@@ -61,7 +66,7 @@ ndp_ack_1m        = 0        # 0 (disable) or 1 (enable)
 #--------------------------------------------------------------------------------#
 # NDP Probe Request
 #  For STA, "scan_ssid=1" in wpa_supplicant's conf should be set to use
-ndp_preq          = 1        # 0 (Legacy Probe Req) 1 (NDP Probe Req)
+ndp_preq          = 0        # 0 (Legacy Probe Req) 1 (NDP Probe Req)
 #--------------------------------------------------------------------------------#
 # CQM (Channel Quality Manager) (STA Only)
 #  STA can disconnect according to Channel Quality (Beacon Loss or Poor Signal)
@@ -312,16 +317,16 @@ def stopNAT():
     os.system("sudo iptables --flush")
 
 def startDHCPCD():
-    os.system("sudo service dhcpcd start")
+    os.system("sudo systemctl start dhcpcd")
 
 def stopDHCPCD():
-    os.system("sudo service dhcpcd stop")
+    os.system("sudo systemctl stop dhcpcd")
 
 def startDNSMASQ():
-    os.system("sudo service dnsmasq start")
+    os.system("sudo systemctl start dnsmasq")
 
 def stopDNSMASQ():
-    os.system("sudo service dnsmasq stop")
+    os.system("sudo systemctl stop dnsmasq")
 
 def addWLANInterface(interface):
     if strSTA() == 'RELAY' and interface == "wlan1":
@@ -348,7 +353,7 @@ def self_config_check():
     elif strSecurity() == 'WPA-PBC' :
         conf_file+="/ap_halow_pbc.conf"
 
-    print"country: " + country +", prefer_bw: " + str(prefer_bw)+ ", dwell_time: "+ str(dwell_time)
+    print("country: " + country +", prefer_bw: " + str(prefer_bw)+ ", dwell_time: "+ str(dwell_time))
 
     self_conf_cmd = script_path+'cli_app set self_config ' + country +' '+str(prefer_bw) +' ' + str(dwell_time) + ' '
     if int(dwell_time) > 1000:
@@ -474,6 +479,11 @@ def setModuleParam():
     else:
         cqm_arg = ""
 
+    if int(short_bcn_enable) == 0:
+        sbi_arg = " enable_short_bi=0"
+    else:
+        sbi_arg = ""
+
     if int(listen_interval) > 0:
         listen_int_arg = " listen_interval=" + str(listen_interval)
     else:
@@ -503,11 +513,12 @@ def setModuleParam():
         power_save_arg= ""
         sw_enc_arg= ""
         ndp_ack_1m_arg= ""
+        ndp_preq_arg= ""
 
     module_param = spi_arg + fw_arg + bd_arg + alt_mode_arg + \
                  power_save_arg + sleep_duration_arg + bss_max_idle_arg + \
                  ndp_preq_arg + ndp_ack_1m_arg + auto_ba_arg + sw_enc_arg + \
-                 cqm_arg + listen_int_arg + drv_dbg_arg + credit_acbe_arg
+                 cqm_arg + listen_int_arg + drv_dbg_arg + credit_acbe_arg + sbi_arg
 
     return module_param
 
@@ -622,12 +633,12 @@ def run_ap(interface):
         debug = ''
 
     if (int(self_config)==1):
-        print"[*] Self configuration start!"
+        print("[*] Self configuration start!")
         self_conf_result = self_config_check()
     elif(int(self_config)==0):
-        print"[*] Self configuration off"
+        print("[*] Self configuration off")
     else:
-        print"[*] self_conf value should be 0 or 1..  Start with default mode(no self configuration)"
+        print("[*] self_conf value should be 0 or 1..  Start with default mode(no self configuration)")
 
     print("[6] Start hostapd on " + interface)
 
