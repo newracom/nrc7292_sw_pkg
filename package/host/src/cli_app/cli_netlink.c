@@ -248,7 +248,8 @@ int netlink_send_data(char cmd_type, char* param, char* response)
 
 		if(cmd_type == NL_SHELL_RUN_RAW)
 		{
-			memcpy(response, NLA_DATA(nl_na), nl_na->nla_len - 4);
+			if ((nl_na->nla_len - 4) > 0)
+				memcpy(response, NLA_DATA(nl_na), nl_na->nla_len - 4);
 		}
 		else
 		{

@@ -320,10 +320,10 @@ static u32 bunch = 0;
 static u8 lb_subtype;
 static u32 lb_count = 1;
 u32 lb_hexdump = 0;
-ktime_t tx_time_first;
-ktime_t tx_time_last;
-ktime_t rcv_time_first;
-ktime_t rcv_time_last;
+s64 tx_time_first;
+s64 tx_time_last;
+s64 rcv_time_first;
+s64 rcv_time_last;
 u32 arv_time_first;
 u32 arv_time_last;
 struct lb_time_info *time_info_array = NULL;
@@ -555,10 +555,11 @@ static ssize_t nrc_debugfs_hspi_report_write(struct file *file, const char __use
 	return ret;
 }
 
+#define TIMESTAMP_SUB(x, y)	((x) - (y))
 #define RESET_VARS()	(c = sum_tx = sum_rx = 0)
 #define LB_INFO(x)		((time_info_array + i)->_##x)
 #define LB_INFO_(x)		((time_info_array + i - 1)->_##x)
-#define LB_SUB(x)		((unsigned long)ktime_sub(LB_INFO(x), LB_INFO_(x)))
+#define LB_SUB(x)		((unsigned long)TIMESTAMP_SUB(LB_INFO(x), LB_INFO_(x)))
 
 static int nrc_debugfs_hspi_report(struct seq_file *s, void *data)
 {
@@ -581,14 +582,14 @@ static int nrc_debugfs_hspi_report(struct seq_file *s, void *data)
 		seq_printf(s, "   => Total transferred bytes (No.3 + No.4): %llu bytes\n\n", t = (unsigned long long)(tx + rx));
 		seq_printf(s, "5. First frame transmit time: %llu us\n", tx_time_first);
 		seq_printf(s, "6. Last frame transmit time: %llu us\n", tx_time_last);
-		seq_printf(s, "   (diff: %lu us)\n", (unsigned long)ktime_sub(tx_time_last, tx_time_first));
+		seq_printf(s, "   (diff: %lu us)\n", (unsigned long)TIMESTAMP_SUB(tx_time_last, tx_time_first));
 		seq_printf(s, "7. First frame received time: %llu us\n", rcv_time_first);
 		seq_printf(s, "8. Last frame received time: %llu us\n", rcv_time_last);
-		seq_printf(s, "   (diff: %lu us)\n", (unsigned long)ktime_sub(rcv_time_last, rcv_time_first));
+		seq_printf(s, "   (diff: %lu us)\n", (unsigned long)TIMESTAMP_SUB(rcv_time_last, rcv_time_first));
 		seq_printf(s, "   --------------------------------------------\n");
-		seq_printf(s, "   => First frame RTT (No.7 - No.5) : %lu us\n", (unsigned long)ktime_sub(rcv_time_first, tx_time_first));
-		seq_printf(s, "   => Last frame RTT (No.8 - No.6) : %lu us\n", (unsigned long)ktime_sub(rcv_time_last, tx_time_last));
-		seq_printf(s, "   => Time diff (No.8 - No.5) : %lu us\n", diff = (unsigned long)ktime_sub(rcv_time_last, tx_time_first));
+		seq_printf(s, "   => First frame RTT (No.7 - No.5) : %lu us\n", (unsigned long)TIMESTAMP_SUB(rcv_time_first, tx_time_first));
+		seq_printf(s, "   => Last frame RTT (No.8 - No.6) : %lu us\n", (unsigned long)TIMESTAMP_SUB(rcv_time_last, tx_time_last));
+		seq_printf(s, "   => Time diff (No.8 - No.5) : %lu us\n", diff = (unsigned long)TIMESTAMP_SUB(rcv_time_last, tx_time_first));
 		t *= 7812; // 8(bit) / 1024(kbit) * 1000000(sec) = 7812.5
 		seq_printf(s, "   => Throughput: %llu kbps\n", div_u64(t, diff));
 	} else if (lb_subtype == LOOPBACK_MODE_TX_ONLY) {
@@ -596,7 +597,7 @@ static int nrc_debugfs_hspi_report(struct seq_file *s, void *data)
 		seq_printf(s, "3. Total tx bytes (HOST -> TARGET): %lld bytes\n\n", t = (lb_count - 1) * slots * TX_SLOT_SIZE);
 		seq_printf(s, "4. First frame transmit time: %llu us\n", tx_time_first);
 		seq_printf(s, "5. Last frame transmit time: %llu us\n", tx_time_last);
-		seq_printf(s, "   (diff: %lu us)\n", (unsigned long)ktime_sub(tx_time_last, tx_time_first));
+		seq_printf(s, "   (diff: %lu us)\n", (unsigned long)TIMESTAMP_SUB(tx_time_last, tx_time_first));
 		seq_printf(s, "6. First frame arrival time(TSF in target): %u us\n", arv_time_first);
 		seq_printf(s, "7. Last frame arrival time(TSF in target): %u us\n", arv_time_last);
 		seq_printf(s, "   (diff: %lu us)\n", diff = (arv_time_last - arv_time_first));
@@ -609,7 +610,7 @@ static int nrc_debugfs_hspi_report(struct seq_file *s, void *data)
 		seq_printf(s, "3. Total rx bytes (TARGET -> HOST): %lld bytes\n\n", t = (lb_count - 1) * rl);
 		seq_printf(s, "7. First frame received time: %llu us\n", rcv_time_first);
 		seq_printf(s, "8. Last frame received time: %llu us\n", rcv_time_last);
-		seq_printf(s, "   (diff: %lu us)\n", diff = (unsigned long)ktime_sub(rcv_time_last, rcv_time_first));
+		seq_printf(s, "   (diff: %lu us)\n", diff = (unsigned long)TIMESTAMP_SUB(rcv_time_last, rcv_time_first));
 		seq_printf(s, "   --------------------------------------------\n");
 		t *= 7812; // 8(bit) / 1024(kbit) * 1000000(sec) = 7812.5
 		seq_printf(s, "   => Throughput: %llu kbps\n", div_u64(t, diff));

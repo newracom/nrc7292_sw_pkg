@@ -2600,8 +2600,8 @@ int nrc_mac_suspend(struct ieee80211_hw *hw, struct cfg80211_wowlan *wowlan)
 	struct nrc_txq *ntxq;
 	struct wim_pm_param *p;
 
-	nrc_ps_dbg("[%s,L%d] any:%d patterns(0x%08x) n_patterns(%d)\n", __func__, __LINE__, 
-			wowlan->any, (int)wowlan->patterns, wowlan->n_patterns);
+	nrc_ps_dbg("[%s,L%d] any:%d patterns(%p) n_patterns(%d)\n", __func__, __LINE__, 
+			wowlan->any, wowlan->patterns, wowlan->n_patterns);
 
 	/*
 	 * If the target is already in deepsleep state(running uCode),
@@ -2666,8 +2666,12 @@ int nrc_mac_suspend(struct ieee80211_hw *hw, struct cfg80211_wowlan *wowlan)
 }
 #endif
 
+#if KERNEL_VERSION(4, 8, 0) <= NRC_TARGET_KERNEL_VERSION
 static u32 nrc_get_expected_throughput(struct ieee80211_hw *hw,
 		struct ieee80211_sta *sta)
+#else
+static u32 nrc_get_expected_throughput(struct ieee80211_sta *sta)
+#endif
 {
 	uint32_t tput = 0;
 

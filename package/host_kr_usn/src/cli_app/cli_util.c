@@ -227,7 +227,7 @@ cmd_tbl_t *cmd_list_display(enum cmd_list_type type)
 	cmd_tbl_t *t = NULL;
 	int i = 0, j = 0;
 	int tab_len =0;
-	int max_tab_number = 8;
+	int max_tab_number = 11;
 
 	for (i = 0; i < list_size; i++) {
 		t = (cmd_tbl_t *)(list + i);

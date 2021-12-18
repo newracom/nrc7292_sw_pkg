@@ -103,7 +103,7 @@ static const struct nla_policy nl_umac_policy[NL_WFA_CAPI_ATTR_LAST] = {
 	[NL_SET_SAE_EID] = {.type = NLA_U16},
 	[NL_SET_SAE_LENGTH] = {.type = NLA_U16},
 	[NL_SET_SAE_DATA] = {.type = NLA_NUL_STRING},
-	[NL_SHELL_RUN_CMD_RAW]		= {.type = NLA_U8},
+	[NL_SHELL_RUN_CMD_RAW]		= {.type = NLA_NUL_STRING},
 	[NL_AUTO_BA_ON]		= {.type = NLA_U8},
 };
 

@@ -191,11 +191,9 @@ cmd_tbl_t show_sub_list[] = {
 	{ "uinfo", cmd_show_umac_info, "show UMAC information", "show uinfo [vif_id]",  "", 0},
 	{ "ampdu", cmd_show_ampdu, "show/clear AMPDU count", "show ampdu | show ampdu clear",  "", 0},
 	{ "mac", cmd_show_mac, "mac command", "show mac {tx|rx|clear} {stats|clear}",  "", 1},
-	{ "signal", cmd_show_signal, "show rssi/snr", "show signal {start|stop} [interval] [number]",  SHOW_SIGNAL_KEY_LIST, 0},
+	{ "signal", cmd_show_signal, "show rssi/snr, {options} are only valid in cli_app prompt", "show signal {start|stop} [interval] [number]",  SHOW_SIGNAL_KEY_LIST, 0},
 	{ "maxagg", cmd_show_maxagg, "show max aggregation", "show maxagg",  "", 0},
-#if defined(INCLUDE_DUTYCYCLE) && (INCLUDE_DUTYCYCLE == 1)
 	{ "duty", cmd_show_duty, "show duty cycle", "show duty",  SHOW_DUTY_KEY_LIST, 0},
-#endif
 	{ "autotxgain", cmd_show_autotxgain, "show autotxgain", "show autotxgain",  SHOW_AUTOTXGAIN_KEY_LIST, 0},
 	{ "cal_use", cmd_show_cal_use, "show cal_use", "show cal_use",  SHOW_CAL_USE_KEY_LIST, 0},
 	{ "bdf_use", cmd_show_bdf_use, "show board data use", "show bdf_use",  SHOW_BDF_USE_KEY_LIST, 0},
@@ -212,15 +210,13 @@ cmd_tbl_t show_sub_list[] = {
 /* sub command list on set */
 cmd_tbl_t set_sub_list[] = {
 	{ "gi", cmd_set_guard_interval, "set guard interval", "set gi {short|long|auto}", "", 0},
-	{ "maxagg", cmd_set_max_aggregation, "set aggregation", "set maxagg {AC(0-3)} <Max(0-13,0:off)> {size:default=0}", SET_MAXAGG_KEY_LIST, 0},
+	{ "maxagg", cmd_set_max_aggregation, "set aggregation", "set maxagg {AC(0-3)} <Max(0-8(1Mhz),0-16(2,4Mhz),0:off)> {size:default=0}", SET_MAXAGG_KEY_LIST, 0},
 	{ "config", cmd_set_config, "set ack, aggregation, mcs", "set config {ack(0,1)} {agg(0,1)} [mcs]", SET_CONFIG_KEY_LIST, 0},
 	{ "rc", cmd_set_rate_control, "set rate control", "set rc {on|off} [vif_id] [mode]", SET_RC_KEY_LIST, 0},
-#if defined(INCLUDE_DUTYCYCLE) && (INCLUDE_DUTYCYCLE == 1)
 	{ "duty", cmd_set_duty, "set duty cycle", "set duty {on|off} {duty window} {tx duration} {duty margin}", SET_DUTY_KEY_LIST, 0},
-#endif
 	{ "cal_use", cmd_set_cal_use, "set cal_use", "set cal_use {on|off}", SET_CAL_USE_KEY_LIST, 0},
 	{ "bdf_use", cmd_set_bdf_use, "set board data use", "set bdf_use {on|off}", SET_BDF_USE_KEY_LIST, 0},
-	{ "txpwr", cmd_set_txpwr, "set txpwrt", "set txpwr {value(1~30)}", SET_TXPWR_KEY_LIST, 0},
+	{ "txpwr", cmd_set_txpwr, "set txpwrt", "set txpwr {value(1~20)}", SET_TXPWR_KEY_LIST, 0},
 	{ "wakeup_pin", cmd_set_wakeup_pin, "set wakeup pin for deepsleep", "set wakeup_pin {Debounce(on|off)} {PIN Number(0~31)}", SET_WAKEUP_PIN_KEY_LIST, 0},
 	{ "wakeup_source", cmd_set_wakeup_source, "set wakeup source for deepsleep", "set wakeup_soruce rtc gpio hspi", SET_WAKEUP_SOURCE_KEY_LIST, 0},
 	{ "addba", cmd_set_addba, "set addba tid / send addba with mac address", "set addba [tid] {mac address}", "", 0},
@@ -370,7 +366,7 @@ static int cmd_stop_ap(cmd_tbl_t *t, int argc, char *argv[])
 *******************************************************************************/
 static int cmd_help(cmd_tbl_t *t, int argc, char *argv[])
 {
-	int print_line_len = 100;
+	int print_line_len = 130;
 	print_line('=', print_line_len,"", 0,0);
 	cmd_list_display(MAIN_CMD);
 	cmd_list_display(SHOW_SUB_CMD);
@@ -1859,7 +1855,7 @@ static int cmd_set_txpwr(cmd_tbl_t *t, int argc, char *argv[])
 	}
 
 	txpwr = atoi(argv[2]);
-	if(txpwr<0 || txpwr >30){
+	if(txpwr<0 || txpwr >20){
 		return CMD_RET_FAILURE;
 	}
 
