@@ -1,6 +1,6 @@
 CC ?= gcc
 AR ?= ar
-RM := rm -f
+RM ?= rm -f
 
 TARGET = cli_app
 
@@ -10,8 +10,8 @@ LIB_OBJS = cli_cmd.o cli_netlink.o cli_util.o
 EXE_SRCS = main.c
 EXE_OBJS = main.o
 
-CFLAGS = -pthread
-LFLAGS = -L./ -l$(TARGET) -lm
+CFLAGS += -pthread
+LFLAGS += -L./ -l$(TARGET) -lm
 
 all: lib$(TARGET).a $(TARGET)
 

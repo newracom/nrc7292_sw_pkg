@@ -376,19 +376,15 @@ def self_config_check():
         best_channel = re.split('[:,\s,\t,\n]+', result)[-3]
         os.system("sudo cp " + conf_path+conf_file + " temp_self_config.conf")
         os.system("sudo mv temp_self_config.conf " +script_path +"conf/")
-
-        with open(script_path+"conf/temp_self_config.conf", 'r') as lines:
-            for line in lines:
-                if line.startswith('#'):
-                    continue
-                elif line.startswith("channel="):
-                    orig_channel+=line.strip().split('=')[1]
-                    break
+        os.system("sed -i '/channel=/d' " + script_path + "conf/temp_self_config.conf")
+        os.system("sed -i '/hw_mode=/d' " + script_path + "conf/temp_self_config.conf")
+        os.system("sed -i '/#ssid=/d' " + script_path + "conf/temp_self_config.conf")
+        if int(best_channel) < 36:
+            os.system('sed -i "/ssid=.*/ahw_mode=' + 'g' +'" ' + script_path + 'conf/temp_self_config.conf')
+        else:
+            os.system('sed -i "/ssid=.*/ahw_mode=' + 'a' +'" ' + script_path + 'conf/temp_self_config.conf')
+        os.system('sed -i "/hw_mode=.*/achannel=' + best_channel +'" ' + script_path + 'conf/temp_self_config.conf')
         print("Start with channel: " + best_channel)
-        os.system("sed -i 's/" + "channel=" + orig_channel + "/channel=" + best_channel + " /g' " +script_path+"conf/temp_self_config.conf")
-        if int(best_channel) < 14:
-            os.system("sed -i '8s/.*/hw_mode=g/g' " +script_path+"conf/temp_self_config.conf")
-
         return 'Done'
 
 def ft232h_usb():

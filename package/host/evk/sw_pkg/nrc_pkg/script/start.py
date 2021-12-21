@@ -43,7 +43,7 @@ bd_name           = 'nrc7292_bd.dat'
 #--------------------------------------------------------------------------------#
 # Calibration usage option
 #  If this value is changed, the device should be restarted for applying the value
-cal_use            = 1       # 0(disable) or 1(enable)
+cal_use           = 1        # 0(disable) or 1(enable)
 ##################################################################################
 # PHY Conf.
 guard_int         = 'long'   # Guard Interval ('long'(LGI) or 'short'(SGI))
@@ -61,7 +61,7 @@ ndp_ack_1m        = 0        # 0 (disable) or 1 (enable)
 #--------------------------------------------------------------------------------#
 # NDP Probe Request
 #  For STA, "scan_ssid=1" in wpa_supplicant's conf should be set to use
-ndp_preq          = 1        # 0 (Legacy Probe Req) 1 (NDP Probe Req)
+ndp_preq          = 0        # 0 (Legacy Probe Req) 1 (NDP Probe Req)
 #--------------------------------------------------------------------------------#
 # CQM (Channel Quality Manager) (STA Only)
 #  STA can disconnect according to Channel Quality (Beacon Loss or Poor Signal)
@@ -312,16 +312,16 @@ def stopNAT():
     os.system("sudo iptables --flush")
 
 def startDHCPCD():
-    os.system("sudo service dhcpcd start")
+    os.system("sudo systemctl start dhcpcd")
 
 def stopDHCPCD():
-    os.system("sudo service dhcpcd stop")
+    os.system("sudo systemctl stop dhcpcd")
 
 def startDNSMASQ():
-    os.system("sudo service dnsmasq start")
+    os.system("sudo systemctl start dnsmasq")
 
 def stopDNSMASQ():
-    os.system("sudo service dnsmasq stop")
+    os.system("sudo systemctl stop dnsmasq")
 
 def addWLANInterface(interface):
     if strSTA() == 'RELAY' and interface == "wlan1":
@@ -348,7 +348,7 @@ def self_config_check():
     elif strSecurity() == 'WPA-PBC' :
         conf_file+="/ap_halow_pbc.conf"
 
-    print"country: " + country +", prefer_bw: " + str(prefer_bw)+ ", dwell_time: "+ str(dwell_time)
+    print("country: " + country +", prefer_bw: " + str(prefer_bw)+ ", dwell_time: "+ str(dwell_time))
 
     self_conf_cmd = script_path+'cli_app set self_config ' + country +' '+str(prefer_bw) +' ' + str(dwell_time) + ' '
     if int(dwell_time) > 1000:
@@ -371,19 +371,15 @@ def self_config_check():
         best_channel = re.split('[:,\s,\t,\n]+', result)[-3]
         os.system("sudo cp " + conf_path+conf_file + " temp_self_config.conf")
         os.system("sudo mv temp_self_config.conf " +script_path +"conf/")
-
-        with open(script_path+"conf/temp_self_config.conf", 'r') as lines:
-            for line in lines:
-                if line.startswith('#'):
-                    continue
-                elif line.startswith("channel="):
-                    orig_channel+=line.strip().split('=')[1]
-                    break
+        os.system("sed -i '/channel=/d' " + script_path + "conf/temp_self_config.conf")
+        os.system("sed -i '/hw_mode=/d' " + script_path + "conf/temp_self_config.conf")
+        os.system("sed -i '/#ssid=/d' " + script_path + "conf/temp_self_config.conf")
+        if int(best_channel) < 36:
+            os.system('sed -i "/ssid=.*/ahw_mode=' + 'g' +'" ' + script_path + 'conf/temp_self_config.conf')
+        else:
+            os.system('sed -i "/ssid=.*/ahw_mode=' + 'a' +'" ' + script_path + 'conf/temp_self_config.conf')
+        os.system('sed -i "/hw_mode=.*/achannel=' + best_channel +'" ' + script_path + 'conf/temp_self_config.conf')
         print("Start with channel: " + best_channel)
-        os.system("sed -i 's/" + "channel=" + orig_channel + "/channel=" + best_channel + " /g' " +script_path+"conf/temp_self_config.conf")
-        if int(best_channel) < 14:
-            os.system("sed -i '8s/.*/hw_mode=g/g' " +script_path+"conf/temp_self_config.conf")
-
         return 'Done'
 
 def ft232h_usb():
@@ -503,6 +499,7 @@ def setModuleParam():
         power_save_arg= ""
         sw_enc_arg= ""
         ndp_ack_1m_arg= ""
+        ndp_preq_arg= ""
 
     module_param = spi_arg + fw_arg + bd_arg + alt_mode_arg + \
                  power_save_arg + sleep_duration_arg + bss_max_idle_arg + \
@@ -622,12 +619,12 @@ def run_ap(interface):
         debug = ''
 
     if (int(self_config)==1):
-        print"[*] Self configuration start!"
+        print("[*] Self configuration start!")
         self_conf_result = self_config_check()
     elif(int(self_config)==0):
-        print"[*] Self configuration off"
+        print("[*] Self configuration off")
     else:
-        print"[*] self_conf value should be 0 or 1..  Start with default mode(no self configuration)"
+        print("[*] self_conf value should be 0 or 1..  Start with default mode(no self configuration)")
 
     print("[6] Start hostapd on " + interface)
 
