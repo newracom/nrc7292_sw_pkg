@@ -25,14 +25,25 @@ supplicant_debug  = 0         # WPA Supplicant debug option : 0(off) or 1(on)
 hostapd_debug     = 0         # Hostapd debug option    : 0(off) or 1(on)
 #################################################################################
 # CSPI Conf. (Default)
-spi_clock         = 20000000  # SPI Master Clock Frequency
-spi_bus_num       = 0         # SPI Master Bus Number
-spi_cs_num        = 0         # SPI Master Chipselect Number
-spi_gpio_irq      = 5         # CSPI_EIRQ GPIO Number, BBB is 60 recommanded.
-spi_gpio_poll     = -1        # CSPI_EIRQ GPIO Polling Interval (if negative, irq mode)
+spi_clock    = 20000000       # SPI Master Clock Frequency
+spi_bus_num  = 0              # SPI Master Bus Number
+spi_cs_num   = 0              # SPI Master Chipselect Number
+spi_gpio_irq = 5              # NRC-CSPI EIRQ GPIO Number
+                              # BBB is 60 recommanded.
+spi_polling_interval = 0      # NRC-CSPI Polling Interval (msec)
+
+#
+# NOTE:
+#  - NRC-CSPI EIRQ Input Interrupt: spi_gpio_irq >= 0 and spi_polling_interval <= 0
+#  - NRC-CSPI EIRQ Input Polling  : spi_gpio_irq >= 0 and spi_polling_interval > 0
+#  - NRC-CSPI Registers Polling   : spi_gpio_irq < 0 and spi_polling_interval > 0
+#
 #--------------------------------------------------------------------------------#
 # FT232H USB-SPI Conf. (FT232H CSPI Conf)
-ft232h_usb_spi    = 0         # FTDI FT232H USB-SPI bridge : 0(off) or 1(on)
+ft232h_usb_spi = 0            # FTDI FT232H USB-SPI bridge
+                              # 0 : Unused
+                              # 1 : NRC-CSPI_EIRQ Input Polling
+                              # 2 : NRC-CSPI Registers Polling
 #################################################################################
 # RF Conf.
 # Board Data includes TX Power per MCS and CH
@@ -383,9 +394,9 @@ def self_config_check():
         return 'Done'
 
 def ft232h_usb():
-    global spi_clock, spi_bus_num, spi_gpio_irq, spi_cs_num, spi_gpio_poll
+    global spi_clock, spi_bus_num, spi_gpio_irq, spi_cs_num, spi_polling_interval
     # ft232h_usb_spi
-    if int(ft232h_usb_spi) == 1:
+    if int(ft232h_usb_spi) > 0:
         print("[*] use ft232h_usb_spi")
         spi_bus_num = 3
         spi_gpio_irq = 500
@@ -393,8 +404,10 @@ def ft232h_usb():
             spi_clock = 15000000
         if int(spi_cs_num) != 0:
             spi_cs_num = 0
-        if int(spi_gpio_poll) < 0:
-            spi_gpio_poll = 30
+        if int(spi_polling_interval) <= 0:
+            spi_polling_interval = 50
+        if int(ft232h_usb_spi) != 1:
+            spi_gpio_irq = -1
 
 def setModuleParam():
     global auto_ba
@@ -406,7 +419,7 @@ def setModuleParam():
               " spi_bus_num=" + str(spi_bus_num) + \
               " spi_cs_num=" + str(spi_cs_num) + \
               " spi_gpio_irq=" + str(spi_gpio_irq) + \
-              " spi_gpio_poll=" + str(spi_gpio_poll)
+              " spi_polling_interval=" + str(spi_polling_interval)
 
     if int(fw_download) == 1:
         fw_arg= " fw_name=" + fw_name
@@ -534,7 +547,7 @@ def run_common():
     print("sudo insmod /home/pi/nrc_pkg/sw/driver/nrc.ko " + insmod_arg)
     os.system("sudo insmod /home/pi/nrc_pkg/sw/driver/nrc.ko " + insmod_arg + "")
 
-    if int(spi_gpio_poll) < 0:
+    if int(spi_polling_interval) <= 0:
         time.sleep(5)
     else:
         time.sleep(10)

@@ -467,7 +467,7 @@ extern int hifspeed;
 extern int spi_bus_num;
 extern int spi_cs_num;
 extern int spi_gpio_irq;
-extern int spi_gpio_poll;
+extern int spi_polling_interval;
 extern int spi_gdma_irq;
 extern int disable_cqm;
 extern int bss_max_idle_offset;

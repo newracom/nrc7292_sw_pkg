@@ -83,9 +83,9 @@ int spi_gpio_irq = 5;
 module_param(spi_gpio_irq, int, 0600);
 MODULE_PARM_DESC(spi_gpio_irq, "SPI gpio irq");
 
-int spi_gpio_poll = -1;
-module_param(spi_gpio_poll, int, 0600);
-MODULE_PARM_DESC(spi_gpio_poll, "SPI gpio polling interval (msec)");
+int spi_polling_interval = 0;
+module_param(spi_polling_interval, int, 0600);
+MODULE_PARM_DESC(spi_polling_interval, "SPI polling interval (msec)");
 
 int spi_gdma_irq = 6;
 module_param(spi_gdma_irq, int, 0600);
