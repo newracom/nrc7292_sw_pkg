@@ -1308,8 +1308,10 @@ static int spi_poll_thread (void *data)
 	interval *= 1000;
 
 	while (!kthread_should_stop()) {
-		if (gpio < 0)
+		if (gpio < 0) {
 			spi_irq(-1, hdev);
+                        wake_up_interruptible(&priv->wait);
+                }
 		else {
 			ret = gpio_get_value_cansleep(gpio);
 
