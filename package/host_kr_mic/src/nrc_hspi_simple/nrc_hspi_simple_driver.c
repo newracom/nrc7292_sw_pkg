@@ -255,4 +255,3 @@ module_exit(nrc_exit);
 MODULE_AUTHOR("Newracom, Inc.(http://www.newracom.com)");
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_DESCRIPTION("Newracom HSPI simple driver");
-MODULE_SUPPORTED_DEVICE("Newracom 802.11 devices");
