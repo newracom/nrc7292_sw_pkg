@@ -532,6 +532,7 @@ def run_common():
     os.system("sudo killall -9 wireshark-gtk")
     os.system("sudo rmmod nrc")
     os.system("sudo rm "+script_path+"conf/temp_self_config.conf")
+    os.system("sudo rm "+script_path+"conf/temp_hostapd_config.conf")
     stopNAT()
     stopDHCPCD()
     stopDNSMASQ()
@@ -623,8 +624,28 @@ def run_sta(interface):
     print("IP assigned. HaLow STA ready")
     print("--------------------------------------------------------------------")
 
+def launch_hostapd(interface, orig_hostapd_conf_file, country, debug, channel):
+    print("[*] configure file copied from: %s" % (orig_hostapd_conf_file) )
+    TEMP_HOSTAPD_CONF = script_path +  "conf/temp_hostapd_config.conf"
+    os.system("sudo cp %s %s" % ( orig_hostapd_conf_file,  TEMP_HOSTAPD_CONF ) )
+    os.system("sed -i \"4s/.*/interface=%s/g\" %s" % ( interface, TEMP_HOSTAPD_CONF ) )
+
+    if channel:
+        os.system("sed -i \"s/^channel=.*/channel=%s/g\" %s" % ( channel, TEMP_HOSTAPD_CONF ) )
+
+        # According to "UG-7292-001-EVK User Guide (Host Mode).pdf" page 40, the ``hw_mode`` needs to be changed to
+        #  ``hw_mode=g`` instead of ``hw_mode=a`` in ``US`` country code.
+        if country == "US" and 1 <= int(channel) and int(channel) <= 13:
+            os.system("sed -i \"s/^hw_mode=.*/hw_mode=g/g\" %s" % ( TEMP_HOSTAPD_CONF ) )
+
+    os.system("sudo hostapd %s %s &" % ( TEMP_HOSTAPD_CONF, debug ) )
+
+
 def run_ap(interface):
     country = str(sys.argv[3])
+    channel = None
+    if len(sys.argv) > 4 :
+        channel = str(sys.argv[4])
 
     if int(hostapd_debug) == 1:
         debug = '-dddd'
@@ -646,20 +667,15 @@ def run_ap(interface):
         os.system("sudo hostapd " + script_path + "conf/temp_self_config.conf " + debug +" &")
     else:
         if strSecurity() == 'OPEN':
-            os.system("sed -i " + '"4s/.*/interface=' + interface + '/g"  /home/pi/nrc_pkg/script/conf/' + country + '/ap_halow_open.conf ')
-            os.system("sudo hostapd /home/pi/nrc_pkg/script/conf/" + country + "/ap_halow_open.conf " + debug +" &")
+            launch_hostapd( interface, '/home/pi/nrc_pkg/script/conf/'+country+'/ap_halow_open.conf', country, debug ,channel )
         elif strSecurity() == 'WPA2-PSK':
-            os.system("sed -i " + '"4s/.*/interface=' + interface + '/g"  /home/pi/nrc_pkg/script/conf/' + country + '/ap_halow_wpa2.conf ')
-            os.system("sudo hostapd /home/pi/nrc_pkg/script/conf/" + country + "/ap_halow_wpa2.conf " + debug + "  &")
+            launch_hostapd( interface, '/home/pi/nrc_pkg/script/conf/'+country+'/ap_halow_wpa2.conf', country, debug ,channel )
         elif strSecurity() == 'WPA3-OWE':
-            os.system("sed -i " + '"4s/.*/interface=' + interface + '/g"  /home/pi/nrc_pkg/script/conf/' + country + '/ap_halow_owe.conf ')
-            os.system("sudo hostapd /home/pi/nrc_pkg/script/conf/" + country + "/ap_halow_owe.conf " + debug + "  &")
+            launch_hostapd( interface, '/home/pi/nrc_pkg/script/conf/'+country+'/ap_halow_owe.conf', country, debug, channel )
         elif strSecurity() == 'WPA3-SAE':
-            os.system("sed -i " + '"4s/.*/interface=' + interface + '/g"  /home/pi/nrc_pkg/script/conf/' + country + '/ap_halow_sae.conf ')
-            os.system("sudo hostapd /home/pi/nrc_pkg/script/conf/" + country + "/ap_halow_sae.conf " + debug + "  &")
+            launch_hostapd( interface, '/home/pi/nrc_pkg/script/conf/'+country+'/ap_halow_sae.conf', country, debug, channel )
         elif strSecurity() == 'WPA-PBC':
-            os.system("sed -i " + '"4s/.*/interface=' + interface + '/g"  /home/pi/nrc_pkg/script/conf/' + country + '/ap_halow_pbc.conf ')
-            os.system("sudo hostapd /home/pi/nrc_pkg/script/conf/" + country + "/ap_halow_pbc.conf " + debug + "  &")
+            launch_hostapd( interface, '/home/pi/nrc_pkg/script/conf/'+country+'/ap_halow_pbc.conf', country, debug, channel )
             time.sleep(1)
             os.system("sudo hostapd_cli wps_pbc")
     time.sleep(3)
