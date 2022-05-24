@@ -1,7 +1,10 @@
-# NRC7292 Software Package
+# NRC7292 Software Package for Host mode (Linux OS)
 
 ## Notice
 ### Release roadmap
+- v1.3.4_rev03 (2022.05.24)
+- v1.3.4_rev02 (2022.01.19)
+- v1.3.4_rev01 (2021.12.20)
 - v1.3.4 (2021.10.22)
 - v1.3.3 (2021.04.26)
 - v1.3.2 (2020.09.16)
@@ -9,7 +12,7 @@
 - v1.3.0 (2020.05.30)
 
 ### Latest release
-- [NRC7292_SW_PKG_v1.3.4](https://github.com/newracom/nrc7292_sw_pkg/releases/tag/v1.3.4)
+- [NRC7292_SW_PKG_v1.3.4](https://github.com/newracom/nrc7292_sw_pkg/releases/tag/v1.3.4_rev03)
 
 ### Release package contents
 - host: NRC7292 software package for global regulatory domains

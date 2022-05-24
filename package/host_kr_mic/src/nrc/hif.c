@@ -277,7 +277,7 @@ static void nrc_hif_ps_work(struct work_struct *work)
 		nw->ps_drv_state = nw->ps_enabled;
 
 		if (power_save >= NRC_PS_DEEPSLEEP_TIM) {
-			p->ps_duration = sleep_duration[0] * (sleep_duration[1] ? 1000 : 1);
+			p->ps_duration = (uint64_t) sleep_duration[0] * (sleep_duration[1] ? 1000 : 1);
 			ieee80211_stop_queues(nw->hw);
 			for (i = 0; i < NRC_QUEUE_MAX; i++) {
 				ntxq = &nw->ntxq[i];
@@ -342,7 +342,7 @@ bool is_tcp_ack(struct sk_buff *skb)
 *******************************************************************************/
 bool is_urgent_frame(struct sk_buff *skb)
 {
-	boot ret = false;
+	bool ret = false;
 	if (is_tcp_ack(skb)){
 		ret = true;
 	}

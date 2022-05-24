@@ -30,6 +30,12 @@
 #include "wim.h"
 #include "nrc-recovery.h"
 #include "nrc-vendor.h"
+#if defined(CONFIG_SUPPORT_BD)
+#include <linux/kernel.h>
+#include <linux/fs.h>
+#include <asm/uaccess.h>
+#include "nrc-bd.h"
+#endif /* defined(CONFIG_SUPPORT_BD) */
 
 char *fw_name;
 
@@ -37,8 +43,7 @@ module_param(fw_name, charp, 0444);
 MODULE_PARM_DESC(fw_name, "Firmware file name");
 
 #if defined(CONFIG_SUPPORT_BD)
-char *bd_name;
-
+char *bd_name ="nrc7292_bd.dat";
 module_param(bd_name, charp, 0600);
 MODULE_PARM_DESC(bd_name, "Board Data file name");
 #endif /* defined(CONFIG_SUPPORT_BD) */
@@ -233,6 +238,13 @@ int credit_ac_be = 40; //default 40
 module_param(credit_ac_be, int, 0600);
 MODULE_PARM_DESC(credit_ac_be, "credit number for AC_BE");
 
+/*
+ * set max # of aggregation by manual (requested by silex)
+ */
+bool manual_aggregation = false; //default false
+module_param(manual_aggregation, bool, 0600);
+MODULE_PARM_DESC(manual_aggregation, "set max # of aggregation by manual");
+
 static bool has_macaddr_param(uint8_t *dev_mac)
 {
 	int res;
@@ -356,6 +368,9 @@ static void nrc_on_fw_ready(struct sk_buff *skb, struct nrc *nw)
 	nw->fwinfo.tx_head_size = ready->v.tx_head_size;
 	nw->fwinfo.payload_align = ready->v.payload_align;
 	nw->fwinfo.buffer_size = ready->v.buffer_size;
+	nrc_dbg(NRC_DBG_HIF, "  -- hw_version: %d",
+			ready->v.hw_version);
+	nw->fwinfo.hw_version = ready->v.hw_version;
 	nrc_dbg(NRC_DBG_HIF, "  -- cap_mask: 0x%x",
 			ready->v.cap.cap);
 	nrc_dbg(NRC_DBG_HIF, "  -- cap_li: %d, %d",
@@ -470,6 +485,7 @@ static void nrc_check_start(struct work_struct *work)
 			sizeof(struct wim_drv_info_param), NULL);
 	p->boot_mode = (nw->fw_priv->num_chunks > 0) ? 1 : 0;
 	p->cqm_off = disable_cqm;
+	p->agg_manual = manual_aggregation?1:0;
 	skb_resp = nrc_xmit_wim_request_wait(nw, skb_req, (WIM_RESP_TIMEOUT * 30));
 	if (skb_resp)
 		nrc_on_fw_ready(skb_resp, nw);
@@ -647,6 +663,12 @@ static int __init nrc_init(void)
 	if (err)
 		return err;
 
+#if defined(CONFIG_SUPPORT_BD)
+	err = nrc_check_bd();
+	if (err)
+		return err;
+#endif /* defined(CONFIG_SUPPORT_BD) */
+
 	err = platform_device_register(&nrc_device);
 	if (err)
 		return err;
@@ -683,3 +705,6 @@ module_exit(nrc_exit);
 MODULE_AUTHOR("Newracom, Inc.(http://www.newracom.com)");
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_DESCRIPTION("Newracom 802.11 driver");
+#if KERNEL_VERSION(5, 12, 0) > NRC_TARGET_KERNEL_VERSION
+MODULE_SUPPORTED_DEVICE("Newracom 802.11 devices");
+#endif

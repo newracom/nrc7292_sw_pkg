@@ -25,6 +25,7 @@ time.sleep(1)
 print("[1] Remove module")
 os.system("sudo rmmod nrc")
 os.system("sudo rm "+script_path+"conf/temp_self_config.conf")
+os.system("sudo rm "+script_path+"conf/temp_hostapd_config.conf")
 time.sleep(2)
 
 print("[2] Done")

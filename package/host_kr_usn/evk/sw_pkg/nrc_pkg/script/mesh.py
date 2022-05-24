@@ -171,7 +171,7 @@ def run_map(wlan, mesh, country, security, debug, peermac, ip):
         else:
             os.system("sed -i " + '"s/ no_auto_peer=1/ #no_auto_peer=1/g"  /home/pi/nrc_pkg/script/conf/' + country + '/mp_halow_open.conf ')
         os.system("sudo wpa_supplicant -i" + mesh + " -c /home/pi/nrc_pkg/script/conf/" + country + "/mp_halow_open.conf " + debug + " &")
-    elif security == 'WPA3-SAE':
+    else:
         if peermac != 0:
             os.system("sed -i " + '"s/#no_auto_peer=1/no_auto_peer=1/g"  /home/pi/nrc_pkg/script/conf/' + country + '/mp_halow_sae.conf ')
         else:

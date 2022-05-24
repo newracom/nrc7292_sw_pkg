@@ -298,6 +298,10 @@ nla_policy nrc_vendor_command_policy[NUM_VENDOR_ATTR] = {
 };
 #endif
 
+#if defined(CONFIG_SUPPORT_BD_TARGET_VERSION)
+extern struct bd_supp_param g_supp_ch_list;
+#endif /* defined(CONFIG_SUPPORT_BD_TARGET_VERSION) */
+
 static bool get_intf_addr(const char *intf_name, char *addr)
 {
 	struct socket *sock	= NULL;
@@ -759,19 +763,17 @@ static int nrc_mac_start(struct ieee80211_hw *hw)
 {
 	struct nrc *nw = hw->priv;
 	struct sk_buff *skb;
-	int ret, alloc_size;
+	int alloc_size;
 
-	nw->drv_state = NRC_DRV_RUNNING;
+#if defined(CONFIG_SUPPORT_BD_TARGET_VERSION)
+	/* Case of Invalid board data */
+	if(nw->bd_valid == false)
+		return -1;
+	else
+#endif /* defined(CONFIG_SUPPORT_BD_TARGET_VERSION) */
+		nw->drv_state = NRC_DRV_RUNNING;
+
 	nw->aid = 0;
-
-	ret = nrc_hif_check_target(nw->hif, 0x2C);
-	if (ret == 0x9D) {
-		/*
-		 * FW has been rebooted by watchdog.
-		 * So, the slot counts must be reset.
-		 */
-		nrc_hif_config(nw->hif);
-	}
 
 	alloc_size = tlv_len(sizeof(u16)) + tlv_len(ETH_ALEN);
 	if (nrc_mac_is_s1g(nw)) {
@@ -807,7 +809,6 @@ void nrc_mac_stop(struct ieee80211_hw *hw)
 	if (ret != 1) {
 		nrc_xmit_wim_simple_request(nw, WIM_CMD_STOP);
 	}
-	nrc_hif_suspend_rx_thread(nw->hif);
 }
 
 /**
@@ -1151,10 +1152,31 @@ static int nrc_mac_config(struct ieee80211_hw *hw, u32 changed)
 	struct nrc_txq *ntxq;
 	int ret = 0;
 	int i;
+#if defined(CONFIG_SUPPORT_BD_TARGET_VERSION)
+	bool supp_ch_flag = false;
+
+	if(g_supp_ch_list.num_ch) {
+		if (changed & IEEE80211_CONF_CHANGE_CHANNEL) {
+			for(i=0; i < g_supp_ch_list.num_ch; i++) {
+				if(g_supp_ch_list.nons1g_ch_freq[i] ==
+					hw->conf.chandef.chan->center_freq) {
+					supp_ch_flag = true;
+					break;
+				}
+			}
+			if(!supp_ch_flag) {
+				nrc_mac_dbg("%s: Not supported channel %u",
+					__func__, hw->conf.chandef.chan->center_freq);
+				return -EINVAL;
+			}
+		}
+	}
+#endif /* defined(CONFIG_SUPPORT_BD_TARGET_VERSION) */
 
 	skb = nrc_wim_alloc_skb(nw, WIM_CMD_SET, WIM_MAX_SIZE);
 
 	if (changed & IEEE80211_CONF_CHANGE_CHANNEL) {
+
 		/* TODO: Remove the following line */
 #ifdef CONFIG_SUPPORT_CHANNEL_INFO
 		nw->band = hw->conf.chandef.chan->band;
@@ -1166,9 +1188,9 @@ static int nrc_mac_config(struct ieee80211_hw *hw, u32 changed)
 
 		if (!atomic_read(&nw->d_deauth.delayed_deauth)) {
 #ifdef CONFIG_SUPPORT_CHANNEL_INFO
-		nrc_mac_add_tlv_channel(skb, &hw->conf.chandef);
+			nrc_mac_add_tlv_channel(skb, &hw->conf.chandef);
 #else
-		nrc_mac_add_tlv_channel(skb, &hw->conf);
+			nrc_mac_add_tlv_channel(skb, &hw->conf);
 #endif
 		} else {
 #ifdef CONFIG_SUPPORT_CHANNEL_INFO
@@ -2686,6 +2708,11 @@ static u32 nrc_get_expected_throughput(struct ieee80211_sta *sta)
 	return tput;
 }
 
+static int nrc_set_frag_threshold(struct ieee80211_hw *hw, u32 value)
+{
+	return -1;
+}
+
 static const struct ieee80211_ops nrc_mac80211_ops = {
 	.tx = nrc_mac_tx,
 	.start = nrc_mac_start,
@@ -2722,6 +2749,7 @@ static const struct ieee80211_ops nrc_mac80211_ops = {
 	.sta_notify = nrc_mac_sta_notify,
 	.set_tim = nrc_mac_set_tim,
 	.set_rts_threshold = nrc_mac_set_rts_threshold,
+	.set_frag_threshold = nrc_set_frag_threshold,
 	.conf_tx = nrc_mac_conf_tx,
 	.get_survey = nrc_mac_get_survey,
 	.ampdu_action = nrc_mac_ampdu_action,
@@ -2787,7 +2815,6 @@ void nrc_free_hw(struct nrc *nw)
 	nw->hw = NULL; /* MERGE CHECK */
 }
 
-bool g_bd_cc_flag = false;
 #ifdef CONFIG_NEW_REG_NOTIFIER
 void nrc_reg_notifier(struct wiphy *wiphy,
 		struct regulatory_request *request)
@@ -2796,14 +2823,11 @@ int nrc_reg_notifier(struct wiphy *wiphy,
 		struct regulatory_request *request)
 #endif
 {
+	int i;
 	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
 	struct nrc *nw = hw->priv;
 	struct sk_buff *skb;
-	//struct wim_bd_param *tmp;
-#if defined(CONFIG_SUPPORT_BD)
 	struct wim_bd_param *bd_param;
-	int i;
-#endif /* defined(CONFIG_SUPPORT_BD) */
 
 	nrc_mac_dbg("info: cfg80211 regulatory domain callback for %c%c",
 			request->alpha2[0], request->alpha2[1]);
@@ -2817,45 +2841,63 @@ int nrc_reg_notifier(struct wiphy *wiphy,
 #endif
 
 #if defined(CONFIG_SUPPORT_BD)
+#if defined(CONFIG_SUPPORT_BD_TARGET_VERSION)
 	//Read board data and save buffer
+	bd_param = nrc_read_bd_tx_pwr(nw, request->alpha2);
+#else
 	bd_param = nrc_read_bd_tx_pwr(request->alpha2);
+#endif /* defined(CONFIG_SUPPORT_BD_TARGET_VERSION) */
 	if(bd_param) {
+#if defined(CONFIG_SUPPORT_BD_TARGET_VERSION)
+		nrc_dbg(NRC_DBG_STATE,"type %04X length %04X checksum %04X target_ver %04X",
+				bd_param->type, bd_param->length, bd_param->checksum, bd_param->hw_version);
+#else
 		nrc_dbg(NRC_DBG_STATE,"type %04X length %04X checksum %04X",
 				bd_param->type, bd_param->length, bd_param->checksum);
-		for(i=0; i < bd_param->length - 2;) {
-			nrc_dbg(NRC_DBG_STATE,"%02X %02X %02X %02X %02X %02X %02X %02X",
-				(bd_param->value[i]),
-				(bd_param->value[i+1]),
-				(bd_param->value[i+2]),
-				(bd_param->value[i+3]),
-				(bd_param->value[i+4]),
-				(bd_param->value[i+5]),
-				(bd_param->value[i+6]),
-				(bd_param->value[i+7])
+#endif /* defined(CONFIG_SUPPORT_BD_TARGET_VERSION) */
+		for(i=0; i < bd_param->length - 4;) {
+			nrc_dbg(NRC_DBG_STATE,"%02d %02d %02d %02d %02d %02d %02d %02d %02d %02d %02d %02d",
+				(bd_param->value[i]), (bd_param->value[i+1]), (bd_param->value[i+2]),
+				(bd_param->value[i+3]), (bd_param->value[i+4]), (bd_param->value[i+5]),
+				(bd_param->value[i+6]), (bd_param->value[i+7]), (bd_param->value[i+8]),
+				(bd_param->value[i+9]), (bd_param->value[i+10]), (bd_param->value[i+11])
 				);
-			i += 8;
+			i += 12;
 		}
 	}
+#if defined(CONFIG_SUPPORT_BD_TARGET_VERSION)
+	/* Default policy is that if board data is invalid, block loading of FW */
+	else {
+		nrc_mac_dbg("BD file is invalid..Exit!!");
+		nw->bd_valid = false;
+		nw->drv_state = NRC_DRV_STOP;
+#ifdef CONFIG_NEW_REG_NOTIFIER
+		return;
+#else
+		return -1;
+#endif
+	}
+#endif /* defined(CONFIG_SUPPORT_BD_TARGET_VERSION) */
 #endif /* defined(CONFIG_SUPPORT_BD) */
 
-	if ((request->alpha2[0] != nw->alpha2[0] ||	
-			request->alpha2[1] != nw->alpha2[1])) {
-		nw->alpha2[0] = request->alpha2[0];
-		nw->alpha2[1] = request->alpha2[1];
+	nw->alpha2[0] = request->alpha2[0];
+	nw->alpha2[1] = request->alpha2[1];
 
-		skb = nrc_wim_alloc_skb(nw, WIM_CMD_SET, WIM_MAX_SIZE);
-		nrc_wim_skb_add_tlv(skb, WIM_TLV_COUNTRY_CODE,
-				sizeof(u16), request->alpha2);
+	skb = nrc_wim_alloc_skb(nw, WIM_CMD_SET, WIM_MAX_SIZE);
+	nrc_wim_skb_add_tlv(skb, WIM_TLV_COUNTRY_CODE,
+		sizeof(u16), request->alpha2);
 
 #if defined(CONFIG_SUPPORT_BD)
- 		if(bd_param) {
-			nrc_wim_skb_add_tlv(skb, WIM_TLV_BD, sizeof(*bd_param), bd_param);
-			kfree(bd_param);
- 		}
- #endif /* defined(CONFIG_SUPPORT_BD) */
-
-		nrc_xmit_wim_request(nw, skb);
+	if(bd_param) {
+		nrc_dbg(NRC_DBG_STATE,"succeed in loading board data on target");
+		nrc_wim_skb_add_tlv(skb, WIM_TLV_BD, sizeof(*bd_param), bd_param);
+		kfree(bd_param);
+	} else {
+		nrc_dbg(NRC_DBG_STATE,"fail to load board data on target");
 	}
+#endif /* defined(CONFIG_SUPPORT_BD) */
+	nrc_xmit_wim_request(nw, skb);
+
 #ifdef CONFIG_NEW_REG_NOTIFIER
 	return;
 #else
@@ -3498,6 +3540,7 @@ int nrc_register_hw(struct nrc *nw)
 	wiphy_apply_custom_regulatory(hw->wiphy, &mac80211_regdom);
 	nw->alpha2[0] = '9';
 	nw->alpha2[1] = '9';
+	nw->bd_valid = true;
 
 	if (nrc_mac_is_s1g(nw)) {
 		/*this is only for 802.11ah*/
@@ -3549,6 +3592,10 @@ void nrc_unregister_hw(struct nrc *nw)
 	SET_IEEE80211_DEV(nw->hw, NULL);
 	nrc_hif_cleanup(nw->hif);
 	
+	if (ieee80211_hw_check(nw->hw, SUPPORTS_DYNAMIC_PS)) {
+		del_timer(&nw->dynamic_ps_timer);
+	}
+
 	if (nw->workqueue != NULL) {
 		flush_workqueue(nw->workqueue);
 		destroy_workqueue(nw->workqueue);
@@ -3570,4 +3617,9 @@ void nrc_unregister_hw(struct nrc *nw)
 bool nrc_mac_is_s1g(struct nrc *nw)
 {
 	return (nw->fwinfo.version != WIM_SYSTEM_VER_11N);
+}
+
+void nrc_mac_clean_txq(struct nrc *nw)
+{
+	nrc_cleanup_txq(nw);
 }

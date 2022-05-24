@@ -378,14 +378,14 @@ int cmd_umac_info_result_parse(char *value, int mode, int *display_start_index)
 		xfer_umac_apinfo* apinfo = (xfer_umac_apinfo*) &value[1];
 		printf("[%5d]  bssid(%02x:%02x:%02x:%02x:%02x:%02x)\tssid(%s)\tssid_len(%u)\tsecurity(%d)\tbeacon_interval(%d)\n",
 			*display_start_index, apinfo->bssid[0], apinfo->bssid[1], apinfo->bssid[2], apinfo->bssid[3], apinfo->bssid[4], apinfo->bssid[5], apinfo->ssid, apinfo->ssid_len, apinfo->security, apinfo->beacon_interval);
-		printf("\t short bi(%u)\t\t\tassoc_s1g_channel(%u)\tcssid(%u)\tchange_seq_num(%u)\n",
+		printf("\t short bi(%u)\t\t\tassoc_s1g_channel(%u)\tcssid(0x%x)\tchange_seq_num(%u)\n",
 			apinfo->short_beacon_interval, apinfo->assoc_s1g_channel, apinfo->comp_ssid, apinfo->change_seq_num);
 		printf("support: s1g_long(%d)\tpv1(%d)\t\tnontim(%d)\t\ttwt(%d)\t\tampdu(%d)\n",
 			apinfo->s1g_long_support, apinfo->pv1_frame_support, apinfo->nontim_support, apinfo->twtoption_activated,
 			apinfo->ampdu_support);
 		printf("\t ndp_pspoll(%d)\t\t\ttraveling pilot(%u)\tshortgi(1mhz:%d, 2mhz:%d, 4mhz:%d) \n",
 			apinfo->ndp_pspoll_support, apinfo->traveling_pilot_support, apinfo->shortgi_1mhz_support, apinfo->shortgi_2mhz_support, apinfo->shortgi_4mhz_support);
-		printf("\t maximum mpdu_len(%u)\t\tampdu_len_exp(%u)\tminimum mpdu_start_spacing(%u)\trx_s1gmcs_map(%u)\tcolor(%u)\n",
+		printf("\t maximum mpdu_len(%u)\t\tampdu_len_exp(%u)\tminimum mpdu_start_spacing(%u)\trx_s1gmcs_map(0x%x)\tcolor(%u)\n",
 			apinfo->maximum_mpdu_length, apinfo->maximum_ampdu_length_exp, apinfo->minimum_mpdu_start_spacing,
 			apinfo->rx_s1gmcs_map, apinfo->color);
 		printf("\n");
@@ -402,7 +402,7 @@ int cmd_umac_info_result_parse(char *value, int mode, int *display_start_index)
 				stainfo->twtoption_activated, stainfo->ampdu_support);
 			printf("\t ndp_pspoll(%d)\t\t\ttraveling_pilot(%u)\tshortgi(1mhz:%d, 2mhz:%d, 4mhz:%d)\n",
 				stainfo->ndp_pspoll_support, stainfo->traveling_pilot_support, stainfo->shortgi_1mhz_support, stainfo->shortgi_2mhz_support, stainfo->shortgi_4mhz_support);
-			printf("\t maximum mpdu_len(%u)\t\tampdu_len_exp(%u)\tminimum mpdu_start_spacing(%u)\trx_s1gmcs_map(%u)\n",
+			printf("\t maximum mpdu_len(%u)\t\tampdu_len_exp(%u)\tminimum mpdu_start_spacing(%u)\trx_s1gmcs_map(0x%x)\n",
 				stainfo->maximum_mpdu_length, stainfo->maximum_ampdu_length_exp, stainfo->minimum_mpdu_start_spacing, stainfo->rx_s1gmcs_map);
 			printf("\n");
 			stainfo++;

@@ -46,11 +46,8 @@ ft232h_usb_spi = 0            # FTDI FT232H USB-SPI bridge
                               # 2 : NRC-CSPI Registers Polling
 #################################################################################
 # RF Conf.
-# Board Data includes TX Power per MCS and CH
-txpwr_val         = 17       # TX Power
+# Max TX PWR
 txpwr_max_default = 24       # Board Data Max TX Power
-bd_download       = 0        # 0(Board Data Download off) or 1(Board Data Download on)
-bd_name           = 'nrc7292_bd.dat'
 #--------------------------------------------------------------------------------#
 # Calibration usage option
 #  If this value is changed, the device should be restarted for applying the value
@@ -98,7 +95,7 @@ listen_interval   = 1000     # STA (listen interval in BI unit) (max:65535)
 #  Period is in unit of 1000TU(1024ms, 1TU=1024us)
 #  Note: if disabled, AP removes STAs' info only with explicit disconnection like deauth
 bss_max_idle_enable = 1      # 0 (disable) or 1 (enable)
-bss_max_idle        = 180    # time interval (e.g. 60: 614400ms) (1 ~ 65535)
+bss_max_idle        = 180    # time interval (e.g. 60: 61440ms) (1 ~ 65535)
 #--------------------------------------------------------------------------------#
 # Mesh Options (Mesh Only)
 #  SW encryption by MAC80211 for Mesh Point
@@ -141,7 +138,7 @@ def usage_print():
                          \n\tcountry       [US:USA  |  JP:Japan  |  TW:Taiwan  | EU:EURO | CN:China | \
                          \n\t               AU:Australia  |  NZ:New Zealand] \
                          \n\t----------------------------------------------------------- \
-                         \n\tchannel       [S1G Channel Number]   * Only for Sniffer \
+                         \n\tchannel       [S1G Channel Number]   * Only for Sniffer & AP \
                          \n\tsniffer_mode  [0:Local | 1:Remote]   * Only for Sniffer \
                          \n\tmesh_mode     [0:MPP | 1:MP | 2:MAP] * Only for Mesh \
                          \n\tmesh_peering  [Peer MAC address]     * Only for Mesh \
@@ -290,9 +287,7 @@ def argv_print():
         print("Sniffer Mode     : " + strSnifferMode())
     if int(fw_download) == 1:
         print("Download FW      : " + fw_name)
-    if int(bd_download) == 1:
-        print("Download Board Data      : " + bd_name)
-    print ("TX Power         : " + str(txpwr_val))
+    print ("Max TX Power     : " + str(txpwr_max_default))
     if int(bss_max_idle_enable) == 1 and strSTA() == 'AP':
         print("BSS MAX IDLE     : " + str(bss_max_idle))
     if strSTA() == 'STA':
@@ -308,7 +303,7 @@ def argv_print():
     print("------------------------------")
 
 def copyConf():
-    os.system("sudo /home/pi/nrc_pkg/sw/firmware/copy " + str(model) + " " + str(bd_name))
+    os.system("sudo /home/pi/nrc_pkg/sw/firmware/copy " + str(model))
     os.system("/home/pi/nrc_pkg/script/conf/etc/ip_config.sh " + strSTA() + " " +  str(relay_type) + " " + str(static_ip))
 
 def startNAT():
@@ -426,11 +421,6 @@ def setModuleParam():
     else:
         fw_arg= ""
 
-    if int(bd_download) == 1:
-        bd_arg= " bd_name=" + bd_name
-    else:
-        bd_arg= ""
-
     if int(model) == 7291:
         alt_mode_arg = " alternate_mode=1"
     else:
@@ -514,7 +504,7 @@ def setModuleParam():
         ndp_ack_1m_arg= ""
         ndp_preq_arg= ""
 
-    module_param = spi_arg + fw_arg + bd_arg + alt_mode_arg + \
+    module_param = spi_arg + fw_arg + alt_mode_arg + \
                  power_save_arg + sleep_duration_arg + bss_max_idle_arg + \
                  ndp_preq_arg + ndp_ack_1m_arg + auto_ba_arg + sw_enc_arg + \
                  cqm_arg + listen_int_arg + drv_dbg_arg + credit_acbe_arg
@@ -563,14 +553,8 @@ def run_common():
         os.system('sudo rmmod nrc.ko')
         sys.exit()
 
-    if int(bd_download) == 1:
-        print("[4] Transmission Power Control(TPC) is activated")
-        os.system('/home/pi/nrc_pkg/script/cli_app set txpwr ' + str(txpwr_max_default))
-        os.system('/home/pi/nrc_pkg/script/cli_app set bdf_use on')
-    else:
-        print("[4] Set tx power")
-        os.system('/home/pi/nrc_pkg/script/cli_app set txpwr ' + str(txpwr_val))
-        os.system('/home/pi/nrc_pkg/script/cli_app set bdf_use off')
+    print("[4] Transmission Power Control(TPC) is activated")
+    os.system('/home/pi/nrc_pkg/script/cli_app set txpwr ' + str(txpwr_max_default))
 
     print("[5] Set guard interval")
     os.system('/home/pi/nrc_pkg/script/cli_app set gi ' + guard_int)

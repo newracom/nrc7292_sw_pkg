@@ -36,11 +36,14 @@
 #include "nrc-recovery.h"
 #include "nrc-vendor.h"
 #include "nrc-mac80211.h"
+#include "nrc-stats.h"
 #include "wim.h"
 
 static bool once;
 static bool cspi_suspend;
 static atomic_t irq_enabled;
+static u16 total_sta=0; /* total number of STA  connected */
+static u16 remain_sta=0; /* number of STA remaining after clearing STA */
 #define TCN  (2*1)
 #define TCNE (0)
 #define CREDIT_AC0	(TCN*2+TCNE)	/* BK (4) */
@@ -228,22 +231,34 @@ static u8 compute_crc7(const u8 *data, ssize_t len)
 	return crc >> 1;
 }
 
-static void disconnect_sta(void *data,  struct ieee80211_sta *sta)
+static void get_sta_cnt(void *data,  struct ieee80211_sta *sta)
+{
+	struct ieee80211_vif *vif = data;
+
+	if (!sta || !vif) {
+		nrc_dbg(NRC_DBG_STATE, "%s Invalid argument", __func__);
+		return;
+	}
+	++remain_sta;
+	nrc_dbg(NRC_DBG_STATE, "(AP Recovery) remaining sta_cnt:%d", remain_sta);
+}
+
+static void prepare_deauth_sta(void *data,  struct ieee80211_sta *sta)
 {
 	struct nrc_sta *i_sta = to_i_sta(sta);
 	struct ieee80211_hw *hw = i_sta->nw->hw;
 	struct ieee80211_vif *vif = data;
 	struct sk_buff *skb = NULL;
 
-	if (!sta) {
-		nrc_dbg(NRC_DBG_STATE, "%s Invalid argument\n", __func__);
+	if (!sta || !vif) {
+		nrc_dbg(NRC_DBG_STATE, "%s Invalid argument", __func__);
 		return;
 	}
 
 	/* (AP Recovery) Delete BSS Max Idle timer if exist */
 	if (i_sta->max_idle.idle_period > 0 &&
 		timer_pending(&i_sta->max_idle.timer)) {
-		nrc_mac_dbg("(AP Recovery) Delete STA(%pM)'s bss_max_idle timer(%u)",
+		nrc_dbg(NRC_DBG_STATE, "(AP Recovery) Delete STA(%pM)'s bss_max_idle timer(%u)",
 			sta->addr,i_sta->max_idle.idle_period);
 		del_timer_sync(&i_sta->max_idle.timer);
 		i_sta->max_idle.idle_period = 0;
@@ -253,11 +268,13 @@ static void disconnect_sta(void *data,  struct ieee80211_sta *sta)
 	skb = ieee80211_deauth_get(hw, vif->addr, sta->addr, vif->addr,
 			WLAN_REASON_DEAUTH_LEAVING, sta, false);
 	if (!skb) {
+		nrc_dbg(NRC_DBG_STATE, "%s Fail to alloc skb", __func__);
 		return;
 	}
-
-	nrc_dbg(NRC_DBG_STATE, "Disconnect STA(%pM) by force\n", sta->addr);
+	nrc_dbg(NRC_DBG_STATE, "(AP Recovery) Disconnect STA(%pM) by force", sta->addr);
 	ieee80211_rx_irqsafe(hw, skb);
+
+	++total_sta;
 }
 
 static inline void spi_set_transfer(struct spi_transfer *xfer,
@@ -707,7 +724,12 @@ static void spi_credit_skb(struct spi_device *spi)
 	cr->v.change_index = 0;
 
 	for (i = 0; i < CREDIT_QUEUE_MAX; i++) {
-		u8 room = priv->front[i] - priv->rear[i];
+		u8 room = 0;
+		if (priv->front[i] >= priv->rear[i]) {
+			room = priv->front[i] - priv->rear[i];
+		} else {
+			room = (255 - priv->rear[i]) + priv->front[i];
+		}
 
 		room = min(priv->credit_max[i], room);
 		cr->v.ac[i] = priv->credit_max[i] - room;
@@ -903,8 +925,12 @@ static int spi_update_status(struct spi_device *spi)
 	struct nrc_spi_priv *priv = hdev->priv;
 	struct spi_status_reg *status = &priv->hw.status;
 	struct nrc *nw = hdev->nw;
-	int ret, ac;
+	int ret, ac, retry_cnt=0;
 	u32 rear;
+	u16 gap_tx_slot, cleared_sta=0;
+#if defined(CONFIG_SUPPORT_BD)
+	struct regulatory_request request;
+#endif
 
 #ifdef CONFIG_NRC_HIF_PRINT_FLOW_CONTROL
 	int cpuid = smp_processor_id();
@@ -922,38 +948,86 @@ static int spi_update_status(struct spi_device *spi)
 		return ret;
 
 	if (status->eirq.status & 0x04) {
-		//nrc_ps_dbg("[%s,L%d] drv_state:%d status:0x%02x mode:0x%02x enable:0x%02x 0x%08X\n",
-		//	__func__, __LINE__, nw->drv_state, status->eirq.status, status->eirq.mode,
-		//	status->eirq.enable, __be32_to_cpu(status->msg[3]));
 
-		if (ieee80211_hw_check(nw->hw, SUPPORTS_DYNAMIC_PS)) {
+#if 0 // for debugging
+		nrc_dbg(NRC_DBG_HIF, "drv_state:%d status:0x%02x mode:0x%02x enable:0x%02x 0x%08X",
+			nw->drv_state, status->eirq.status, status->eirq.mode,
+			status->eirq.enable, status->msg[3]);
+#endif
+#if defined(CONFIG_SUPPORT_BD)
+		request.alpha2[0] = nw->alpha2[0];
+		request.alpha2[1] = nw->alpha2[1];
+#endif
+
+		if (ieee80211_hw_check(nw->hw, SUPPORTS_DYNAMIC_PS) &&
+			nw->drv_state >= NRC_DRV_RUNNING &&
+			nw->hw->conf.dynamic_ps_timeout > 0) {
 			mod_timer(&nw->dynamic_ps_timer,
 				jiffies + msecs_to_jiffies(nw->hw->conf.dynamic_ps_timeout));
 		}
 
-		if (nw->drv_state == NRC_DRV_RUNNING)
+		if ((status->msg[3] & 0xffff) == 0x7D) {
+			nw->drv_state = NRC_DRV_REBOOT;
+			nrc_dbg(NRC_DBG_STATE, "init  spi config");
 			spi_config_fw(hdev);
-
-		if ((__be32_to_cpu(status->msg[3]) & 0xffff0000) == 0x9D000000) {
-			if (nw->vif[0]->type == NL80211_IFTYPE_STATION) {
-				/*
-				 * The target was rebooted due to watchdog.
-				 * Then, driver always requests deauth for trying to reconnect.
-				 */
-				mdelay(300);
-				nrc_mac_cancel_hw_scan(nw->hw, nw->vif[0]);
-				ieee80211_connection_loss(nw->vif[0]);
-			} else if (nw->vif[0]->type == NL80211_IFTYPE_AP) {
-				nrc_dbg(NRC_DBG_STATE, "Recovery AP by Watchdog!!\n");\
-				nrc_hif_cleanup(nw->hif);
-				//nrc_hif_flush_wq();
-				mdelay(300);
-				ieee80211_iterate_stations_atomic(nw->hw, disconnect_sta, (void *)nw->vif[0]);
-				mdelay(300);
-				nrc_free_vif_index(nw, nw->vif[0]);
-				ieee80211_restart_hw(nw->hw);
+			nrc_hif_cleanup(nw->hif);
+			nrc_mac_clean_txq(nw);
+		} else if ((status->msg[3] & 0xffff) == 0x9D) {
+			nrc_dbg(NRC_DBG_STATE, "init  spi config");
+			spi_config_fw(hdev);
+			if (nw->vif[0]) {
+				if (nw->vif[0]->type == NL80211_IFTYPE_STATION) {
+					/*
+					 * The target was rebooted due to watchdog.
+					 * Then, driver always requests deauth for trying to reconnect.
+					 */
+					nrc_dbg(NRC_DBG_STATE, "Target (STA) is reset by WDT. Reconnect to AP");
+					mdelay(300);
+					nrc_mac_cancel_hw_scan(nw->hw, nw->vif[0]);
+					nw->drv_state = NRC_DRV_RUNNING;
+					ieee80211_connection_loss(nw->vif[0]);
+				} else if (nw->vif[0]->type == NL80211_IFTYPE_AP) {
+					ieee80211_iterate_stations_atomic(nw->hw, prepare_deauth_sta, (void *)nw->vif[0]);
+					nrc_dbg(NRC_DBG_STATE, "Target (AP) is reset by WDT. Now try to clear all STAs(total cnt:%d)", total_sta);
+					while (1) {
+						//wait for all the sta are locally deauthenticated by mac80211
+						if (!total_sta) break;
+						msleep(2000);
+						remain_sta = 0;
+						ieee80211_iterate_stations_atomic(nw->hw, get_sta_cnt, (void *)nw->vif[0]);
+						cleared_sta = total_sta -remain_sta;
+						if (!remain_sta) {
+							nrc_dbg(NRC_DBG_STATE, "Completed! (Remaining STA cnt:%d)", remain_sta);
+							remain_sta = 0;
+							break;
+						}
+						retry_cnt++;
+						if (retry_cnt > 10) {
+							nrc_dbg(NRC_DBG_STATE, "10 Trials but fail to clear STAs on mac80211. Reset by Force (Remaining STA cnt:%d)",
+								remain_sta);
+							break;
+						}
+						nrc_dbg(NRC_DBG_STATE, "NOT completed yet. Try again. (cleared STA:%d vs remained STA:%d, retry_cnt:%d)",
+							cleared_sta, remain_sta, retry_cnt);
+						total_sta = 0;
+						ieee80211_iterate_stations_atomic(nw->hw, prepare_deauth_sta, (void *)nw->vif[0]);
+					}
+					nrc_dbg(NRC_DBG_STATE, "All STAs are cleared. After 5 seconds, AP will be restarted (retry_cnt:%d remaining sta cnt:%d)",
+						retry_cnt, nrc_stats_report_count());
+					total_sta = 0;
+					mdelay(5000); //it's for STA's reconnect by CQM
+					nrc_free_vif_index(nw, nw->vif[0]);
+					nrc_hif_cleanup(nw->hif);
+					nrc_mac_clean_txq(nw);
+					ieee80211_restart_hw(nw->hw);
+					nw->drv_state = NRC_DRV_RUNNING;
+				}
 			}
-		} else if ((__be32_to_cpu(status->msg[3]) & 0xffff0000) == 0xDC000000) {
+#if defined(CONFIG_SUPPORT_BD)
+			nrc_ps_dbg("[%s,L%d]\n", __func__, __LINE__);
+			nrc_reg_notifier(nw->hw->wiphy, &request);
+#endif
+		} else if ((status->msg[3] & 0xffff) == 0xDC) {
 			/*
 			 * uCode requested the fw downloading.
 			 */
@@ -966,13 +1040,16 @@ static int spi_update_status(struct spi_device *spi)
 				spi_config_fw(hdev);
 				nrc_release_fw(nw);
 			}
-		} else if ((__be32_to_cpu(status->msg[3]) & 0xffff0000) == 0xEC000000) {
+		} else if ((status->msg[3] & 0xffff) == 0xEC) {
 			/*
 			 * FW notified the target reboot is done.
 			 */
 			atomic_set(&nw->fw_state, NRC_FW_ACTIVE);
 			nrc_hif_resume(hdev);
-
+#if defined(CONFIG_SUPPORT_BD)
+			nrc_ps_dbg("[%s,L%d]\n", __func__, __LINE__);
+			nrc_reg_notifier(nw->hw->wiphy, &request);
+#endif
 			if (!ieee80211_hw_check(nw->hw, SUPPORTS_DYNAMIC_PS)) {
 				if (power_save >= NRC_PS_DEEPSLEEP_NONTIM) {
 					if (!atomic_read(&nw->d_deauth.delayed_deauth))
@@ -981,8 +1058,11 @@ static int spi_update_status(struct spi_device *spi)
 				else
 					nw->invoke_beacon_loss = true;
 			} else {
-				mod_timer(&nw->dynamic_ps_timer,
+				if (nw->drv_state >= NRC_DRV_RUNNING &&
+					nw->hw->conf.dynamic_ps_timeout > 0) {
+					mod_timer(&nw->dynamic_ps_timer,
 					jiffies + msecs_to_jiffies(nw->hw->conf.dynamic_ps_timeout));
+				}
 			}
 
 			if (atomic_read(&nw->d_deauth.delayed_deauth)) {
@@ -1077,6 +1157,15 @@ static int spi_update_status(struct spi_device *spi)
 	//if (c_spi_num_slots(priv, RX_SLOT) > 32)
 	//	spi_print_status(status);
 #endif
+
+	gap_tx_slot = c_spi_num_slots(priv, TX_SLOT);
+	if (gap_tx_slot > 32) {
+		WARN_ON(true);
+		nrc_dbg(NRC_DBG_HIF,"* tx slot gap (%d) > 32", gap_tx_slot);
+		/* Workaround : ESL project (fail to recover AP after WDT reset while 300 STAs connect)
+			TX slot gap > 32 when restarting AP by ieee80211_restart_hw after WDT Reset */
+		priv->slot[TX_SLOT].tail += (gap_tx_slot - 32);
+	}
 
 	spi_credit_skb(spi);
 #ifdef CONFIG_NRC_HIF_PRINT_FLOW_CONTROL
@@ -1228,14 +1317,9 @@ static int spi_xmit(struct nrc_hif_device *hdev, struct sk_buff *skb)
 	hif = (void *)skb->data;
 	fh = (void *)(hif + 1);
 
-	if (nw->drv_state == NRC_DRV_CLOSING)
+	if (nw->drv_state <= NRC_DRV_CLOSING || nw->loopback)
 		return 0;
 
-	if (nw->loopback)
-		return 0;
-
-	if (nw->drv_state == NRC_DRV_CLOSING)
-		return 0;
 	priv->slot[TX_SLOT].tail += nr_slot;
 
 	if ((hif->type == HIF_TYPE_FRAME)
@@ -1308,8 +1392,10 @@ static int spi_poll_thread (void *data)
 	interval *= 1000;
 
 	while (!kthread_should_stop()) {
-		if (gpio < 0)
+		if (gpio < 0) {
 			spi_irq(-1, hdev);
+			wake_up_interruptible(&priv->wait);
+		}
 		else {
 			ret = gpio_get_value_cansleep(gpio);
 

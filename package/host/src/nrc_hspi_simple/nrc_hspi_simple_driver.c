@@ -163,12 +163,12 @@ static int nrc_hspi_probe(struct spi_device *spi)
 	int ret = 0;
 	struct spi_sys_reg sys = {0,};
 
-	pr_err("[%s,L%d]", __func__, __LINE__);
+	pr_err("[%s,L%d]\n", __func__, __LINE__);
 
 	/* Read the register */
 	ret = c_spi_read_regs(spi, C_SPI_WAKE_UP, (void *)&sys, sizeof(struct spi_sys_reg));
 	if (ret < 0) {
-		pr_err("[Error] failed to read register(0x0).");
+		pr_err("[Error] failed to read register(0x0).\n");
 		return ret;
 	}
 
@@ -180,7 +180,7 @@ static int nrc_hspi_probe(struct spi_device *spi)
 
 static int nrc_hspi_remove(struct spi_device *spi)
 {
-	pr_err("[%s,L%d]", __func__, __LINE__);
+	pr_err("[%s,L%d]\n", __func__, __LINE__);
 	return 0;
 }
 
@@ -207,15 +207,15 @@ static int __init nrc_init(void)
 	bi.chip_select = spi_cs_num;
 	bi.max_speed_hz = hifspeed;
 
-	pr_err("### [nrc_simple] Value of paramters ###");
-	pr_err("- bus_num: %d", bi.bus_num);
-	pr_err("- chip_select: %d", bi.chip_select);
-	pr_err("- max_speed_hz: %d", bi.max_speed_hz);
+	pr_err("### [nrc_simple] Value of paramters ###\n");
+	pr_err("- bus_num: %d\n", bi.bus_num);
+	pr_err("- chip_select: %d\n", bi.chip_select);
+	pr_err("- max_speed_hz: %d\n", bi.max_speed_hz);
 
 	/* Find the spi master that our device is attached to */
 	master = spi_busnum_to_master(spi_bus_num);
 	if (!master) {
-		pr_err("[Error] could not find spi master with the bus number %d.",
+		pr_err("[Error] could not find spi master with the bus number %d.\n",
 			spi_bus_num);
 		return -EINVAL;
 	}
@@ -223,19 +223,19 @@ static int __init nrc_init(void)
 	/* Instantiate and add a spi device */
 	spi = spi_new_device(master, &bi);
 	if (!spi) {
-		pr_err("[Error] failed to instantiate a new spi device.");
+		pr_err("[Error] failed to instantiate a new spi device.\n");
 		return -EINVAL;
 	}
 
 	/* Register spi driver */
 	ret = spi_register_driver(&hspi_simple_driver);
 	if (ret) {
-		pr_err("[Error %d] failed to register spi driver(%s).",
+		pr_err("[Error %d] failed to register spi driver(%s).\n",
 			ret, hspi_simple_driver.driver.name);
 		return ret;
 	}
 
-	pr_err("done successfully.");
+	pr_err("done successfully.\n");
 	return 0;
 }
 module_init(nrc_init);
@@ -245,13 +245,17 @@ static void __exit nrc_exit(void)
 	pr_err("+%s", __func__);
 
 	spi_unregister_driver(&hspi_simple_driver);
-	pr_err("[%s,L%d]", __func__, __LINE__);
+	pr_err("[%s,L%d]\n", __func__, __LINE__);
 	spi_unregister_device(spi);
 
-	pr_err("-%s\n\n", __func__);
+	pr_err("-%s", __func__);
+	pr_err("\n");
 }
 module_exit(nrc_exit);
 
 MODULE_AUTHOR("Newracom, Inc.(http://www.newracom.com)");
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_DESCRIPTION("Newracom HSPI simple driver");
+#if KERNEL_VERSION(5, 12, 0) > NRC_TARGET_KERNEL_VERSION
+MODULE_SUPPORTED_DEVICE("Newracom 802.11 devices");
+#endif

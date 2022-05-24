@@ -22,6 +22,10 @@
 #include "nrc-recovery.h"
 #include "nrc-mac80211.h"
 
+#if defined(CONFIG_SUPPORT_BD_TARGET_VERSION)
+#include "nrc-bd.h"
+extern struct bd_supp_param g_supp_ch_list;
+#endif /* defined(CONFIG_SUPPORT_BD_TARGET_VERSION) */
 
 static void nrc_wim_skb_bind_vif(struct sk_buff *skb, struct ieee80211_vif *vif)
 {
@@ -159,7 +163,10 @@ int nrc_wim_hw_scan(struct nrc *nw, struct ieee80211_vif *vif,
 	struct sk_buff *skb;
 	struct wim_scan_param *p;
 	int i, size = tlv_len(sizeof(struct wim_scan_param));
-
+#if defined(CONFIG_SUPPORT_BD_TARGET_VERSION)
+	int j;
+	bool avail_ch_flag = false;
+#endif /* defined(CONFIG_SUPPORT_BD_TARGET_VERSION) */
 	if (ies) {
 		size += tlv_len(ies->common_ie_len);
 		size += ies->len[NL80211_BAND_2GHZ];
@@ -180,6 +187,46 @@ int nrc_wim_hw_scan(struct nrc *nw, struct ieee80211_vif *vif,
 	p->n_channels = req->n_channels;
 	for (i = 0; i < req->n_channels; i++)
 		p->channel[i] = req->channels[i]->center_freq;
+#if defined(CONFIG_SUPPORT_BD_TARGET_VERSION)
+#if BD_DEBUG
+	nrc_dbg(NRC_DBG_MAC, "org_ch_freq");
+	for (i = 0; i < p->n_channels; i++) {
+		nrc_dbg(NRC_DBG_MAC, "%u", p->channel[i]);
+	}
+#endif
+
+	if(g_supp_ch_list.num_ch) {
+		for (i = 0; i < req->n_channels; i++) {
+			for(j=0; j< g_supp_ch_list.num_ch; j++) {
+				if(p->channel[i] == g_supp_ch_list.nons1g_ch_freq[j])
+					avail_ch_flag = true;
+			}
+			if(!avail_ch_flag) {
+				p->n_channels--;
+				p->channel[i] = 0;
+			} else
+				avail_ch_flag = false;
+		}
+
+		j = 0;
+		for (i = 0; i < req->n_channels; i++) {
+			if(p->channel[i]) {
+				p->channel[j] = req->channels[i]->center_freq;
+				j++;
+			}
+		}
+#if BD_DEBUG	
+		nrc_dbg(NRC_DBG_MAC, "%s: org_num_ch %u  num_ch %u", __func__,
+			req->n_channels,
+			p->n_channels);
+
+		nrc_dbg(NRC_DBG_MAC, "mod_ch_freq");
+		for (i = 0; i < p->n_channels; i++) {
+			nrc_dbg(NRC_DBG_MAC, "%u", p->channel[i]);
+		}
+#endif
+	}
+#endif /* defined(CONFIG_SUPPORT_BD_TARGET_VERSION) */
 
 	p->n_ssids = req->n_ssids;
 	for (i = 0; i < req->n_ssids; i++) {
@@ -218,29 +265,6 @@ int nrc_wim_hw_scan(struct nrc *nw, struct ieee80211_vif *vif,
 
 	return nrc_xmit_wim_request(nw, skb);
 }
-
-#if 0
-int nrc_wim_pm_req(struct nrc *nw, uint32_t cmd, uint64_t arg)
-{
-	struct sk_buff *skb, *skb_resp;
-	struct wim_pm_param *p;
-	int size = tlv_len(sizeof(struct wim_pm_param));
-	skb = nrc_wim_alloc_skb(nw, WIM_CMD_PM, size);
-	p = nrc_wim_skb_add_tlv(skb, WIM_TLV_PM, sizeof(*p), NULL);
-	memset(p, 0, sizeof(*p));
-	p->cmd = cmd;
-	p->boot_mode = (nw->fw_priv->num_chunks > 0) ? 1 : 0;
-	p->arg0 = arg;
-
-	atomic_set(&nw->fw_state, NRC_FW_ACTIVE);
-	skb_resp = nrc_xmit_wim_request_wait(nw, skb, (WIM_RESP_TIMEOUT * 5));
-	nrc_ps_dbg("[%s,L%d] cmd:%d boot_mode:%d arg:%lld\n", __func__, __LINE__, cmd, p->boot_mode, arg);
-	if (skb_resp)
-		nrc_hif_free_skb(nw, skb_resp);
-
-	return 0;
-}
-#endif
 
 static char *ieee80211_cipher_str(u32 cipher)
 {

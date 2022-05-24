@@ -46,11 +46,8 @@ ft232h_usb_spi = 0            # FTDI FT232H USB-SPI bridge
                               # 2 : NRC-CSPI Registers Polling
 #################################################################################
 # RF Conf.
-# Board Data includes TX Power per MCS and CH
-txpwr_val         = 14       # TX Power
+# Maximum TX Power
 txpwr_max_default = 24       # Board Data Max TX Power
-bd_download       = 0        # 0(Board Data Download off) or 1(Board Data Download on)
-bd_name           = 'nrc7292_bd_kr.dat'
 #--------------------------------------------------------------------------------#
 # Calibration usage option
 #  If this value is changed, the device should be restarted for applying the value
@@ -98,7 +95,7 @@ listen_interval   = 1000     # STA (listen interval in BI unit) (max:65535)
 #  Period is in unit of 1000TU(1024ms, 1TU=1024us)
 #  Note: if disabled, AP removes STAs' info only with explicit disconnection like deauth
 bss_max_idle_enable = 1      # 0 (disable) or 1 (enable)
-bss_max_idle        = 180    # time interval (e.g. 60: 614400ms) (1 ~ 65535)
+bss_max_idle        = 180    # time interval (e.g. 60: 61440ms) (1 ~ 65535)
 #--------------------------------------------------------------------------------#
 # Mesh Options (Mesh Only)
 #  SW encryption by MAC80211 for Mesh Point
@@ -115,6 +112,7 @@ dwell_time        = 100      # max dwell is 1000 (ms), min: 10ms, default: 100ms
 #--------------------------------------------------------------------------------#
 # Credit num of AC_BE for flow control between host and target (Internal use only)
 credit_ac_be      = 40        # number of buffer (min: 40, max: 120)
+#--------------------------------------------------------------------------------#
 # uns arg
 usn_enable              = 1     # 0 (disable), 1 (enable)
 ##################################################################################
@@ -142,7 +140,7 @@ def usage_print():
             \n\tsecurity_mode [0:Open  |  1:WPA2-PSK  |  2:WPA3-OWE  |  3:WPA3-SAE | 4:WPS-PBC] \
                          \n\tcountry       [KR:Korea] \
                          \n\t----------------------------------------------------------- \
-                         \n\tchannel       [S1G Channel Number]   * Only for Sniffer \
+                         \n\tchannel       [S1G Channel Number]   * Only for Sniffer & AP\
                          \n\tsniffer_mode  [0:Local | 1:Remote]   * Only for Sniffer \
                          \n\tmesh_mode     [0:MPP | 1:MP | 2:MAP] * Only for Mesh \
                          \n\tmesh_peering  [Peer MAC address]     * Only for Mesh \
@@ -292,9 +290,7 @@ def argv_print():
         print("Sniffer Mode     : " + strSnifferMode())
     if int(fw_download) == 1:
         print("Download FW      : " + fw_name)
-    if int(bd_download) == 1:
-        print("Download Board Data      : " + bd_name)
-    print ("TX Power         : " + str(txpwr_val))
+    print ("Max TX Power     : " + str(txpwr_max_default))
     if int(bss_max_idle_enable) == 1 and strSTA() == 'AP':
         print("BSS MAX IDLE     : " + str(bss_max_idle))
     if strSTA() == 'STA':
@@ -310,7 +306,7 @@ def argv_print():
     print("------------------------------")
 
 def copyConf():
-    os.system("sudo /home/pi/nrc_pkg/sw/firmware/copy " + str(model) + " " + str(bd_name))
+    os.system("sudo /home/pi/nrc_pkg/sw/firmware/copy " + str(model))
     os.system("/home/pi/nrc_pkg/script/conf/etc/ip_config.sh " + strSTA() + " " +  str(relay_type) + " " + str(static_ip))
 
 def startNAT():
@@ -428,11 +424,6 @@ def setModuleParam():
     else:
         fw_arg= ""
 
-    if int(bd_download) == 1:
-        bd_arg= " bd_name=" + bd_name
-    else:
-        bd_arg= ""
-
     if int(model) == 7291:
         alt_mode_arg = " alternate_mode=1"
     else:
@@ -521,7 +512,7 @@ def setModuleParam():
         ndp_ack_1m_arg= ""
         ndp_preq_arg= ""
 
-    module_param = spi_arg + fw_arg + bd_arg + alt_mode_arg + usn_arg +\
+    module_param = spi_arg + fw_arg + alt_mode_arg + usn_arg +\
                  power_save_arg + sleep_duration_arg + bss_max_idle_arg + \
                  ndp_preq_arg + ndp_ack_1m_arg + auto_ba_arg + sw_enc_arg + \
                  cqm_arg + listen_int_arg + drv_dbg_arg + credit_acbe_arg
@@ -539,6 +530,7 @@ def run_common():
     os.system("sudo killall -9 wireshark-gtk")
     os.system("sudo rmmod nrc")
     os.system("sudo rm "+script_path+"conf/temp_self_config.conf")
+    os.system("sudo rm "+script_path+"conf/temp_hostapd_config.conf")
     stopNAT()
     stopDHCPCD()
     stopDNSMASQ()
@@ -569,14 +561,8 @@ def run_common():
         os.system('sudo rmmod nrc.ko')
         sys.exit()
 
-    if int(bd_download) == 1:
-        print("[4] Transmission Power Control(TPC) is activated")
-        os.system('/home/pi/nrc_pkg/script/cli_app set txpwr ' + str(txpwr_max_default))
-        os.system('/home/pi/nrc_pkg/script/cli_app set bdf_use on')
-    else:
-        print("[4] Set tx power")
-        os.system('/home/pi/nrc_pkg/script/cli_app set txpwr ' + str(txpwr_val))
-        os.system('/home/pi/nrc_pkg/script/cli_app set bdf_use off')
+    print("[4] Transmission Power Control(TPC) is activated")
+    os.system('/home/pi/nrc_pkg/script/cli_app set txpwr ' + str(txpwr_max_default))
 
     print("[5] Set guard interval")
     os.system('/home/pi/nrc_pkg/script/cli_app set gi ' + guard_int)
@@ -630,8 +616,28 @@ def run_sta(interface):
     print("IP assigned. HaLow STA ready")
     print("--------------------------------------------------------------------")
 
+def launch_hostapd(interface, orig_hostapd_conf_file, country, debug, channel):
+    print("[*] configure file copied from: %s" % (orig_hostapd_conf_file) )
+    TEMP_HOSTAPD_CONF = script_path +  "conf/temp_hostapd_config.conf"
+    os.system("sudo cp %s %s" % ( orig_hostapd_conf_file,  TEMP_HOSTAPD_CONF ) )
+    os.system("sed -i \"4s/.*/interface=%s/g\" %s" % ( interface, TEMP_HOSTAPD_CONF ) )
+
+    if channel:
+        os.system("sed -i \"s/^channel=.*/channel=%s/g\" %s" % ( channel, TEMP_HOSTAPD_CONF ) )
+
+        # According to "UG-7292-001-EVK User Guide (Host Mode).pdf" page 40, the ``hw_mode`` needs to be changed to
+        #  ``hw_mode=g`` instead of ``hw_mode=a`` in ``US`` country code.
+        if country == "US" and 1 <= int(channel) and int(channel) <= 13:
+            os.system("sed -i \"s/^hw_mode=.*/hw_mode=g/g\" %s" % ( TEMP_HOSTAPD_CONF ) )
+
+    os.system("sudo hostapd %s %s &" % ( TEMP_HOSTAPD_CONF, debug ) )
+
+
 def run_ap(interface):
     country = str(sys.argv[3])
+    channel = None
+    if len(sys.argv) > 4 :
+        channel = str(sys.argv[4])
 
     if int(hostapd_debug) == 1:
         debug = '-dddd'
@@ -653,20 +659,15 @@ def run_ap(interface):
         os.system("sudo hostapd " + script_path + "conf/temp_self_config.conf " + debug +" &")
     else:
         if strSecurity() == 'OPEN':
-            os.system("sed -i " + '"4s/.*/interface=' + interface + '/g"  /home/pi/nrc_pkg/script/conf/' + country + '/ap_halow_open.conf ')
-            os.system("sudo hostapd /home/pi/nrc_pkg/script/conf/" + country + "/ap_halow_open.conf " + debug +" &")
+            launch_hostapd( interface, '/home/pi/nrc_pkg/script/conf/'+country+'/ap_halow_open.conf', country, debug ,channel )
         elif strSecurity() == 'WPA2-PSK':
-            os.system("sed -i " + '"4s/.*/interface=' + interface + '/g"  /home/pi/nrc_pkg/script/conf/' + country + '/ap_halow_wpa2.conf ')
-            os.system("sudo hostapd /home/pi/nrc_pkg/script/conf/" + country + "/ap_halow_wpa2.conf " + debug + "  &")
+            launch_hostapd( interface, '/home/pi/nrc_pkg/script/conf/'+country+'/ap_halow_wpa2.conf', country, debug ,channel )
         elif strSecurity() == 'WPA3-OWE':
-            os.system("sed -i " + '"4s/.*/interface=' + interface + '/g"  /home/pi/nrc_pkg/script/conf/' + country + '/ap_halow_owe.conf ')
-            os.system("sudo hostapd /home/pi/nrc_pkg/script/conf/" + country + "/ap_halow_owe.conf " + debug + "  &")
+            launch_hostapd( interface, '/home/pi/nrc_pkg/script/conf/'+country+'/ap_halow_owe.conf', country, debug, channel )
         elif strSecurity() == 'WPA3-SAE':
-            os.system("sed -i " + '"4s/.*/interface=' + interface + '/g"  /home/pi/nrc_pkg/script/conf/' + country + '/ap_halow_sae.conf ')
-            os.system("sudo hostapd /home/pi/nrc_pkg/script/conf/" + country + "/ap_halow_sae.conf " + debug + "  &")
+            launch_hostapd( interface, '/home/pi/nrc_pkg/script/conf/'+country+'/ap_halow_sae.conf', country, debug, channel )
         elif strSecurity() == 'WPA-PBC':
-            os.system("sed -i " + '"4s/.*/interface=' + interface + '/g"  /home/pi/nrc_pkg/script/conf/' + country + '/ap_halow_pbc.conf ')
-            os.system("sudo hostapd /home/pi/nrc_pkg/script/conf/" + country + "/ap_halow_pbc.conf " + debug + "  &")
+            launch_hostapd( interface, '/home/pi/nrc_pkg/script/conf/'+country+'/ap_halow_pbc.conf', country, debug, channel )
             time.sleep(1)
             os.system("sudo hostapd_cli wps_pbc")
     time.sleep(3)

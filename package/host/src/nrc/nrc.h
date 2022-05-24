@@ -58,6 +58,7 @@ enum NRC_SCAN_MODE {
 #define	NRC_FW_SLEEP					(3)
 
 enum NRC_DRV_STATE {
+	NRC_DRV_REBOOT = -1,
 	NRC_DRV_BOOT = -1,
 	NRC_DRV_INIT = 0,
 	NRC_DRV_STOP,
@@ -103,6 +104,7 @@ struct fwinfo_t {
 	uint32_t rx_head_size;
 	uint32_t payload_align;
 	uint32_t buffer_size;
+	uint16_t hw_version;
 };
 
 struct vif_capabilities {
@@ -237,6 +239,7 @@ struct nrc {
 	bool amsdu_supported;
 	bool block_frame;
 	bool ampdu_reject;
+	bool bd_valid;
 
 	/* tx */
 	spinlock_t txq_lock;
@@ -484,6 +487,7 @@ extern bool signal_monitor;
 extern bool enable_usn;
 extern bool debug_level_all;
 extern int credit_ac_be;
+extern bool manual_aggregation;
 
 void nrc_set_bss_max_idle_offset(int value);
 void nrc_set_auto_ba(bool toggle);

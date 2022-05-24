@@ -519,12 +519,14 @@ struct wim_channel_param {
 	uint8_t width;
 } __packed;
 
-#define WIM_MAX_BD_DATA_LEN		(544)
+
+#define WIM_MAX_BD_DATA_LEN		(540)
 struct wim_bd_param {
 	uint16_t type;
 	uint16_t length;
 	uint16_t checksum;
-	uint8_t value[WIM_MAX_BD_DATA_LEN];	
+	uint16_t hw_version;
+	uint8_t value[WIM_MAX_BD_DATA_LEN];
 } __packed;
 
 #define WIM_MAX_SCAN_SSID       (2)
@@ -583,6 +585,7 @@ struct wim_ready_param {
 	uint32_t buffer_size;
 	uint8_t macaddr[NR_NRC_VIF][ETH_ALEN];
 	bool has_macaddr[NR_NRC_VIF];
+	uint16_t hw_version;
 	struct wim_cap_param cap;
 } __packed;
 WIM_DECLARE(wim_ready);
@@ -693,7 +696,8 @@ WIM_DECLARE(wim_pm);
 struct wim_drv_info_param {
 	uint32_t boot_mode		:1;
 	uint32_t cqm_off		:1;
-	uint32_t reserved		:30;
+	uint32_t agg_manual		:1;
+	uint32_t reserved		:29;
 } __packed;
 WIM_DECLARE(wim_drv_info);
 

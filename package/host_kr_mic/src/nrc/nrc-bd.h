@@ -17,18 +17,39 @@
 #ifndef _NRC_BD_H_
 #define _NRC_BD_H_
 
+#define NRC_BD_MAX_CH_LIST		45
+
+#define BD_DEBUG	0
 
 struct BDF {
 	uint8_t	ver_major;
 	uint8_t	ver_minor;
 	uint16_t total_len;
 	
-	uint16_t num_country;
+	uint16_t num_data_groups;
 	uint16_t reserved[4];
 	uint16_t checksum_data;
 	
-	uint8_t data[1024];
-}; 
+	uint8_t data[0];
+};
 
+struct bd_ch_table {
+	uint16_t    s1g_freq;
+	uint16_t    nons1g_freq;
+	uint8_t     s1g_freq_index;
+	uint16_t    nons1g_freq_index;
+};
+
+struct bd_supp_param {
+	uint8_t num_ch;
+	uint8_t s1g_ch_index[NRC_BD_MAX_CH_LIST];
+	uint16_t nons1g_ch_freq[NRC_BD_MAX_CH_LIST];
+};
+
+#if defined(CONFIG_SUPPORT_BD_TARGET_VERSION)
+struct wim_bd_param * nrc_read_bd_tx_pwr(struct nrc *nw, uint8_t *cc);
+#else
 struct wim_bd_param * nrc_read_bd_tx_pwr(uint8_t *cc);
+#endif /* defined(CONFIG_SUPPORT_BD_TARGET_VERSION) */
+int nrc_check_bd(void);
 #endif //_NRC_BD_H_

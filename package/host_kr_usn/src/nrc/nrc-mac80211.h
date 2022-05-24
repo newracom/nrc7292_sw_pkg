@@ -103,4 +103,6 @@ void nrc_reg_notifier(struct wiphy *wiphy, struct regulatory_request *request);
 int nrc_reg_notifier(struct wiphy *wiphy, struct regulatory_request *request);
 #endif
 
+void nrc_mac_clean_txq(struct nrc *nw);
+
 #endif

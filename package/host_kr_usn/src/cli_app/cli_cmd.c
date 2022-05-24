@@ -71,7 +71,6 @@ static int cmd_show_maxagg(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_show_duty(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_show_autotxgain(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_show_cal_use(cmd_tbl_t *t, int argc, char *argv[]);
-static int cmd_show_bdf_use(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_show_recovery(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_show_detection(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_show_temperature(cmd_tbl_t *t, int argc, char *argv[]);
@@ -80,6 +79,7 @@ static int cmd_show_wakeup_source(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_show_sta(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_show_cli_app_list_version(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_show_tx_time(cmd_tbl_t *t, int argc, char *argv[]);
+static int cmd_show_cca_thresh(cmd_tbl_t *t, int argc, char *argv[]);
 
 /* 2nd sub commands on show */
 static int cmd_show_stats_simple_rx(cmd_tbl_t *t, int argc, char *argv[]);
@@ -104,7 +104,6 @@ static int cmd_set_config(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_set_rate_control(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_set_duty(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_set_cal_use(cmd_tbl_t *t, int argc, char *argv[]);
-static int cmd_set_bdf_use(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_set_txpwr(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_set_wakeup_pin(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_set_wakeup_source(cmd_tbl_t *t, int argc, char *argv[]);
@@ -115,6 +114,7 @@ static int cmd_set_tx_time(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_set_drop_frame(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_set_temp_sensor(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_set_self_configuration(cmd_tbl_t *t, int argc, char *argv[]);
+static int cmd_set_cca_thresh(cmd_tbl_t *t, int argc, char *argv[]);
 
 /*******************************************************************************
 * sub commands on test
@@ -196,7 +196,6 @@ cmd_tbl_t show_sub_list[] = {
 	{ "duty", cmd_show_duty, "show duty cycle", "show duty",  SHOW_DUTY_KEY_LIST, 0},
 	{ "autotxgain", cmd_show_autotxgain, "show autotxgain", "show autotxgain",  SHOW_AUTOTXGAIN_KEY_LIST, 0},
 	{ "cal_use", cmd_show_cal_use, "show cal_use", "show cal_use",  SHOW_CAL_USE_KEY_LIST, 0},
-	{ "bdf_use", cmd_show_bdf_use, "show board data use", "show bdf_use",  SHOW_BDF_USE_KEY_LIST, 0},
 	{ "recovery", cmd_show_recovery, "show recovery", "show recovery stats",  "", 0},
 	{ "detection", cmd_show_detection, "show detection", "show detection stats",  "", 0},
 	{ "temp", cmd_show_temperature, "show temp","show temp",  SHOW_TEMPERATURE_KEY_LIST, 0},
@@ -204,6 +203,7 @@ cmd_tbl_t show_sub_list[] = {
 	{ "wakeup_source", cmd_show_wakeup_source, "show wakeup source configuration","show wakeup_source", SHOW_WAKEUP_SOURCE_KEY_LIST, 0},
 	{ "sta", cmd_show_sta, "show station information", "show sta [vif_id] {all|aid [aid_index]}",  "", 0},
 	{ "tx_time", cmd_show_tx_time, "show tx_time about <CS time> <Blank time>", "show tx_time", SHOW_TX_TIME_KEY_LIST, 0},
+	{ "cca_thresh", cmd_show_cca_thresh, "show cca_thresh(unit: dBm)", "show cca_thresh", "", 0},
 	{ "cli_app_list_version", cmd_show_cli_app_list_version, "show cli app list version", "show cli_app_list_version",  "", 1},
 };
 
@@ -215,10 +215,9 @@ cmd_tbl_t set_sub_list[] = {
 	{ "rc", cmd_set_rate_control, "set rate control", "set rc {on|off} [vif_id] [mode]", SET_RC_KEY_LIST, 0},
 	{ "duty", cmd_set_duty, "set duty cycle", "set duty {on|off} {duty window} {tx duration} {duty margin}", SET_DUTY_KEY_LIST, 0},
 	{ "cal_use", cmd_set_cal_use, "set cal_use", "set cal_use {on|off}", SET_CAL_USE_KEY_LIST, 0},
-	{ "bdf_use", cmd_set_bdf_use, "set board data use", "set bdf_use {on|off}", SET_BDF_USE_KEY_LIST, 0},
-	{ "txpwr", cmd_set_txpwr, "set txpwrt", "set txpwr {value(1~20)}", SET_TXPWR_KEY_LIST, 0},
+	{ "txpwr", cmd_set_txpwr, "set txpwrt", "set txpwr {value(1~30)}", SET_TXPWR_KEY_LIST, 0},
 	{ "wakeup_pin", cmd_set_wakeup_pin, "set wakeup pin for deepsleep", "set wakeup_pin {Debounce(on|off)} {PIN Number(0~31)}", SET_WAKEUP_PIN_KEY_LIST, 0},
-	{ "wakeup_source", cmd_set_wakeup_source, "set wakeup source for deepsleep", "set wakeup_soruce rtc gpio hspi", SET_WAKEUP_SOURCE_KEY_LIST, 0},
+	{ "wakeup_source", cmd_set_wakeup_source, "set wakeup source for deepsleep", "set wakeup_source rtc gpio hspi", SET_WAKEUP_SOURCE_KEY_LIST, 0},
 	{ "addba", cmd_set_addba, "set addba tid / send addba with mac address", "set addba [tid] {mac address}", "", 0},
 	{ "delba", cmd_set_delba, "set delba tid / send delba with mac address", "set delba [tid] {mac address}", "", 0},
 	{ "rts", cmd_set_rts, "set rts on/off", "set rts {on|off|default} <threshold> <vif_id>", "", 0},
@@ -226,6 +225,7 @@ cmd_tbl_t set_sub_list[] = {
 	{ "drop", cmd_set_drop_frame, "set drop frames from configured mac address", "set drop [vif id] [mac address] {on|off}", SET_DROP_KEY_LIST, 0},
 	{ "tsensor", cmd_set_temp_sensor, "set temperature sensor scl, sda", "set tsensor [GPIO for SCL] [GPIO for SDA]", "", 0},
 	{ "self_config", cmd_set_self_configuration, "set self_config", "set self_config {Country(KR,US...)}{BW}{dwell time}", "", 0},
+	{ "cca_thresh", cmd_set_cca_thresh, "set cca threshold", "set cca_thresh {CCA threshold(unit:dBm, -100~-70)}", "", 0},
 };
 
 /* sub command list on test */
@@ -962,31 +962,6 @@ static int cmd_show_cal_use(cmd_tbl_t *t, int argc, char *argv[])
 	return ret;
 }
 
-static int cmd_show_bdf_use(cmd_tbl_t *t, int argc, char *argv[])
-{
-	int ret = CMD_RET_SUCCESS;
-	char param[NRC_MAX_CMDLINE_SIZE];
-	char response[NL_MSG_MAX_RESPONSE_SIZE];
-	int netlink_ret = 0;
-	int display_per_line= 1;
-
-	memset(response, 0x0, NL_MSG_MAX_RESPONSE_SIZE);
-	memset(param, 0x0, sizeof(param));
-	strcpy(param, "show bdf_use -sr");
-	netlink_ret = netlink_send_data(NL_SHELL_RUN, param, response);
-	if(!netlink_ret){
-		if(strcmp(response, response_timeout_str)== 0){
-			ret =  CMD_RET_RESPONSE_TIMEOUT;
-		}else{
-			cmd_result_parse((char*)t->key_list, response, display_per_line);
-			ret = CMD_RET_SUCCESS;
-		}
-	}else{
-		ret = CMD_RET_FAILURE;
-	}
-	return ret;
-}
-
 static int cmd_show_recovery(cmd_tbl_t *t, int argc, char *argv[])
 {
 	int ret = CMD_RET_SUCCESS;
@@ -1291,6 +1266,31 @@ static int cmd_show_tx_time(cmd_tbl_t *t, int argc, char *argv[])
 			ret =  CMD_RET_RESPONSE_TIMEOUT;
 		}else{
 			cmd_result_parse((char*)t->key_list, response, display_per_line);
+			ret = CMD_RET_SUCCESS;
+		}
+	}else{
+		ret = CMD_RET_FAILURE;
+	}
+	return ret;
+}
+
+static int cmd_show_cca_thresh(cmd_tbl_t *t, int argc, char *argv[])
+{
+	int ret = CMD_RET_SUCCESS;
+	char param[NRC_MAX_CMDLINE_SIZE];
+	char response[NL_MSG_MAX_RESPONSE_SIZE];
+	int netlink_ret = 0;
+	int display_per_line= 1;
+
+	memset(response, 0x0, NL_MSG_MAX_RESPONSE_SIZE);
+	memset(param, 0x0, sizeof(param));
+	sprintf(param, "show cca_thresh -sr");
+	netlink_ret = netlink_send_data(NL_SHELL_RUN, param, response);
+	if(!netlink_ret){
+		if(strcmp(response, response_timeout_str)== 0){
+			ret =  CMD_RET_RESPONSE_TIMEOUT;
+		}else{
+			printf("%s\n",response);
 			ret = CMD_RET_SUCCESS;
 		}
 	}else{
@@ -1803,41 +1803,6 @@ static int cmd_set_cal_use(cmd_tbl_t *t, int argc, char *argv[])
 	return ret;
 }
 
-static int cmd_set_bdf_use(cmd_tbl_t *t, int argc, char *argv[])
-{
-	int ret = CMD_RET_SUCCESS;
-	char param[NRC_MAX_CMDLINE_SIZE];
-	char response[NL_MSG_MAX_RESPONSE_SIZE];
-	int netlink_ret = 0;
-	int display_per_line= 1;
-
-	memset(response, 0x0, NL_MSG_MAX_RESPONSE_SIZE);
-	memset(param, 0x0, sizeof(param));
-
-	if (argc < 3) {
-		return CMD_RET_FAILURE;
-	}
-
-	if (strcmp(argv[2], "on") != 0 && strcmp(argv[2], "off") != 0) {
-		return CMD_RET_FAILURE;
-	}
-
-	sprintf(param, "set bdf_use %s -sr", argv[2]);
-
-	netlink_ret = netlink_send_data(NL_SHELL_RUN, param, response);
-	if(!netlink_ret){
-		if(strcmp(response, response_timeout_str)== 0){
-			ret =  CMD_RET_RESPONSE_TIMEOUT;
-		}else{
-			cmd_result_parse((char*)t->key_list, response, display_per_line);
-			ret = CMD_RET_SUCCESS;
-		}
-	}else{
-		ret = CMD_RET_FAILURE;
-	}
-	return ret;
-}
-
 static int cmd_set_txpwr(cmd_tbl_t *t, int argc, char *argv[])
 {
 	int ret = CMD_RET_FAILURE;
@@ -1855,7 +1820,7 @@ static int cmd_set_txpwr(cmd_tbl_t *t, int argc, char *argv[])
 	}
 
 	txpwr = atoi(argv[2]);
-	if(txpwr<0 || txpwr >20){
+	if(txpwr<0 || txpwr >30){
 		return CMD_RET_FAILURE;
 	}
 
@@ -2187,6 +2152,38 @@ static int cmd_set_self_configuration(cmd_tbl_t *t, int argc, char *argv[])
 				best_freq/10.0, best_cca/10.0, (best_bw == 0)?1:(best_bw == 1)?2:4);
 			printf("[*]ch_num:%d\n",best_nons1g_freq_idx );
 
+			ret = CMD_RET_SUCCESS;
+		}
+	}else{
+		ret = CMD_RET_FAILURE;
+	}
+	return ret;
+}
+
+static int cmd_set_cca_thresh(cmd_tbl_t *t, int argc, char *argv[])
+{
+	int ret = CMD_RET_FAILURE;
+	char param[NRC_MAX_CMDLINE_SIZE];
+	char response[NL_MSG_MAX_RESPONSE_SIZE];
+	int netlink_ret = 0;
+	int display_per_line = 1;
+
+	memset(response, 0x0, NL_MSG_MAX_RESPONSE_SIZE);
+	memset(param, 0x0, sizeof(param));
+
+	if(argc == 3)
+		sprintf(param, "set cca_thresh %s -sr", argv[2]);
+	else if(argc == 4)
+		sprintf(param, "set cca_thresh %s %s -sr", argv[2], argv[3]);
+	else
+		return CMD_RET_FAILURE;
+
+	netlink_ret = netlink_send_data(NL_SHELL_RUN, param, response);
+	if(!netlink_ret){
+		if(strcmp(response, response_timeout_str)== 0){
+			ret =  CMD_RET_RESPONSE_TIMEOUT;
+		}else {
+			printf("%s\n", response);
 			ret = CMD_RET_SUCCESS;
 		}
 	}else{

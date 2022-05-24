@@ -249,11 +249,6 @@ static void ap_max_idle_period_expire(struct timer_list *t)
 	u16 max_limit_cnt = BSS_MAX_ILDE_DEAUTH_LIMIT_COUNT;
 	unsigned long period_jiffies = 0;
 
-	/* bss_max_idle period is below 10 (10240ms),triple limit count */
-	if (jiffies_to_msecs(i_sta->max_idle.idle_period) <= 10240) {
-		max_limit_cnt *= 3;
-	}
-
 	++i_sta->max_idle.timeout_cnt;
 
 	if (i_sta->max_idle.timeout_cnt >= max_limit_cnt) {

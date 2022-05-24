@@ -147,14 +147,6 @@ Tx power index for MCS 6,Tx power index for MCS 7,Tx power index for MCS 10"
 #define SET_CAL_USE_KEY_DISP	"%s,%s"
 #define SET_CAL_USE_KEY_LIST	"Calibration_use,Country"
 
-/* show bdf_use */
-#define SHOW_BDF_USE_KEY_DISP	"%s"
-#define SHOW_BDF_USE_KEY_LIST	"Board Data use"
-
-/* set bdf_use */
-#define SET_BDF_USE_KEY_DISP	"%s"
-#define SET_BDF_USE_KEY_LIST	"Board Data use"
-
 /* show recovery stats */
 #define SHOW_RECOVERY_STATS_KEY_DISP1	"%lu"
 #define SHOW_RECOVERY_STATS_KEY_DISP2	"%d,%lu,%d"
