@@ -918,13 +918,24 @@ int nrc_check_bd(void)
 	char filepath[64];
 
 	sprintf(filepath, "/lib/firmware/%s", bd_name);
+#if KERNEL_VERSION(5,0,0) > NRC_TARGET_KERNEL_VERSION
+	old_fs = get_fs();
+	set_fs(get_ds());
+#elif KERNEL_VERSION(5,10,0) > NRC_TARGET_KERNEL_VERSION
 	old_fs = get_fs();
 	set_fs(KERNEL_DS);
+#else
+	old_fs = force_uaccess_begin();
+#endif
 
 	filp = filp_open(filepath, O_RDONLY, 0);
 	if (IS_ERR(filp)) {
 		pr_err("Failed to load board data :error: %d",IS_ERR(filp));
+#if KERNEL_VERSION(5,10,0) > NRC_TARGET_KERNEL_VERSION
 		set_fs(old_fs);
+#else
+		force_uaccess_end(old_fs);
+#endif
 		return -EIO;
 	}
 
@@ -965,7 +976,11 @@ int nrc_check_bd(void)
 #endif /* defined(CONFIG_SUPPORT_BD_TARGET_VERSION) */
 
 	filp_close(filp, NULL);
+#if KERNEL_VERSION(5,10,0) > NRC_TARGET_KERNEL_VERSION
 	set_fs(old_fs);
+#else
+	force_uaccess_end(old_fs);
+#endif
 #if defined(CONFIG_SUPPORT_BD_TARGET_VERSION)
 	kfree(stat);
 #endif /* defined(CONFIG_SUPPORT_BD_TARGET_VERSION) */
