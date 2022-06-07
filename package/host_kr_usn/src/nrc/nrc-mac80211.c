@@ -2912,17 +2912,17 @@ static u8* nrc_vendor_remove(struct nrc *nw, u8 subcmd)
 	if (!nw->vendor_skb)
 		return NULL;
 
-	pos = (u8*)cfg80211_find_vendor_ie(OUI_NRC, subcmd,
+	pos = (u8*)cfg80211_find_vendor_ie(OUI_IEEE_REGISTRATION_AUTHORITY, subcmd,
 			nw->vendor_skb->data, nw->vendor_skb->len);
 
 	if (pos) {
 		u8 len = *(pos + 1);
-		/* Remove element first */
 		memmove(pos, pos + len + 2, nw->vendor_skb->len -
 			(pos - nw->vendor_skb->data) - (len + 2));
 		skb_trim(nw->vendor_skb, nw->vendor_skb->len - (len + 2));
 	}
 
+	nrc_mac_dbg("%s: removed vendor IE", __func__);
 	return pos;
 }
 
@@ -2940,6 +2940,7 @@ static int nrc_vendor_update(struct nrc *nw, u8 subcmd,
 	if (!nw->vendor_skb)
 		nw->vendor_skb = dev_alloc_skb(IEEE80211_MAX_FRAME_LEN);
 
+	// Remove old data first
 	pos = nrc_vendor_remove(nw, subcmd);
 	
 	/* Append new data */
@@ -2958,6 +2959,61 @@ static int nrc_vendor_update(struct nrc *nw, u8 subcmd,
 	return 0;
 }
 
+static int nrc_vendor_cmd_remove(struct wiphy *wiphy,
+				struct wireless_dev *wdev, u8 subcmd)
+{
+	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
+	struct ieee80211_vif *vif = wdev_to_ieee80211_vif(wdev);
+	struct nrc *nw = hw->priv;
+
+	/* Remove the vendor ie */
+	if (nrc_vendor_remove(nw, subcmd) == NULL)
+		return -EINVAL;
+	/* Update beacon */
+	return nrc_vendor_update_beacon(hw, vif);
+}
+
+struct timer_list remotecmd_timer;
+struct remotecmd_params remotecmd_params;
+
+#if KERNEL_VERSION(4, 15, 0) > NRC_TARGET_KERNEL_VERSION
+void remotecmd_callback(unsigned long ptr)
+{
+	struct remotecmd_params *params = (struct remotecmd_params *)ptr;
+	struct wiphy *wiphy = params->wiphy;
+	struct wireless_dev *wdev = params->wdev;
+	u8 subcmd = params->subcmd;
+#else
+void remotecmd_callback(struct timer_list *t)
+{
+	struct wiphy *wiphy = remotecmd_params.wiphy;
+	struct wireless_dev *wdev = remotecmd_params.wdev;
+	u8 subcmd = remotecmd_params.subcmd;
+#endif
+	nrc_vendor_cmd_remove(wiphy, wdev, subcmd);
+}
+
+void remotecmd_schedule_off(struct wiphy *wiphy, struct wireless_dev *wdev,
+				u8 subcmd, const u8 cntdwn)
+{
+	remotecmd_params.wiphy = wiphy;
+	remotecmd_params.wdev = wdev;
+	remotecmd_params.subcmd = subcmd;
+
+#if KERNEL_VERSION(4, 15, 0) > NRC_TARGET_KERNEL_VERSION
+	init_timer(&remotecmd_timer);
+	remotecmd_timer.function = remotecmd_callback;
+	remotecmd_timer.data = (unsigned long)&remotecmd_params;
+	remotecmd_timer.expires = jiffies +
+		usecs_to_jiffies(wdev->beacon_interval * cntdwn * 1024);
+	add_timer(&remotecmd_timer);
+#else
+	timer_setup(&remotecmd_timer, remotecmd_callback, 0);
+	mod_timer(&remotecmd_timer, jiffies +
+		usecs_to_jiffies(wdev->beacon_interval * cntdwn * 1024));
+#endif
+}
+
 static int nrc_vendor_cmd_append(struct wiphy *wiphy, struct wireless_dev *wdev,
 				u8 subcmd, const void *data, int data_len)
 {
@@ -2968,20 +3024,10 @@ static int nrc_vendor_cmd_append(struct wiphy *wiphy, struct wireless_dev *wdev,
 	/* Update local vendor data */
 	if (nrc_vendor_update(nw, subcmd, data, data_len) != 0)
 		return -EINVAL;
-	/* Update beacon */
-	return nrc_vendor_update_beacon(hw, vif);
-}
-
-static int nrc_vendor_cmd_remove(struct wiphy *wiphy, struct wireless_dev *wdev,
-									u8 subcmd)
-{
-	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
-	struct ieee80211_vif *vif = wdev_to_ieee80211_vif(wdev);
-	struct nrc *nw = hw->priv;
-
-	/* Remove the vendor ie */
-	if (nrc_vendor_remove(nw, subcmd) == NULL)
-		return -EINVAL;
+	// Schedule async vendor IE removal if REMOTECMD
+	if (subcmd == NRC_SUBCMD_ANNOUNCE6) {
+		remotecmd_schedule_off(wiphy, wdev, subcmd, *(const u8 *)data);
+	}
 	/* Update beacon */
 	return nrc_vendor_update_beacon(hw, vif);
 }
@@ -3016,7 +3062,7 @@ static int nrc_vendor_cmd_announce1(struct wiphy *wiphy,
 				struct wireless_dev *wdev,
 				const void *data, int data_len)
 {
-	return nrc_vendor_cmd_append(wiphy, wdev, NRC_OUI_SUBCMD_ANNOUNCE1,
+	return nrc_vendor_cmd_append(wiphy, wdev, NRC_SUBCMD_ANNOUNCE1,
 				 data, data_len);
 }
 
@@ -3024,7 +3070,7 @@ static int nrc_vendor_cmd_announce2(struct wiphy *wiphy,
 				struct wireless_dev *wdev,
 				const void *data, int data_len)
 {
-	return nrc_vendor_cmd_append(wiphy, wdev, NRC_OUI_SUBCMD_ANNOUNCE2,
+	return nrc_vendor_cmd_append(wiphy, wdev, NRC_SUBCMD_ANNOUNCE2,
 				 data, data_len);
 }
 
@@ -3032,7 +3078,7 @@ static int nrc_vendor_cmd_announce3(struct wiphy *wiphy,
 				struct wireless_dev *wdev,
 				const void *data, int data_len)
 {
-	return nrc_vendor_cmd_append(wiphy, wdev, NRC_OUI_SUBCMD_ANNOUNCE3,
+	return nrc_vendor_cmd_append(wiphy, wdev, NRC_SUBCMD_ANNOUNCE3,
 				 data, data_len);
 }
 
@@ -3040,7 +3086,7 @@ static int nrc_vendor_cmd_announce4(struct wiphy *wiphy,
 				struct wireless_dev *wdev,
 				const void *data, int data_len)
 {
-	return nrc_vendor_cmd_append(wiphy, wdev, NRC_OUI_SUBCMD_ANNOUNCE4,
+	return nrc_vendor_cmd_append(wiphy, wdev, NRC_SUBCMD_ANNOUNCE4,
 				 data, data_len);
 }
 
@@ -3048,49 +3094,38 @@ static int nrc_vendor_cmd_announce5(struct wiphy *wiphy,
 				struct wireless_dev *wdev,
 				const void *data, int data_len)
 {
-	return nrc_vendor_cmd_append(wiphy, wdev, NRC_OUI_SUBCMD_ANNOUNCE5,
+	return nrc_vendor_cmd_append(wiphy, wdev, NRC_SUBCMD_ANNOUNCE5,
 				 data, data_len);
 }
 
-static int nrc_vendor_cmd_remove_announce1(struct wiphy *wiphy,
+static int nrc_vendor_cmd_announce6(struct wiphy *wiphy,
 				struct wireless_dev *wdev,
 				const void *data, int data_len)
 {
-	return nrc_vendor_cmd_remove(wiphy, wdev, NRC_OUI_SUBCMD_ANNOUNCE1);
+	return nrc_vendor_cmd_append(wiphy, wdev, NRC_SUBCMD_ANNOUNCE6,
+				 data, data_len);
 }
 
-static int nrc_vendor_cmd_remove_announce2(struct wiphy *wiphy,
+static int nrc_vendor_cmd_remove_vendor_ie(struct wiphy *wiphy,
 				struct wireless_dev *wdev,
 				const void *data, int data_len)
 {
-	return nrc_vendor_cmd_remove(wiphy, wdev, NRC_OUI_SUBCMD_ANNOUNCE2);
+	return nrc_vendor_cmd_remove(wiphy, wdev, *((u8*)data));
 }
 
-static int nrc_vendor_cmd_remove_announce3(struct wiphy *wiphy,
+static int nrc_vendor_cmd_remove_announce6(struct wiphy *wiphy,
 				struct wireless_dev *wdev,
 				const void *data, int data_len)
 {
-	return nrc_vendor_cmd_remove(wiphy, wdev, NRC_OUI_SUBCMD_ANNOUNCE3);
-}
-
-static int nrc_vendor_cmd_remove_announce4(struct wiphy *wiphy,
-				struct wireless_dev *wdev,
-				const void *data, int data_len)
-{
-	return nrc_vendor_cmd_remove(wiphy, wdev, NRC_OUI_SUBCMD_ANNOUNCE4);
-}
-
-static int nrc_vendor_cmd_remove_announce5(struct wiphy *wiphy,
-				struct wireless_dev *wdev,
-				const void *data, int data_len)
-{
-	return nrc_vendor_cmd_remove(wiphy, wdev, NRC_OUI_SUBCMD_ANNOUNCE5);
+	return nrc_vendor_cmd_remove(wiphy, wdev, NRC_SUBCMD_ANNOUNCE6);
 }
 
 static struct wiphy_vendor_command nrc_vendor_cmds[] = {
 	{
-		.info = { .vendor_id = OUI_NRC,
-			  .subcmd = NRC_SUBCMD_WOWLAN_PATTERN },
+		.info = {
+			.vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
+			.subcmd = NRC_SUBCMD_WOWLAN_PATTERN
+		},
 		.flags = WIPHY_VENDOR_CMD_NEED_NETDEV,
 		.doit = nrc_vendor_cmd_wowlan_pattern,
 #if KERNEL_VERSION(5, 3, 0) <= NRC_TARGET_KERNEL_VERSION
@@ -3099,8 +3134,10 @@ static struct wiphy_vendor_command nrc_vendor_cmds[] = {
 #endif
 	},
 	{
-		.info = { .vendor_id = OUI_NRC,
-			  .subcmd = NRC_OUI_SUBCMD_ANNOUNCE1 },
+		.info = {
+			.vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
+			.subcmd = NRC_SUBCMD_ANNOUNCE1
+		},
 		.flags = WIPHY_VENDOR_CMD_NEED_NETDEV,
 		.doit = nrc_vendor_cmd_announce1,
 #if KERNEL_VERSION(5, 3, 0) <= NRC_TARGET_KERNEL_VERSION
@@ -3109,8 +3146,10 @@ static struct wiphy_vendor_command nrc_vendor_cmds[] = {
 #endif
 	},
 	{
-		.info = { .vendor_id = OUI_NRC,
-			  .subcmd = NRC_OUI_SUBCMD_ANNOUNCE2 },
+		.info = {
+			.vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
+			.subcmd = NRC_SUBCMD_ANNOUNCE2
+		},
 		.flags = WIPHY_VENDOR_CMD_NEED_NETDEV,
 		.doit = nrc_vendor_cmd_announce2,
 #if KERNEL_VERSION(5, 3, 0) <= NRC_TARGET_KERNEL_VERSION
@@ -3119,8 +3158,10 @@ static struct wiphy_vendor_command nrc_vendor_cmds[] = {
 #endif
 	},
 	{
-		.info = { .vendor_id = OUI_NRC,
-			  .subcmd = NRC_OUI_SUBCMD_ANNOUNCE3 },
+		.info = {
+			.vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
+			.subcmd = NRC_SUBCMD_ANNOUNCE3
+		},
 		.flags = WIPHY_VENDOR_CMD_NEED_NETDEV,
 		.doit = nrc_vendor_cmd_announce3,
 #if KERNEL_VERSION(5, 3, 0) <= NRC_TARGET_KERNEL_VERSION
@@ -3129,8 +3170,10 @@ static struct wiphy_vendor_command nrc_vendor_cmds[] = {
 #endif
 	},
 	{
-		.info = { .vendor_id = OUI_NRC,
-			  .subcmd = NRC_OUI_SUBCMD_ANNOUNCE4 },
+		.info = {
+			.vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
+			.subcmd = NRC_SUBCMD_ANNOUNCE4
+		},
 		.flags = WIPHY_VENDOR_CMD_NEED_NETDEV,
 		.doit = nrc_vendor_cmd_announce4,
 #if KERNEL_VERSION(5, 3, 0) <= NRC_TARGET_KERNEL_VERSION
@@ -3139,8 +3182,10 @@ static struct wiphy_vendor_command nrc_vendor_cmds[] = {
 #endif
 	},
 	{
-		.info = { .vendor_id = OUI_NRC,
-			  .subcmd = NRC_OUI_SUBCMD_ANNOUNCE5 },
+		.info = {
+			.vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
+			.subcmd = NRC_SUBCMD_ANNOUNCE5
+		},
 		.flags = WIPHY_VENDOR_CMD_NEED_NETDEV,
 		.doit = nrc_vendor_cmd_announce5,
 #if KERNEL_VERSION(5, 3, 0) <= NRC_TARGET_KERNEL_VERSION
@@ -3149,50 +3194,32 @@ static struct wiphy_vendor_command nrc_vendor_cmds[] = {
 #endif
 	},
 	{
-		.info = { .vendor_id = OUI_NRC,
-			  .subcmd = NRC_OUI_SUBCMD_RM_ANNOUNCE1 },
+		.info = {
+			.vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
+			.subcmd = NRC_SUBCMD_ANNOUNCE6
+		},
 		.flags = WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = nrc_vendor_cmd_remove_announce1,
+		.doit = nrc_vendor_cmd_announce6,
+#if KERNEL_VERSION(5, 3, 0) <= NRC_TARGET_KERNEL_VERSION
+		.policy = VENDOR_CMD_RAW_DATA,
+		.maxattr = MAX_VENDOR_ATTR,
+#endif
+	},
+	{
+		.info = { .vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
+			  .subcmd = NRC_OUI_SUBCMD_RM_ANNOUNCE6 },
+		.flags = WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = nrc_vendor_cmd_remove_announce6,
 #if KERNEL_VERSION(5, 3, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nrc_vendor_command_policy,
 		.maxattr = MAX_VENDOR_ATTR,
 #endif
 	},
 	{
-		.info = { .vendor_id = OUI_NRC,
-			  .subcmd = NRC_OUI_SUBCMD_RM_ANNOUNCE2 },
+		.info = { .vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
+			  .subcmd = NRC_SUBCMD_RM_VENDOR_IE },
 		.flags = WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = nrc_vendor_cmd_remove_announce2,
-#if KERNEL_VERSION(5, 3, 0) <= NRC_TARGET_KERNEL_VERSION
-		.policy = nrc_vendor_command_policy,
-		.maxattr = MAX_VENDOR_ATTR,
-#endif
-	},
-	{
-		.info = { .vendor_id = OUI_NRC,
-			  .subcmd = NRC_OUI_SUBCMD_RM_ANNOUNCE3 },
-		.flags = WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = nrc_vendor_cmd_remove_announce3,
-#if KERNEL_VERSION(5, 3, 0) <= NRC_TARGET_KERNEL_VERSION
-		.policy = nrc_vendor_command_policy,
-		.maxattr = MAX_VENDOR_ATTR,
-#endif
-	},
-	{
-		.info = { .vendor_id = OUI_NRC,
-			  .subcmd = NRC_OUI_SUBCMD_RM_ANNOUNCE4 },
-		.flags = WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = nrc_vendor_cmd_remove_announce4,
-#if KERNEL_VERSION(5, 3, 0) <= NRC_TARGET_KERNEL_VERSION
-		.policy = nrc_vendor_command_policy,
-		.maxattr = MAX_VENDOR_ATTR,
-#endif
-	},
-	{
-		.info = { .vendor_id = OUI_NRC,
-			  .subcmd = NRC_OUI_SUBCMD_RM_ANNOUNCE5 },
-		.flags = WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = nrc_vendor_cmd_remove_announce5,
+		.doit = nrc_vendor_cmd_remove_vendor_ie,
 #if KERNEL_VERSION(5, 3, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nrc_vendor_command_policy,
 		.maxattr = MAX_VENDOR_ATTR,
@@ -3202,12 +3229,32 @@ static struct wiphy_vendor_command nrc_vendor_cmds[] = {
 
 static const struct nl80211_vendor_cmd_info nrc_vendor_events[] = {
 	{
-		.vendor_id = OUI_NRC,
-		.subcmd = NRC_VENDOR_EVENT_ANNOUNCE
+		.vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
+		.subcmd = NRC_SUBCMD_ANNOUNCE1
 	},
 	{
-		.vendor_id = OUI_NRC,
-		.subcmd = NRC_VENDOR_EVENT_WOWLAN
+		.vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
+		.subcmd = NRC_SUBCMD_ANNOUNCE2
+	},
+	{
+		.vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
+		.subcmd = NRC_SUBCMD_ANNOUNCE3
+	},
+	{
+		.vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
+		.subcmd = NRC_SUBCMD_ANNOUNCE4
+	},
+	{
+		.vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
+		.subcmd = NRC_SUBCMD_ANNOUNCE5
+	},
+	{
+		.vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
+		.subcmd = NRC_SUBCMD_ANNOUNCE6
+	},
+	{
+		.vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
+		.subcmd = NRC_SUBCMD_WOWLAN_PATTERN
 	},
 };
 

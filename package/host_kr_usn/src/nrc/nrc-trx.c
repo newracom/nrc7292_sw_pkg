@@ -717,9 +717,9 @@ static int rx_h_vendor(struct nrc_trx_data *rx)
 	__le16 fc = mh->frame_control;
 	u16 ies_offset, len;
 	const u8 *pos, *data, ann_subs[] = { NRC_SUBCMD_WOWLAN_PATTERN,
-			 NRC_OUI_SUBCMD_ANNOUNCE1, NRC_OUI_SUBCMD_ANNOUNCE2,
-			 NRC_OUI_SUBCMD_ANNOUNCE3, NRC_OUI_SUBCMD_ANNOUNCE4,
-			 NRC_OUI_SUBCMD_ANNOUNCE5};
+			NRC_SUBCMD_ANNOUNCE1, NRC_SUBCMD_ANNOUNCE2,
+			NRC_SUBCMD_ANNOUNCE3, NRC_SUBCMD_ANNOUNCE4,
+			NRC_SUBCMD_ANNOUNCE5, NRC_SUBCMD_ANNOUNCE6 };
 	const int OUIT_LEN = 4;
 	u8 i;
 
@@ -731,7 +731,7 @@ static int rx_h_vendor(struct nrc_trx_data *rx)
 
 	for (i = 0; i < ARRAY_SIZE(ann_subs); i++) {
 		pos = cfg80211_find_vendor_ie(
-			OUI_NRC, ann_subs[i],
+			OUI_IEEE_REGISTRATION_AUTHORITY, ann_subs[i],
 			rx->skb->data + ies_offset,
 			rx->skb->len - ies_offset);
 
@@ -739,13 +739,7 @@ static int rx_h_vendor(struct nrc_trx_data *rx)
 			len = *(pos + 1);
 			data = pos + 2 /*ID(1)+LEN(1)*/ + OUIT_LEN;
 			len -= OUIT_LEN;
-			if (ann_subs[i] == NRC_SUBCMD_WOWLAN_PATTERN) {
-				nrc_vendor_ann_event(rx->nw, data, len,
-								NRC_VENDOR_EVENT_WOWLAN);
-			} else {
-				nrc_vendor_ann_event(rx->nw, data, len,
-								NRC_VENDOR_EVENT_ANNOUNCE);
-			}
+			nrc_vendor_ann_event(rx->nw, data, len, ann_subs[i]);
 		}
 	}
 	return 0;
