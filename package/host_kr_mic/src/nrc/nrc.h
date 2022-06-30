@@ -35,7 +35,7 @@ struct nrc_hif_device;
 #define WIM_RESP_TIMEOUT    (msecs_to_jiffies(100))
 #define NR_NRC_VIF			(2)
 #define NR_NRC_VIF_HW_QUEUE	(4)
-#define NR_NRC_MAX_TXQ		(100)
+#define NR_NRC_MAX_TXQ		(125)
 /* VIF0 AC0~3,BCN, GP, VIF1 AC0~3,BCN */
 #define NRC_QUEUE_MAX		(NR_NRC_VIF_HW_QUEUE*NR_NRC_VIF + 3)
 
@@ -162,7 +162,7 @@ struct nrc_delayed_deauth {
 #else
 	struct ieee80211_conf c;
 #endif
-	struct ieee80211_tx_queue_params tqp[4];
+	struct ieee80211_tx_queue_params tqp[NRC_QUEUE_MAX];
 };
 
 struct nrc {
@@ -487,7 +487,8 @@ extern bool signal_monitor;
 extern bool enable_usn;
 extern bool debug_level_all;
 extern int credit_ac_be;
-extern bool manual_aggregation;
+extern bool discard_deauth;
+extern bool enable_legacy_ack;
 
 void nrc_set_bss_max_idle_offset(int value);
 void nrc_set_auto_ba(bool toggle);

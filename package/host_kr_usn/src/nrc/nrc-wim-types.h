@@ -208,6 +208,7 @@ enum WIM_TLV_ID {
 	WIM_TLV_SAE_PARAM,
 	WIM_TLV_DRV_INFO,
 	WIM_TLV_NDP_ACK_1M, //65
+	WIM_TLV_LEGACY_ACK,
 	WIM_TLV_MAX,
 };
 
@@ -694,10 +695,11 @@ struct wim_pm_param {
 WIM_DECLARE(wim_pm);
 
 struct wim_drv_info_param {
-	uint32_t boot_mode		:1;
-	uint32_t cqm_off		:1;
-	uint32_t agg_manual		:1;
-	uint32_t reserved		:29;
+	uint32_t boot_mode			:1;
+	uint32_t cqm_off			:1;
+	uint32_t bitmap_encoding	:1;
+	uint32_t reverse_scrambler	:1;
+	uint32_t reserved			:28;
 } __packed;
 WIM_DECLARE(wim_drv_info);
 

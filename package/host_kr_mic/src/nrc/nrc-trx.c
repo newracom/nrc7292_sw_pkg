@@ -353,6 +353,28 @@ static int tx_h_wfa_halow_filter(struct nrc_trx_data *tx)
 }
 TXH(tx_h_wfa_halow_filter, NL80211_IFTYPE_ALL);
 
+static int tx_h_frame_filter(struct nrc_trx_data *tx)
+{
+	const struct ieee80211_hdr *hdr;
+	__le16 fc;
+
+	if (!tx) {
+		nrc_mac_dbg("[%s] tx is NULL", __func__);
+		return 0;
+	}
+
+	if (discard_deauth && tx->vif->type == NL80211_IFTYPE_STATION) {
+		hdr = (const struct ieee80211_hdr *) tx->skb->data;
+		fc = hdr->frame_control;
+		if (ieee80211_is_deauth(fc)) {
+			nrc_mac_dbg("[%s] discard TX deauth frame\n", __func__);
+			return -1;
+		}
+	}
+	return 0;
+}
+TXH(tx_h_frame_filter, NL80211_IFTYPE_ALL);
+
 #ifdef CONFIG_SUPPORT_P2P
 static int tx_h_managed_p2p_intf_addr(struct nrc_trx_data *tx)
 {

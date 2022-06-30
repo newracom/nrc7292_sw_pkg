@@ -48,7 +48,9 @@ module_param(bd_name, charp, 0600);
 MODULE_PARM_DESC(bd_name, "Board Data file name");
 #endif /* defined(CONFIG_SUPPORT_BD) */
 
-/* default port name */
+/**
+ * default port name
+ */
 #if defined(CONFIG_ARM)
 #if defined(CONFIG_NRC_HIF_UART)
 char *hifport = "/dev/ttyAMA0";
@@ -62,7 +64,9 @@ char *hifport = "/dev/ttyUSB0";
 module_param(hifport, charp, 0600);
 MODULE_PARM_DESC(hifport, "HIF port device name");
 
-/* default port speed */
+/**
+ * default port speed
+ */
 #if defined(CONFIG_NRC_HIF_CSPI)
 int hifspeed = (20*1000*1000);
 #elif defined(CONFIG_NRC_HIF_SSP)
@@ -112,26 +116,39 @@ int listen_interval = 100;
 module_param(listen_interval, int, 0600);
 MODULE_PARM_DESC(listen_interval, "Listen Interval");
 
-/* bss_max_idle (in unit of 1000TUs(1024ms) */
+/**
+ * bss_max_idle (in unit of 1000TUs(1024ms)
+ */
 int bss_max_idle;
 module_param(bss_max_idle, int, 0600);
 MODULE_PARM_DESC(bss_max_idle, "BSS Max Idle");
 
-/* bss_max_idle_usf_format */
+/**
+ * bss_max_idle_usf_format
+ */
 bool bss_max_idle_usf_format=true;
 module_param(bss_max_idle_usf_format, bool, 0600);
 MODULE_PARM_DESC(bss_max_idle_usf_format, "BSS Max Idle specified in units of usf");
 
-/* default enable_short_bi */
+/**
+ * default enable_short_bi
+ */
 bool enable_short_bi;
 module_param(enable_short_bi, bool, 0600);
 MODULE_PARM_DESC(enable_short_bi, "Enable Short BI");
+
+/**
+ * enable/disable the legacy ack mode
+ */
+bool enable_legacy_ack = false;
+module_param(enable_legacy_ack, bool, 0600);
+MODULE_PARM_DESC(enable_legacy_ack, "Enable Legacy ACK mode");
 
 bool enable_monitor;
 module_param(enable_monitor, bool, 0600);
 MODULE_PARM_DESC(enable_monitor, "Enable Monitor");
 
-/*
+/**
  * milisecond unit
  * to resolve QoS null frame variable-interval issue
  */
@@ -139,7 +156,7 @@ int bss_max_idle_offset;
 module_param(bss_max_idle_offset, int, 0600);
 MODULE_PARM_DESC(bss_max_idle_offset, "BSS Max Idle Offset");
 
-/*
+/**
  * override  mac-address on nrc driver, follow below format
  * xx:xx:xx:xx:xx:xx
  */
@@ -147,103 +164,117 @@ static char *macaddr = ":";
 module_param(macaddr, charp, 0);
 MODULE_PARM_DESC(macaddr, "MAC Address");
 
-/*
+/**
  * enable/disable the power save mode by default
  */
 int power_save = NRC_PS_NONE;;
 module_param(power_save, int, 0600);
 MODULE_PARM_DESC(power_save, "power save");
 
-/*
+/**
  * deepsleep duration of non-TIM mode power save
  */
 int sleep_duration[2] = {0,};
 module_param_array(sleep_duration, int, NULL, 0600);
 MODULE_PARM_DESC(sleep_duration, "deepsleep duration of non-TIM mode power save");
 
-/*
+/**
  * wlantest mode
  */
 bool wlantest = false;
 module_param(wlantest, bool, 0600);
 MODULE_PARM_DESC(wlantest, "wlantest");
 
-/*
+/**
  * Set NDP Probe Request mode
  */
 bool ndp_preq = false;
 module_param(ndp_preq, bool, 0600);
 MODULE_PARM_DESC(ndp_preq, "Enable NDP Probe Request");
 
-/*
+/**
  * Set 1M NDP ACK
  */
 bool ndp_ack_1m = false;
 module_param(ndp_ack_1m, bool, 0600);
 MODULE_PARM_DESC(ndp_ack_1m, "Enable 1M NDP ACK");
 
-/*
+/**
  * Enable HSPI init
  */
 bool enable_hspi_init = false;
 module_param(enable_hspi_init, bool, S_IRUSR | S_IWUSR);
 MODULE_PARM_DESC(enable_hspi_init, "Enable HSPI Initialization");
 
-/*
+/**
  * Enable handling null func (ps-poll) on mac80211
  */
 bool nullfunc_enable = false;
 module_param(nullfunc_enable, bool, S_IRUSR | S_IWUSR);
 MODULE_PARM_DESC(nullfunc_enable, "Enable null func on mac80211");
 
-/*
+/**
  * Set up automatic TX BA session on connection and QoS data Tx
  */
 bool auto_ba = false;
 module_param(auto_ba, bool, 0600);
 MODULE_PARM_DESC(auto_ba, "Enable auto ba session setup on connection / QoS data Tx");
 
-/*
+/**
  * Use SW Encryption instead of HW Encryption
  */
 bool sw_enc = false;
 module_param(sw_enc, bool, S_IRUSR | S_IWUSR);
 MODULE_PARM_DESC(sw_enc, "Use SW Encryption instead of HW Encryption");
 
-/*
+/**
  * Set Singal Monitor  mode
  */
 bool signal_monitor = false;
 module_param(signal_monitor, bool, 0600);
 MODULE_PARM_DESC(signal_monitor, "Enable SIGNAL(RSSI/SNR) Monitor");
 
-/*
+/**
  * Set configuration of KR USN
  */
 bool enable_usn = false;
 module_param(enable_usn, bool, 0600);
 MODULE_PARM_DESC(enable_usn, "Use configuration of KR USN (Same ac between data and beacon)");
 
-/*
+/**
  * Debug Level All
  */
 bool debug_level_all = false;
 module_param(debug_level_all, bool, 0600);
 MODULE_PARM_DESC(debug_level_all, "Driver debug level all");
 
-/*
+/**
  * credit number for AC_BE
  */
 int credit_ac_be = 40; //default 40
 module_param(credit_ac_be, int, 0600);
 MODULE_PARM_DESC(credit_ac_be, "credit number for AC_BE");
 
-/*
- * set max # of aggregation by manual (requested by silex)
+/**
+ * discard TX deauth frame for Mult-STA test
  */
-bool manual_aggregation = false; //default false
-module_param(manual_aggregation, bool, 0600);
-MODULE_PARM_DESC(manual_aggregation, "set max # of aggregation by manual");
+bool discard_deauth = false;
+module_param(discard_deauth , bool, 0600);
+MODULE_PARM_DESC(discard_deauth , "(Test only) discard TX deauth for Multi-STA test");
+
+/**
+ * Use bitmap encoding for block ack
+ */
+bool bitmap_encoding = true;
+module_param(bitmap_encoding , bool, 0600);
+MODULE_PARM_DESC(bitmap_encoding , "(NRC7292 only) Use bitmap encoding for block ack");
+
+/**
+ * Apply scrambler reversely
+ */
+bool reverse_scrambler = true;
+module_param(reverse_scrambler , bool, 0600);
+MODULE_PARM_DESC(reverse_scrambler , "(NRC7292 only) Apply scrambler reversely");
 
 static bool has_macaddr_param(uint8_t *dev_mac)
 {
@@ -485,7 +516,8 @@ static void nrc_check_start(struct work_struct *work)
 			sizeof(struct wim_drv_info_param), NULL);
 	p->boot_mode = (nw->fw_priv->num_chunks > 0) ? 1 : 0;
 	p->cqm_off = disable_cqm;
-	p->agg_manual = manual_aggregation?1:0;
+	p->bitmap_encoding = bitmap_encoding;
+	p->reverse_scrambler = reverse_scrambler;
 	skb_resp = nrc_xmit_wim_request_wait(nw, skb_req, (WIM_RESP_TIMEOUT * 30));
 	if (skb_resp)
 		nrc_on_fw_ready(skb_resp, nw);
@@ -693,7 +725,7 @@ static void __exit nrc_exit(void)
 	nrc_dbg(NRC_DBG_MAC, "+%s", __func__);
 
 	nrc_exit_debugfs();
-		
+
 	platform_device_unregister(&nrc_device);
 	platform_driver_unregister(&nrc_driver);
 	nrc_stats_deinit();

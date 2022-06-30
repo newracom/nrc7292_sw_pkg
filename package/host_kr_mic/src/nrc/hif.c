@@ -636,7 +636,7 @@ int nrc_xmit_frame(struct nrc *nw, s8 vif_index, u16 aid,
 
 	if (atomic_read(&nw->d_deauth.delayed_deauth)) {
 		if (key) {
-			key->cipher = nw->d_deauth.p.cipher;
+			key = &nw->d_deauth.p;
 		}
 	}
 

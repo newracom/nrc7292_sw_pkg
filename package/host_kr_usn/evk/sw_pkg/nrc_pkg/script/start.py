@@ -10,7 +10,7 @@ script_path = "/home/pi/nrc_pkg/script/"
 max_cpuclock      = 1         # Set Max CPU Clock : 0(off) or 1(on)
 ##################################################################################
 # Firmware Conf.
-model             = 7292      # 7292 or 7192
+model             = 7292      # 7292
 fw_download       = 1         # 0(FW Download off) or 1(FW Download on)
 fw_name           = 'uni_s1g.bin'
 ##################################################################################
@@ -60,6 +60,11 @@ guard_int         = 'long'   # Guard Interval ('long'(LGI) or 'short'(SGI))
 # AMPDU (Aggregated MPDU)
 #  Enable AMPDU for full channel utilization and throughput enhancement
 ampdu_enable      = 1        # 0 (disable) or 1 (enable)
+#--------------------------------------------------------------------------------#
+# Legacy ACK enable (AP & STA)
+#  If disabled, AP/STA sends only NDP ack frame
+#  Recommend using NDP ack mode  (Default: disable)
+legacy_ack_enable  = 0        # 0 (NDP ack mode) or 1 (legacy ack mode)
 #--------------------------------------------------------------------------------#
 # 1M NDP (Block) ACK (AP Only)
 #  Enable 1M NDP ACK on 2/4MHz BW for robustness (default: 2M NDP ACK on 2/4MH BW)
@@ -115,6 +120,12 @@ credit_ac_be      = 40        # number of buffer (min: 40, max: 120)
 #--------------------------------------------------------------------------------#
 # uns arg
 usn_enable              = 1     # 0 (disable), 1 (enable)
+#--------------------------------------------------------------------------------#
+# Use bitmap encoding for block ack operation (NRC7292 only)
+bitmap_encoding   = 1         # 0 (disable) or 1 (enable)
+#--------------------------------------------------------------------------------#
+# User scrambler reversely (NRC7292 only)
+reverse_scrambler = 1         # 0 (disable) or 1 (enable)
 ##################################################################################
 
 def check(interface):
@@ -179,10 +190,7 @@ def checkCountry():
         exit()
 
 def checkMeshUsage():
-    global sw_enc
-    global relay_type
-    global peer
-    global static_ip
+    global sw_enc,relay_type, peer, static_ip
     if len(sys.argv) < 5:
         usage_print()
     sw_enc = 1
@@ -254,6 +262,12 @@ def strMeshMode():
         return 'Mesh AP'
     else:
         usage_print()
+
+def strOriCountry():
+    if str(sys.argv[3]) == 'EU':
+        return 'DE'
+    else:
+        return str(sys.argv[3])
 
 def isNumber(s):
     try:
@@ -369,6 +383,7 @@ def self_config_check():
     try:
         print("Start CCA scan.... It will take up to "+str(checkout_timeout/1000) +" sec to complete")
         result = subprocess.check_output('timeout ' +str(checkout_timeout) +' ' +self_conf_cmd, shell=True)
+        result = result.decode()
     except:
         sys.exit("[self_configuration] No return best channel within " +str(checkout_timeout/1000) +" seconds")
 
@@ -392,43 +407,80 @@ def self_config_check():
         return 'Done'
 
 def ft232h_usb():
-    global spi_clock, spi_bus_num, spi_gpio_irq, spi_cs_num, spi_polling_interval
+    # Re-define SPI parameters for ft232h_usb_spi
     # ft232h_usb_spi
-    if int(ft232h_usb_spi) > 0:
-        print("[*] use ft232h_usb_spi")
-        spi_bus_num = 3
-        spi_gpio_irq = 500
-        if int(spi_clock) > 15000000:
-            spi_clock = 15000000
-        if int(spi_cs_num) != 0:
-            spi_cs_num = 0
-        if int(spi_polling_interval) <= 0:
-            spi_polling_interval = 50
-        if int(ft232h_usb_spi) != 1:
-            spi_gpio_irq = -1
+    global spi_clock, spi_bus_num, spi_gpio_irq, spi_cs_num, spi_polling_interval
+    print("[*] use ft232h_usb_spi")
+    spi_bus_num = 3
+    spi_gpio_irq = 500
+    if int(spi_clock) > 15000000:
+        spi_clock = 15000000
+    if int(spi_cs_num) != 0:
+        spi_cs_num = 0
+    if int(spi_polling_interval) <= 0:
+        spi_polling_interval = 50
+    if int(ft232h_usb_spi) != 1:
+        spi_gpio_irq = -1
+
+def setAPParam():
+    # Re-define parameters for AP mode
+    global ndp_preq
+    ndp_preq=1
+
+def setRelayParam():
+    # Re-define parameters for RELAY mode
+    global sw_enc, power_save, ndp_ack_1m, ndp_preq
+    power_save=0; ndp_ack_1m=0; ndp_preq=0;
+    # Use sw_enc=2 with Hybrid Security
+    # sw_enc=2
+
+def setSnifferParam():
+    # Re-define parameters for Sniffer mode
+    global sw_enc, ampdu_enable, bss_max_idle_enable, power_save, ndp_ack_1m, listen_interval
+    sw_enc=0; ampdu_enable=0; bss_max_idle_enable=0; power_save=0; ndp_ack_1m=0; listen_interval=0;
 
 def setModuleParam():
-    global auto_ba
+    # Set module parameters based on configuration
+
+    # Initialize arguments for module params
+    spi_arg = fw_arg = power_save_arg = sleep_duration_arg = \
+    bss_max_idle_arg = ndp_preq_arg = ndp_ack_1m_arg = auto_ba_arg =\
+    sw_enc_arg =  cqm_arg = listen_int_arg = drv_dbg_arg = credit_acbe_arg = \
+    sbi_arg = discard_deauth_arg = dbg_fc_arg = usn_arg = legacy_ack_arg = \
+    be_arg = rs_arg = usn_arg = ""
 
     # Check ft232h_usb_spi
-    ft232h_usb()
+    if int(ft232h_usb_spi) > 0:
+        ft232h_usb()
 
+    # Set parameters for AP (support NDP probing)
+    if strSTA() == 'AP':
+        setAPParam()
+
+    # Set parameters for RELAY
+    if strSTA() == 'RELAY':
+        setRelayParam()
+
+    # Set parameters for SNIFFER
+    if strSTA() == 'SNIFFER':
+        setSnifferParam()
+
+    # module param for spi setting
+    # default:
+    #  hifspeed(20000000) spi_bus_num(0) spi_cs_num(0) spi_gpio_irq(5) spi_polling_interval(0)
     spi_arg = " hifspeed=" + str(spi_clock) + \
               " spi_bus_num=" + str(spi_bus_num) + \
               " spi_cs_num=" + str(spi_cs_num) + \
               " spi_gpio_irq=" + str(spi_gpio_irq) + \
               " spi_polling_interval=" + str(spi_polling_interval)
 
+    # module param for FW download from host
+    # default: fw_name (NULL: no download)
     if int(fw_download) == 1:
         fw_arg= " fw_name=" + fw_name
-    else:
-        fw_arg= ""
 
-    if int(model) == 7291:
-        alt_mode_arg = " alternate_mode=1"
-    else:
-        alt_mode_arg = ""
-
+    # module param for power_save
+    # default: power_save(0: active mode) sleep_duration(0,0)
     if strSTA() == 'STA' and int(power_save) > 0:
         power_save_arg = " power_save=" + str(power_save)
         if int(power_save) == 3:
@@ -440,82 +492,76 @@ def setModuleParam():
                 sleep_duration_arg += ",1"
         else:
             sleep_duration_arg = " sleep_duration=0,0"
-    else:
-        if int(power_save) > 0:
-            print("Error: " + strSTA() + " interface does not support power save: " + str(power_save))
-        power_save_arg = " power_save=0"
-        sleep_duration_arg= ""
 
-    if int(bss_max_idle_enable) == 1 and strSTA() == 'AP':
-        bss_max_idle_arg = " bss_max_idle=" + str(bss_max_idle)
-    else:
-        bss_max_idle_arg = ""
+    # module param for bss_max_idle (keep alive)
+    # default: bss_max_idle(0: disabled)
+    if int(bss_max_idle_enable) == 1:
+        if strSTA() == 'AP' or strSTA() == 'RELAY':
+            bss_max_idle_arg = " bss_max_idle=" + str(bss_max_idle)
 
+    # module param for NDP Prboe Request (NDP scan)
+    # default: ndp_preq(0: disabled)
     if int(ndp_preq) == 1:
         ndp_preq_arg = " ndp_preq=1"
-    else:
-        ndp_preq_arg = ""
 
+    if int(legacy_ack_enable) == 1:
+        legacy_ack_arg = " enable_legacy_ack=1"
+
+    # module param for 1MBW NDP ACK
+    # default: ndp_ack_1m(0: disabled)
     if int(ndp_ack_1m) == 1:
         ndp_ack_1m_arg = " ndp_ack_1m=1"
-    else:
-        ndp_ack_1m_arg = ""
 
+    # module param for AMPDU
+    # default: auto_ba(0: disabled)
     if int(ampdu_enable) == 1:
         auto_ba_arg = " auto_ba=1"
-    else:
-        auto_ba_arg = ""
 
+    # module param for SW-based ENC/DEC
+    # default: sw_enc(0: HW-based ENC/DEC)
     if int(sw_enc) == 1:
         sw_enc_arg = " sw_enc=1"
-    else:
-        sw_enc_arg = ""
 
+    # module param for CQM
+    # default: disable_cqm(0: CQM enabled)
     if int(cqm_enable) == 0:
         cqm_arg = " disable_cqm=1"
-    else:
-        cqm_arg = ""
 
+    # module param for listen interval
+    # default: listen_interval(100)
     if int(listen_interval) > 0:
         listen_int_arg = " listen_interval=" + str(listen_interval)
-    else:
-        listen_int_arg = ""
 
+    # module param for flow control between host and target (test only)
+    # default: credit_ac_be(40)
+    if int(credit_ac_be) > 40 and (credit_ac_be) <= 120:
+        credit_acbe_arg = " credit_ac_be=" + str(credit_ac_be)
+
+    # module param for driver debug (debug only)
+    # default: debug_level_all(0: disabled)
     if int(driver_debug) == 1:
         drv_dbg_arg = " debug_level_all=1"
-    else:
-        drv_dbg_arg = ""
 
-    if int(credit_ac_be) >= 40 and (credit_ac_be) <= 120:
-        credit_acbe_arg = " credit_ac_be=" + str(credit_ac_be)
-    else:
-        credit_acbe_arg = ""
+    # module param for bitmap encoding
+    # default: use bitmap encoding (1: enabled)
+    if int(bitmap_encoding) == 0:
+        be_arg = " bitmap_encoding=0"
+
+    # module param for reverse scrambler
+    # default: use reverse scrambler (1: enabled)
+    if int(reverse_scrambler) == 0:
+        rs_arg = " reverse_scrambler=0"
 
     if int(usn_enable) == 1:
         usn_arg = " enable_usn=1"
-    else:
-        usn_arg = ""
 
-    if strSTA() == 'SNIFFER':
-        auto_ba_arg = ""
-        cqm_arg = ""
-        bss_max_idle_arg = ""
-        power_save_arg= ""
-        sw_enc_arg= ""
-        ndp_ack_1m_arg= ""
-
-    if strSTA() == 'RELAY':
-        auto_ba_arg = ""
-        bss_max_idle_arg = ""
-        power_save_arg= ""
-        sw_enc_arg= ""
-        ndp_ack_1m_arg= ""
-        ndp_preq_arg= ""
-
-    module_param = spi_arg + fw_arg + alt_mode_arg + usn_arg +\
+    # module parameter setting while loading NRC driver
+    # Default value is used if arg is not defined
+    module_param = spi_arg + fw_arg + usn_arg + \
                  power_save_arg + sleep_duration_arg + bss_max_idle_arg + \
                  ndp_preq_arg + ndp_ack_1m_arg + auto_ba_arg + sw_enc_arg + \
-                 cqm_arg + listen_int_arg + drv_dbg_arg + credit_acbe_arg
+                 cqm_arg + listen_int_arg + drv_dbg_arg + credit_acbe_arg + legacy_ack_arg + \
+                 be_arg + rs_arg
 
     return module_param
 
@@ -536,11 +582,12 @@ def run_common():
     stopDNSMASQ()
     time.sleep(1)
 
-    print("[1] Copy")
+    print("[1] Copy and Set Module Parameters")
     copyConf()
-
-    print("[2] Set Module Parameters")
     insmod_arg = setModuleParam()
+
+    print("[2] Set Country")
+    os.system("sudo iw reg set " + strOriCountry())
 
     print("[3] Loading module")
     print("sudo insmod /home/pi/nrc_pkg/sw/driver/nrc.ko " + insmod_arg)
@@ -685,15 +732,11 @@ def run_ap(interface):
     print("--------------------------------------------------------------------")
 
 def run_sniffer():
-    country = str(sys.argv[3])
-    if country == 'EU':
-        country = 'DE'
-
     print("[6] Setting Monitor Mode")
     time.sleep(3)
     os.system('sudo ifconfig wlan0 down; sudo iw dev wlan0 set type monitor; sudo ifconfig wlan0 up')
-    print("[7] Setting Country: " + country)
-    os.system("sudo iw reg set " + country)
+    print("[7] Setting Country: " + strOriCountry())
+    os.system("sudo iw reg set " + strOriCountry())
     time.sleep(3)
     print("[8] Setting Channel: " + str(sys.argv[4]))
     os.system("sudo iw dev wlan0 set channel " + str(sys.argv[4]))

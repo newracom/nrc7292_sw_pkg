@@ -841,7 +841,7 @@ struct wim_bd_param * nrc_read_bd_tx_pwr(uint8_t *country_code)
 		bd->ver_major, bd->ver_minor, bd->total_len, bd->num_data_groups, bd->checksum_data);
 
 	for(i=0; i < bd->total_len;) {
-		nrc_dbg(NRC_DBG_STATE,"%02X %02X %02X %02X %02X %02X %02X %02X",
+		nrc_dbg(NRC_DBG_MAC,"%02X %02X %02X %02X %02X %02X %02X %02X",
 				bd->data[i],
 				bd->data[i+1],
 				bd->data[i+2],

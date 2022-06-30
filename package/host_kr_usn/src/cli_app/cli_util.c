@@ -479,23 +479,31 @@ int cmd_show_maxagg_result_parse(char *value, int *display_start_index)
 	const char *str_state[2] ={"OFF", "ON"};
 	const char *str_ba_session[2] ={"NO", "YES"};
 	int index = 0;
-	if(value == NULL || strncmp("success", value, 7) == 0 || strncmp("fail", value, 4) == 0)
+	if (value == NULL || strncmp("success", value, 7) == 0 || strncmp("fail", value, 4) == 0)
 		return 0;
 
 	uint8_t header = value[index++];
 	uint8_t count = (header & 0x7F);
 	uint8_t more  = (header >> 7) & 1;
 
-	if(!count)
+	if (!count)
 		return 0;
 
 	xfer_maxagg_info* maxagg_info = (xfer_maxagg_info*) &value[index];
-	for(int i=0;i<count;i++)
-	{
-		if(maxagg_info->is_ap)
-			printf("[STA AID: %4d]\n",  maxagg_info->aid);
+	for (int i=0;i<count;i++) {
+		if (maxagg_info->is_ap) {
+			if ( 0 == maxagg_info->aid) {
+				printf("[Base info]\n");
+			} else {
+				printf("[STA AID: %4d]\n",  maxagg_info->aid);
+			}
+		} else {
+			if ( 0 == maxagg_info->aid) {
+				printf("[Base info]\n");
+			}
+		}
 
-		for(int j=0; j<4; j++){
+		for (int j=0; j<4; j++) {
 			printf("AC_%s: %s (%2d, %4d bytes), BA session: %s\n",
 				str_ac[maxagg_info->ac], str_state[maxagg_info->state], maxagg_info->max_agg_num,
 				maxagg_info->agg_num_size, str_ba_session[maxagg_info->ba_session]);

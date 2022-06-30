@@ -215,7 +215,7 @@ cmd_tbl_t set_sub_list[] = {
 	{ "rc", cmd_set_rate_control, "set rate control", "set rc {on|off} [vif_id] [mode]", SET_RC_KEY_LIST, 0},
 	{ "duty", cmd_set_duty, "set duty cycle", "set duty {on|off} {duty window} {tx duration} {duty margin}", SET_DUTY_KEY_LIST, 0},
 	{ "cal_use", cmd_set_cal_use, "set cal_use", "set cal_use {on|off}", SET_CAL_USE_KEY_LIST, 0},
-	{ "txpwr", cmd_set_txpwr, "set txpwrt", "set txpwr {value(1~30)}", SET_TXPWR_KEY_LIST, 0},
+	{ "txpwr", cmd_set_txpwr, "set txpwr", "set txpwr {value(1~30)}", SET_TXPWR_KEY_LIST, 0},
 	{ "wakeup_pin", cmd_set_wakeup_pin, "set wakeup pin for deepsleep", "set wakeup_pin {Debounce(on|off)} {PIN Number(0~31)}", SET_WAKEUP_PIN_KEY_LIST, 0},
 	{ "wakeup_source", cmd_set_wakeup_source, "set wakeup source for deepsleep", "set wakeup_source rtc gpio hspi", SET_WAKEUP_SOURCE_KEY_LIST, 0},
 	{ "addba", cmd_set_addba, "set addba tid / send addba with mac address", "set addba [tid] {mac address}", "", 0},
@@ -225,7 +225,7 @@ cmd_tbl_t set_sub_list[] = {
 	{ "drop", cmd_set_drop_frame, "set drop frames from configured mac address", "set drop [vif id] [mac address] {on|off}", SET_DROP_KEY_LIST, 0},
 	{ "tsensor", cmd_set_temp_sensor, "set temperature sensor scl, sda", "set tsensor [GPIO for SCL] [GPIO for SDA]", "", 0},
 	{ "self_config", cmd_set_self_configuration, "set self_config", "set self_config {Country(KR,US...)}{BW}{dwell time}", "", 0},
-	{ "cca_thresh", cmd_set_cca_thresh, "set cca threshold", "set cca_thresh {CCA threshold(unit:dBm, -100~-70)}", "", 0},
+	{ "cca_thresh", cmd_set_cca_thresh, "set cca threshold", "set cca_thresh {CCA threshold(unit:dBm, -85~-76)}", "", 0},
 };
 
 /* sub command list on test */
@@ -1597,7 +1597,7 @@ static int cmd_set_guard_interval(cmd_tbl_t *t, int argc, char *argv[])
 		if(!netlink_ret){
 			if(strcmp(response, response_timeout_str)== 0){
 				ret =  CMD_RET_RESPONSE_TIMEOUT;
-			}else if(strcmp(response, "succss")){
+			}else if(strcmp(response, "success") == 0){
 				printf("guard interval : %s\n", argv[2]);
 				ret = CMD_RET_SUCCESS;
 			}
@@ -2167,9 +2167,14 @@ static int cmd_set_cca_thresh(cmd_tbl_t *t, int argc, char *argv[])
 	char response[NL_MSG_MAX_RESPONSE_SIZE];
 	int netlink_ret = 0;
 	int display_per_line = 1;
+	int cca_thres = atoi(argv[2]);
 
 	memset(response, 0x0, NL_MSG_MAX_RESPONSE_SIZE);
 	memset(param, 0x0, sizeof(param));
+
+	if(cca_thres<-85 || cca_thres >-76){
+		return CMD_RET_FAILURE;
+	}
 
 	if(argc == 3)
 		sprintf(param, "set cca_thresh %s -sr", argv[2]);

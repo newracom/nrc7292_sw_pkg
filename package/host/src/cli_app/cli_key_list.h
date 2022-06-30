@@ -41,7 +41,7 @@
 #define SHOW_CONFIG_KEY_LIST "[MAC Configuration]\nDevice Mode,MAC Address,\
 Country,Bandwidth,Frequency,MAC80211_freq,Rate Control, -MCS, -bw,Guard Interval,\
 Security,Type,RTS,RTS threshold,Format,Preamble type,Promiscuous Mode,\
-color,Auto CFO Cal,BSSID,AID,\n[PHY Configuration]\nTX_Gain,RX_Gain,\nTx Power"
+color,Auto CFO Cal,BSSID,AID,\n[PHY Configuration]\nTX_Gain,RX_Gain,\nTx Power Limit"
 
 /* show edca */
 #define SHOW_EDCA_DISP		"%d,%d,%d,%d,\

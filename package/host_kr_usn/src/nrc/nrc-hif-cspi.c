@@ -957,6 +957,7 @@ static int spi_update_status(struct spi_device *spi)
 #if defined(CONFIG_SUPPORT_BD)
 		request.alpha2[0] = nw->alpha2[0];
 		request.alpha2[1] = nw->alpha2[1];
+		request.initiator = NL80211_REGDOM_SET_BY_DRIVER;
 #endif
 
 		if (ieee80211_hw_check(nw->hw, SUPPORTS_DYNAMIC_PS) &&
@@ -1083,7 +1084,7 @@ static int spi_update_status(struct spi_device *spi)
 					nrc_wim_install_key(nw, DISABLE_KEY, &nw->d_deauth.v, &nw->d_deauth.s, &nw->d_deauth.g);
 				nrc_mac_sta_remove(nw->hw, &nw->d_deauth.v, &nw->d_deauth.s);
 				nrc_mac_bss_info_changed(nw->hw, &nw->d_deauth.v, &nw->d_deauth.b, 0x80309f);
-				for (i=0; i<4; i++) {
+				for (i=0; i < NRC_QUEUE_MAX; i++) {
 #ifdef CONFIG_SUPPORT_CHANNEL_INFO
 					nrc_mac_conf_tx(nw->hw, &nw->d_deauth.v, i, &nw->d_deauth.tqp[i]);
 #else
