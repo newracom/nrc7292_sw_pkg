@@ -35,7 +35,7 @@ struct nrc_hif_device;
 #define WIM_RESP_TIMEOUT    (msecs_to_jiffies(100))
 #define NR_NRC_VIF			(2)
 #define NR_NRC_VIF_HW_QUEUE	(4)
-#define NR_NRC_MAX_TXQ		(125)
+#define NR_NRC_MAX_TXQ		(130)
 /* VIF0 AC0~3,BCN, GP, VIF1 AC0~3,BCN */
 #define NRC_QUEUE_MAX		(NR_NRC_VIF_HW_QUEUE*NR_NRC_VIF + 3)
 
