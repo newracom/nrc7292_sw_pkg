@@ -183,4 +183,8 @@ Tx power index for MCS 6,Tx power index for MCS 7,Tx power index for MCS 10"
 #define SET_DROP_DISP		"%d,%s,%s"
 #define SET_DROP_KEY_LIST	"vif_id,mac_addr,on"
 
+/* set ack_mode */
+#define SET_ACK_MODE_DISP	"%s"
+#define SET_ACK_MODE_LIST	"ACK_MODE"
+
 #endif /* _CLI_KEY_LIST_H_ */

@@ -46,7 +46,7 @@ ft232h_usb_spi = 0            # FTDI FT232H USB-SPI bridge
                               # 2 : NRC-CSPI Registers Polling
 #################################################################################
 # RF Conf.
-# Maximum TX Power
+# Max TX PWR
 txpwr_max_default = 24       # Board Data Max TX Power
 #--------------------------------------------------------------------------------#
 # Calibration usage option
@@ -57,6 +57,11 @@ cal_use           = 1        # 0(disable) or 1(enable)
 guard_int         = 'long'   # Guard Interval ('long'(LGI) or 'short'(SGI))
 ##################################################################################
 # MAC Conf.
+# S1G Short Beacon (AP & MESH Only)
+#  If disabled, AP sends only S1G long beacon every BI
+#  Recommend using S1G short beacon for network efficiency (Default: enabled)
+short_bcn_enable  = 1        # 0 (disable) or 1 (enable)
+#--------------------------------------------------------------------------------#
 # AMPDU (Aggregated MPDU)
 #  Enable AMPDU for full channel utilization and throughput enhancement
 ampdu_enable      = 1        # 0 (disable) or 1 (enable)
@@ -115,7 +120,7 @@ self_config       = 0        # 0 (disable)  or 1 (enable)
 prefer_bw         = 0        # 0: no preferred bandwidth, 1: 1M, 2: 2M, 4: 4M
 dwell_time        = 100      # max dwell is 1000 (ms), min: 10ms, default: 100ms
 #--------------------------------------------------------------------------------#
-# Credit num of AC_BE for flow control between host and target (Internal use only)
+# Credit num of AC_BE for flow control between host and target (Test only)
 credit_ac_be      = 40        # number of buffer (min: 40, max: 120)
 #--------------------------------------------------------------------------------#
 # Use bitmap encoding for block ack operation (NRC7292 only)
@@ -524,6 +529,11 @@ def setModuleParam():
     if int(cqm_enable) == 0:
         cqm_arg = " disable_cqm=1"
 
+    # module param for short beacon
+    # default: enable_short_bi(1: Short Beacon enabled)
+    if int(short_bcn_enable) == 0:
+        sbi_arg = " enable_short_bi=0"
+
     # module param for listen interval
     # default: listen_interval(100)
     if int(listen_interval) > 0:
@@ -555,7 +565,7 @@ def setModuleParam():
                  power_save_arg + sleep_duration_arg + bss_max_idle_arg + \
                  ndp_preq_arg + ndp_ack_1m_arg + auto_ba_arg + sw_enc_arg + \
                  cqm_arg + listen_int_arg + drv_dbg_arg + credit_acbe_arg + legacy_ack_arg + \
-                 be_arg + rs_arg
+                 be_arg + rs_arg + sbi_arg
 
     return module_param
 
@@ -580,7 +590,7 @@ def run_common():
     copyConf()
     insmod_arg = setModuleParam()
 
-    print("[2] Set Country")
+    print("[2] Set Initial Country")
     os.system("sudo iw reg set " + strOriCountry())
 
     print("[3] Loading module")
@@ -676,7 +686,9 @@ def launch_hostapd(interface, orig_hostapd_conf_file, country, debug, channel):
 
 def run_ap(interface):
     country = str(sys.argv[3])
+    global self_config
     channel = None
+
     if len(sys.argv) > 4 :
         channel = str(sys.argv[4])
 
@@ -685,6 +697,9 @@ def run_ap(interface):
     else:
         debug = ''
 
+    if strSTA() == 'RELAY':
+        self_config = 0
+        print("[*] Selfconfig is not used in RELAY mode.")
     if (int(self_config)==1):
         print("[*] Self configuration start!")
         self_conf_result = self_config_check()
@@ -698,6 +713,9 @@ def run_ap(interface):
     if(int(self_config)==1 and self_conf_result=='Done'):
         os.system("sed -i " + '"4s/.*/interface=' + interface + '/g" '  + script_path +  "conf/temp_self_config.conf " )
         os.system("sudo hostapd " + script_path + "conf/temp_self_config.conf " + debug +" &")
+        if strSecurity() == 'WPA-PBC':
+            time.sleep(1)
+            os.system("sudo hostapd_cli wps_pbc")
     else:
         if strSecurity() == 'OPEN':
             launch_hostapd( interface, '/home/pi/nrc_pkg/script/conf/'+country+'/ap_halow_open.conf', country, debug ,channel )

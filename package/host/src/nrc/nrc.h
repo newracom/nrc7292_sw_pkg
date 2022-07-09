@@ -29,22 +29,25 @@
 #include <net/ieee80211_radiotap.h>
 
 
-#define DEFAULT_INTERFACE_NAME "nrc"
+#define DEFAULT_INTERFACE_NAME			"nrc"
 struct nrc_hif_device;
 #define WIM_SKB_MAX         (10)
 #define WIM_RESP_TIMEOUT    (msecs_to_jiffies(100))
 #define NR_NRC_VIF			(2)
 #define NR_NRC_VIF_HW_QUEUE	(4)
 #define NR_NRC_MAX_TXQ		(130)
+#ifdef CONFIG_CHECK_DATA_SIZE
+#define NR_NRC_MAX_TXQ_SIZE	(1500*100) /* 150K */
+#endif
 /* VIF0 AC0~3,BCN, GP, VIF1 AC0~3,BCN */
-#define NRC_QUEUE_MAX		(NR_NRC_VIF_HW_QUEUE*NR_NRC_VIF + 3)
+#define NRC_QUEUE_MAX					(NR_NRC_VIF_HW_QUEUE*NR_NRC_VIF + 3)
 
 #ifdef CONFIG_SUPPORT_AFTER_KERNEL_3_0_36
 #else
-#define IEEE80211_NUM_ACS	4
-#define IEEE80211_P2P_NOA_DESC_MAX	4
+#define IEEE80211_NUM_ACS				(4)
+#define IEEE80211_P2P_NOA_DESC_MAX		(4)
 #endif
-#define NRC_MAX_TID				8
+#define NRC_MAX_TID						(8)
 
 enum NRC_SCAN_MODE {
 	NRC_SCAN_MODE_IDLE = 0,
@@ -53,12 +56,12 @@ enum NRC_SCAN_MODE {
 };
 
 #define NRC_FW_ACTIVE					(0)
-#define NRC_FW_LOADING				(1)
-#define	NRC_FW_PREPARE_SLEEP	(2)
+#define NRC_FW_LOADING					(1)
+#define	NRC_FW_PREPARE_SLEEP			(2)
 #define	NRC_FW_SLEEP					(3)
 
 enum NRC_DRV_STATE {
-	NRC_DRV_REBOOT = -1,
+	NRC_DRV_REBOOT = -2,
 	NRC_DRV_BOOT = -1,
 	NRC_DRV_INIT = 0,
 	NRC_DRV_STOP,
@@ -138,6 +141,9 @@ struct nrc_txq {
 	u16 hw_queue; /* 0: AC_BK, 1: AC_BE, 2: AC_VI, 3: AC_VO */
 	struct list_head list;
 	struct sk_buff_head queue; /* own queue */
+#ifdef CONFIG_CHECK_DATA_SIZE
+	unsigned int data_size;
+#endif
 	unsigned long nr_fw_queueud;
 	unsigned long nr_push_allowed;
 	struct ieee80211_vif vif;
@@ -486,6 +492,7 @@ extern bool sw_enc;
 extern bool signal_monitor;
 extern bool enable_usn;
 extern bool debug_level_all;
+extern bool enable_short_bi;
 extern int credit_ac_be;
 extern bool discard_deauth;
 extern bool enable_legacy_ack;

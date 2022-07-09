@@ -127,7 +127,7 @@ void nrc_mac_tx(struct ieee80211_hw *hw,
 				}
 				if (ieee80211_is_probe_req(mh->frame_control)) {
 					nrc_ps_dbg("[%s,L%d][prob_req] drv_state:%d\n", __func__, __LINE__, tx.nw->drv_state);
-					schedule_delayed_work(&tx.nw->fake_prb_resp, msecs_to_jiffies(100));
+					schedule_delayed_work(&tx.nw->fake_prb_resp, msecs_to_jiffies(30));
 				}
 				if (ieee80211_is_qos_nullfunc(mh->frame_control)) {
 					nrc_ps_dbg("[%s,L%d][qos_null] make target wake for keep-alive\n", __func__, __LINE__);
@@ -741,7 +741,7 @@ static int rx_h_vendor(struct nrc_trx_data *rx)
 	const u8 *pos, *data, ann_subs[] = { NRC_SUBCMD_WOWLAN_PATTERN,
 			NRC_SUBCMD_ANNOUNCE1, NRC_SUBCMD_ANNOUNCE2,
 			NRC_SUBCMD_ANNOUNCE3, NRC_SUBCMD_ANNOUNCE4,
-			NRC_SUBCMD_ANNOUNCE5, NRC_SUBCMD_ANNOUNCE6 };
+			NRC_SUBCMD_ANNOUNCE5, NRC_SUBCMD_REMOTECMD };
 	const int OUIT_LEN = 4;
 	u8 i;
 

@@ -38,7 +38,6 @@
 #endif /* defined(CONFIG_SUPPORT_BD) */
 
 char *fw_name;
-
 module_param(fw_name, charp, 0444);
 MODULE_PARM_DESC(fw_name, "Firmware file name");
 
@@ -60,7 +59,6 @@ char *hifport = "/dev/ttyUSB0";
 #else
 char *hifport = "/dev/ttyUSB0";
 #endif
-
 module_param(hifport, charp, 0600);
 MODULE_PARM_DESC(hifport, "HIF port device name");
 
@@ -76,7 +74,6 @@ int hifspeed = 115200;
 #else
 int hifspeed = 115200;
 #endif
-
 module_param(hifspeed, int, 0600);
 MODULE_PARM_DESC(hifspeed, "HIF port speed");
 
@@ -133,9 +130,9 @@ MODULE_PARM_DESC(bss_max_idle_usf_format, "BSS Max Idle specified in units of us
 /**
  * default enable_short_bi
  */
-bool enable_short_bi;
+bool enable_short_bi = 1;
 module_param(enable_short_bi, bool, 0600);
-MODULE_PARM_DESC(enable_short_bi, "Enable Short BI");
+MODULE_PARM_DESC(enable_short_bi, "Enable Short Beacon Interval");
 
 /**
  * enable/disable the legacy ack mode
@@ -536,9 +533,6 @@ static void nrc_check_start(struct work_struct *work)
 		goto fail_start;
 	}
 
-	//nrc_recovery_wdt_init(nw, 2000);
-	//nrc_recovery_wdt_kick(nw);
-
 	return;
 
  fail_start:
@@ -615,9 +609,6 @@ static int nrc_platform_remove(struct platform_device *pdev)
 	nw->drv_state = NRC_DRV_CLOSING;
 
 	cancel_delayed_work(&nw->check_start);
-
-	//nrc_recovery_wdt_clear(nw);
-
 	cancel_delayed_work(&nw->fake_bcn);
 	flush_delayed_work(&nw->fake_bcn);
 	cancel_delayed_work(&nw->fake_prb_resp);

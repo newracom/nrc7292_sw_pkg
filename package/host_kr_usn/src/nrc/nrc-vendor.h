@@ -19,13 +19,11 @@
 
 #define OUI_IEEE_REGISTRATION_AUTHORITY		0xFCFFAA
 
-#define NRC_OUI_SUBCMD_RM_ANNOUNCE6			0xE5 // remove the vendor specific IE which was injected by 0xF5
-
 /**
  * A subcmd to remove the vendor specific IE which was injected before.
- * ex>$sudo iw dev wlan0 vendor send 0xfcffaa 0xde 0xf0
+ * ex>$sudo iw dev wlan0 vendor send 0xfcffaa 0xde 0x2
  *   => this cmd will remove the injected vendor specific IE
- *      of which the subcmd was 0xf0.
+ *      of which the subcmd was 0x2.
  */
 #define NRC_SUBCMD_RM_VENDOR_IE				0xDE
 
@@ -60,7 +58,7 @@ enum nrc_vendor_event {
 	NRC_SUBCMD_ANNOUNCE3,
 	NRC_SUBCMD_ANNOUNCE4,
 	NRC_SUBCMD_ANNOUNCE5,
-	NRC_SUBCMD_ANNOUNCE6,
+	NRC_SUBCMD_REMOTECMD,
 	NRC_SUBCMD_WOWLAN_PATTERN,
 	NUM_VENDOR_EVENT,
 	MAX_VENDOR_EVENT = NUM_VENDOR_EVENT - 1

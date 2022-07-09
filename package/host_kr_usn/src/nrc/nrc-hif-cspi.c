@@ -1498,7 +1498,7 @@ static int spi_suspend(struct nrc_hif_device *dev)
 		 * this delay is necessary to achive sending WIM meg completly.
 		 * (especially, WIM_TLV_PS_ENABLE)
 		 */
-		msleep(10);
+		usleep_range(20 * 1000, 30 * 1000);
 
 		if (spi->irq >= 0 && priv->polling_interval <= 0) {
 			/* Waits for any pending IRQ handlers for this interrupt to complete */
@@ -1513,8 +1513,9 @@ static int spi_suspend(struct nrc_hif_device *dev)
 			//atomic_set(&irq_enabled, 0);
 		}
 
-		if (power_save >= NRC_PS_DEEPSLEEP_TIM)
-			schedule_delayed_work(&dev->nw->fake_bcn, msecs_to_jiffies(1024));
+		if (power_save >= NRC_PS_DEEPSLEEP_TIM) {
+			schedule_delayed_work(&dev->nw->fake_bcn, msecs_to_jiffies(nw->beacon_int));
+		}
 
 		nrc_hif_flush_wq(dev);
 		spi_config_fw(dev);

@@ -149,4 +149,7 @@
  * #endif
  */
 
+/* Check tx queue total data size, not just queue length */
+#define CONFIG_CHECK_DATA_SIZE
+
 #endif

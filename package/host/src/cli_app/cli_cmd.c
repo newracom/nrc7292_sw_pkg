@@ -100,7 +100,8 @@ static void cmd_show_mac_result_display(char *response, int dir, int type);
 /* 1st sub commands on set */
 static int cmd_set_guard_interval(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_set_max_aggregation(cmd_tbl_t *t, int argc, char *argv[]);
-static int cmd_set_config(cmd_tbl_t *t, int argc, char *argv[]);
+//static int cmd_set_config(cmd_tbl_t *t, int argc, char *argv[]);
+static int cmd_set_ackmode(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_set_rate_control(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_set_duty(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_set_cal_use(cmd_tbl_t *t, int argc, char *argv[]);
@@ -211,7 +212,8 @@ cmd_tbl_t show_sub_list[] = {
 cmd_tbl_t set_sub_list[] = {
 	{ "gi", cmd_set_guard_interval, "set guard interval", "set gi {short|long|auto}", "", 0},
 	{ "maxagg", cmd_set_max_aggregation, "set aggregation", "set maxagg {AC(0-3)} <Max(0-8(1Mhz),0-16(2,4Mhz),0:off)> {size:default=0}", SET_MAXAGG_KEY_LIST, 0},
-	{ "config", cmd_set_config, "set ack, aggregation, mcs", "set config {ack(0,1)} {agg(0,1)} [mcs]", SET_CONFIG_KEY_LIST, 0},
+	//{ "config", cmd_set_config, "set ack, aggregation, mcs", "set config {ack(0,1)} {agg(0,1)} [mcs]", SET_CONFIG_KEY_LIST, 0},
+	{ "ack_mode", cmd_set_ackmode, "set ack mode", "set ack_mode {no|ndp|normal|show}", SET_ACK_MODE_LIST, 0},
 	{ "rc", cmd_set_rate_control, "set rate control", "set rc {on|off} [vif_id] [mode]", SET_RC_KEY_LIST, 0},
 	{ "duty", cmd_set_duty, "set duty cycle", "set duty {on|off} {duty window} {tx duration} {duty margin}", SET_DUTY_KEY_LIST, 0},
 	{ "cal_use", cmd_set_cal_use, "set cal_use", "set cal_use {on|off}", SET_CAL_USE_KEY_LIST, 0},
@@ -1640,7 +1642,9 @@ static int cmd_set_max_aggregation(cmd_tbl_t *t, int argc, char *argv[])
 	return ret;
 }
 
-static int cmd_set_config(cmd_tbl_t *t, int argc, char *argv[]) {
+#if 0
+static int cmd_set_config(cmd_tbl_t *t, int argc, char *argv[])
+{
 	int ret = CMD_RET_FAILURE;
 	char param[NRC_MAX_CMDLINE_SIZE];
 	char response[NL_MSG_MAX_RESPONSE_SIZE];
@@ -1663,6 +1667,38 @@ static int cmd_set_config(cmd_tbl_t *t, int argc, char *argv[]) {
 			ret = CMD_RET_SUCCESS;
 		}
 	}else{
+		ret = CMD_RET_FAILURE;
+	}
+	return ret;
+}
+#endif
+
+static int cmd_set_ackmode(cmd_tbl_t *t, int argc, char *argv[])
+{
+	int ret = CMD_RET_FAILURE;
+	char param[NRC_MAX_CMDLINE_SIZE];
+	char response[NL_MSG_MAX_RESPONSE_SIZE];
+	int netlink_ret = 0;
+	int display_per_line = 1;
+
+	memset(response, 0x0, NL_MSG_MAX_RESPONSE_SIZE);
+	memset(param, 0x0, sizeof(param));
+
+	if (strcmp(argv[2], "no") != 0 && strcmp(argv[2], "ndp") != 0 &&
+		strcmp(argv[2], "normal") != 0 && strcmp(argv[2], "show") != 0) {
+		return CMD_RET_FAILURE;
+	}
+
+	sprintf(param, "set ack_mode %s -sr", argv[2]);
+	netlink_ret = netlink_send_data(NL_SHELL_RUN, param, response);
+	if(!netlink_ret) {
+		if(strcmp(response, response_timeout_str)== 0){
+			ret = CMD_RET_RESPONSE_TIMEOUT;
+		} else {
+			cmd_result_parse((char*)t->key_list, response, display_per_line);
+			ret = CMD_RET_SUCCESS;
+		}
+	} else {
 		ret = CMD_RET_FAILURE;
 	}
 	return ret;

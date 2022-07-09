@@ -504,7 +504,7 @@ int cmd_show_maxagg_result_parse(char *value, int *display_start_index)
 		}
 
 		for (int j=0; j<4; j++) {
-			printf("AC_%s: %s (%2d, %4d bytes), BA session: %s\n",
+			printf("AC_%s: %3s (%2d, %4d bytes), BA session: %s\n",
 				str_ac[maxagg_info->ac], str_state[maxagg_info->state], maxagg_info->max_agg_num,
 				maxagg_info->agg_num_size, str_ba_session[maxagg_info->ba_session]);
 			index += sizeof(xfer_maxagg_info);
