@@ -643,7 +643,6 @@ struct wim_bd_param * nrc_read_bd_tx_pwr(struct nrc *nw, uint8_t *country_code)
 	struct wim_bd_param *bd_sel;
 	bool check_bd_flag=false;
 	uint16_t target_version;
-	uint8_t *buf;
 
 	if(!g_bd_size)
 		return NULL;
@@ -676,23 +675,9 @@ struct wim_bd_param * nrc_read_bd_tx_pwr(struct nrc *nw, uint8_t *country_code)
 		return NULL;
 	}
 
-	bd = kmalloc(g_bd_size, GFP_KERNEL);
-
+	bd = (struct BDF *)nrc_dump_load(g_bd_size);
 	if(!bd) {
 		nrc_dbg(NRC_DBG_STATE,"bd is NULL");
-		return NULL;
-	}
-
-	memset(bd, 0, g_bd_size);
-
-	buf = (uint8_t *)nrc_dump_load(g_bd_size);
-
-	if(buf) {
-		memcpy(bd, (struct BDF*)buf, g_bd_size);
-		//nrc_dbg(NRC_DBG_STATE,"buf is gonna be NULL");
-		kfree(buf);
-	} else {
-		nrc_dbg(NRC_DBG_STATE,"buf is NULL");
 		return NULL;
 	}
 
@@ -717,6 +702,7 @@ struct wim_bd_param * nrc_read_bd_tx_pwr(struct nrc *nw, uint8_t *country_code)
 	bd_sel = kmalloc(sizeof(*bd_sel), GFP_KERNEL);
 	if (!bd_sel) {
 		nrc_dbg(NRC_DBG_STATE,"[ERROR] bd_sel is NULL");
+		kfree(bd);
 		return NULL;
 	}
 	memset(bd_sel, 0, sizeof(*bd_sel));
@@ -768,14 +754,11 @@ struct wim_bd_param * nrc_read_bd_tx_pwr(struct nrc *nw, uint8_t *country_code)
 				(bd->data[3 + len + 4*i]<<8));
 	}
 
-	if(check_bd_flag) {
-		kfree(bd);
-		if(nrc_set_supp_ch_list(bd_sel))
-			return bd_sel;
-		else
-			return NULL;
+	kfree(bd);
+
+	if(check_bd_flag && nrc_set_supp_ch_list(bd_sel)) {
+		return bd_sel;
 	} else {
-		kfree(bd);
 		kfree(bd_sel);
 		return NULL;
 	}
@@ -987,6 +970,7 @@ int nrc_check_bd(void)
 
 	if(g_bd_size < NRC_BD_HEADER_LENGTH) {
 		pr_err("Invalid data size(%d)", g_bd_size);
+		kfree(buf);
 		return -EINVAL;
 	}
 #if defined(CONFIG_SUPPORT_BD_TARGET_VERSION)
@@ -996,12 +980,14 @@ int nrc_check_bd(void)
 #endif /* defined(CONFIG_SUPPORT_BD_TARGET_VERSION) */
 	if((bd->total_len > g_bd_size-NRC_BD_HEADER_LENGTH) || (bd->total_len < NRC_BD_HEADER_LENGTH)) {
 		pr_err("Invalid total length(%d)", bd->total_len);
+		kfree(buf);
 		return -EINVAL;
 	}
 
 	ret = nrc_checksum_16(bd->total_len, (uint8_t *)&bd->data[0]);
 	if(bd->checksum_data != ret) {
 		pr_err("Invalid checksum(%u : %u)", bd->checksum_data, ret);
+		kfree(buf);
 		return -EINVAL;
 	}
 

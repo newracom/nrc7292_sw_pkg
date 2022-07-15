@@ -868,6 +868,8 @@ loopback_tx:
 		priv->loopback_measure_cnt = 0;
 	}
 end:
+	if(skb)
+		dev_kfree_skb(skb);
 	return ret;
 }
 

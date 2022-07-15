@@ -508,7 +508,7 @@ def setModuleParam():
 
     # module param for legacy ack mode
     # default: 0(Legacy ACK disabled)
-   if int(legacy_ack_enable) == 1:
+    if int(legacy_ack_enable) == 1:
         legacy_ack_arg = " enable_legacy_ack=1"
 
     # module param for 1MBW NDP ACK

@@ -3020,6 +3020,16 @@ int nrc_reg_notifier(struct wiphy *wiphy,
 			request->alpha2[0], request->alpha2[1]);
 	nrc_mac_dbg("request->initiator:%d", request->initiator);
 
+	if((request->alpha2[0] == '0' && request->alpha2[1] == '0') ||
+		(request->alpha2[0] == '9' && request->alpha2[1] == '9')) {
+		nrc_mac_dbg("CC is 00 or 99. Skip loading BD and setting CC");
+#ifdef CONFIG_NEW_REG_NOTIFIER
+		return;
+#else
+		return 0;
+#endif
+	}
+
 #ifdef CONFIG_USE_NEW_BAND_ENUM
 	for (band = NL80211_BAND_2GHZ; band < NUM_NL80211_BANDS; band++) {
 #else
@@ -3100,35 +3110,15 @@ int nrc_reg_notifier(struct wiphy *wiphy,
 #if defined(CONFIG_SUPPORT_BD)
 #if defined(CONFIG_SUPPORT_BD_TARGET_VERSION)
 	//Read board data and save buffer
-	if (!strncmp("KR", request->alpha2,2)) {
-		if (enable_usn) {
-			/* KR-USN Band */
-			bd_param = nrc_read_bd_tx_pwr(nw, "K1");
-		} else {
-			/* KR-MIC Band */
-			bd_param = nrc_read_bd_tx_pwr(nw, "K2");
-		}
+	/* Check the state of undefined CC and update it with default country(US) for intialization of channel list */
+	if((request->alpha2[0] == '0' && request->alpha2[1] == '0') ||
+		(request->alpha2[0] == '9' && request->alpha2[1] == '9')) {
+		bd_param = nrc_read_bd_tx_pwr(nw, "US");
 	} else {
-		/* Check the state of undefined CC and update it with default country(US) for intialization of channel list */
-		if((request->alpha2[0] == '0' && request->alpha2[1] == '0') ||
-			(request->alpha2[0] == '9' && request->alpha2[1] == '9')) {
-			bd_param = nrc_read_bd_tx_pwr(nw, "US");
-		} else {
-			bd_param = nrc_read_bd_tx_pwr(nw, request->alpha2);
-		}
+		bd_param = nrc_read_bd_tx_pwr(nw, request->alpha2);
 	}
 #else
-	if (!strncmp("KR", request->alpha2,2)) {
-		if (enable_usn) {
-			/* KR-USN Band */
-			bd_param = nrc_read_bd_tx_pwr("K1");
-		} else {
-			/* KR-MIC Band */
-			bd_param = nrc_read_bd_tx_pwr("K2");
-		}
-	} else {
-		bd_param = nrc_read_bd_tx_pwr(request->alpha2);
-	}
+	bd_param = nrc_read_bd_tx_pwr(request->alpha2);
 #endif /* defined(CONFIG_SUPPORT_BD_TARGET_VERSION) */
 	if(bd_param) {
 #if defined(CONFIG_SUPPORT_BD_TARGET_VERSION)
@@ -3256,47 +3246,6 @@ static int nrc_vendor_cmd_remove(struct wiphy *wiphy,
 	return nrc_vendor_update_beacon(hw, vif);
 }
 
-struct timer_list remotecmd_timer;
-struct remotecmd_params remotecmd_params;
-
-#if KERNEL_VERSION(4, 15, 0) > NRC_TARGET_KERNEL_VERSION
-void remotecmd_callback(unsigned long ptr)
-{
-	struct remotecmd_params *params = (struct remotecmd_params *)ptr;
-	struct wiphy *wiphy = params->wiphy;
-	struct wireless_dev *wdev = params->wdev;
-	u8 subcmd = params->subcmd;
-#else
-void remotecmd_callback(struct timer_list *t)
-{
-	struct wiphy *wiphy = remotecmd_params.wiphy;
-	struct wireless_dev *wdev = remotecmd_params.wdev;
-	u8 subcmd = remotecmd_params.subcmd;
-#endif
-	nrc_vendor_cmd_remove(wiphy, wdev, subcmd);
-}
-
-void remotecmd_schedule_off(struct wiphy *wiphy, struct wireless_dev *wdev,
-				u8 subcmd, const u8 cntdwn)
-{
-	remotecmd_params.wiphy = wiphy;
-	remotecmd_params.wdev = wdev;
-	remotecmd_params.subcmd = subcmd;
-
-#if KERNEL_VERSION(4, 15, 0) > NRC_TARGET_KERNEL_VERSION
-	init_timer(&remotecmd_timer);
-	remotecmd_timer.function = remotecmd_callback;
-	remotecmd_timer.data = (unsigned long)&remotecmd_params;
-	remotecmd_timer.expires = jiffies +
-		usecs_to_jiffies(wdev->beacon_interval * cntdwn * 1024);
-	add_timer(&remotecmd_timer);
-#else
-	timer_setup(&remotecmd_timer, remotecmd_callback, 0);
-	mod_timer(&remotecmd_timer, jiffies +
-		usecs_to_jiffies(wdev->beacon_interval * cntdwn * 1024));
-#endif
-}
-
 static int nrc_vendor_cmd_append(struct wiphy *wiphy, struct wireless_dev *wdev,
 				u8 subcmd, const void *data, int data_len)
 {
@@ -3307,10 +3256,7 @@ static int nrc_vendor_cmd_append(struct wiphy *wiphy, struct wireless_dev *wdev,
 	/* Update local vendor data */
 	if (nrc_vendor_update(nw, subcmd, data, data_len) != 0)
 		return -EINVAL;
-	// Schedule async vendor IE removal if REMOTECMD
-	if (subcmd == NRC_SUBCMD_REMOTECMD) {
-		remotecmd_schedule_off(wiphy, wdev, subcmd, *(const u8 *)data);
-	}
+
 	/* Update beacon */
 	return nrc_vendor_update_beacon(hw, vif);
 }
@@ -3378,14 +3324,6 @@ static int nrc_vendor_cmd_announce5(struct wiphy *wiphy,
 				const void *data, int data_len)
 {
 	return nrc_vendor_cmd_append(wiphy, wdev, NRC_SUBCMD_ANNOUNCE5,
-				 data, data_len);
-}
-
-static int nrc_vendor_cmd_announce6(struct wiphy *wiphy,
-				struct wireless_dev *wdev,
-				const void *data, int data_len)
-{
-	return nrc_vendor_cmd_append(wiphy, wdev, NRC_SUBCMD_REMOTECMD,
 				 data, data_len);
 }
 
@@ -3470,18 +3408,6 @@ static struct wiphy_vendor_command nrc_vendor_cmds[] = {
 #endif
 	},
 	{
-		.info = {
-			.vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
-			.subcmd = NRC_SUBCMD_REMOTECMD
-		},
-		.flags = WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = nrc_vendor_cmd_announce6,
-#if KERNEL_VERSION(5, 3, 0) <= NRC_TARGET_KERNEL_VERSION
-		.policy = VENDOR_CMD_RAW_DATA,
-		.maxattr = MAX_VENDOR_ATTR,
-#endif
-	},
-	{
 		.info = { .vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
 			  .subcmd = NRC_SUBCMD_RM_VENDOR_IE },
 		.flags = WIPHY_VENDOR_CMD_NEED_NETDEV,
@@ -3513,10 +3439,6 @@ static const struct nl80211_vendor_cmd_info nrc_vendor_events[] = {
 	{
 		.vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
 		.subcmd = NRC_SUBCMD_ANNOUNCE5
-	},
-	{
-		.vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
-		.subcmd = NRC_SUBCMD_REMOTECMD
 	},
 	{
 		.vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
@@ -3696,6 +3618,7 @@ int nrc_register_hw(struct nrc *nw)
 	ieee80211_hw_set(hw, MFP_CAPABLE);
 	ieee80211_hw_set(hw, SIGNAL_DBM);
 	ieee80211_hw_set(hw, SUPPORTS_PER_STA_GTK);
+	ieee80211_hw_set(hw, SINGLE_SCAN_ON_ALL_BANDS);
 
 #ifdef CONFIG_USE_MONITOR_VIF
 	ieee80211_hw_set(hw, WANT_MONITOR_VIF);

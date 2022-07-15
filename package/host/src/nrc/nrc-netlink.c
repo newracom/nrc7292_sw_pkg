@@ -1152,7 +1152,7 @@ static int nrc_inject_mgmt_frame(struct sk_buff *skb, struct genl_info *info)
 
 fail_over:
 	if (skb_mgmt)
-		kfree_skb(skb_mgmt);
+		dev_kfree_skb(skb_mgmt);
 
 	return 0;
 }

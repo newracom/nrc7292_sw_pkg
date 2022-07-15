@@ -251,6 +251,7 @@ int ssp_read_buffer(struct nrc_ssp *ssp)
 
 		if (!ret) {
 			nrc_dbg(NRC_DBG_HIF, "fail to read payload\n");
+			dev_kfree_skb_any(skb);
 			return -6;
 		}
 

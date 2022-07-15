@@ -738,10 +738,11 @@ static int rx_h_vendor(struct nrc_trx_data *rx)
 	struct ieee80211_hdr *mh = (void *) rx->skb->data;
 	__le16 fc = mh->frame_control;
 	u16 ies_offset, len;
-	const u8 *pos, *data, ann_subs[] = { NRC_SUBCMD_WOWLAN_PATTERN,
-			NRC_SUBCMD_ANNOUNCE1, NRC_SUBCMD_ANNOUNCE2,
-			NRC_SUBCMD_ANNOUNCE3, NRC_SUBCMD_ANNOUNCE4,
-			NRC_SUBCMD_ANNOUNCE5, NRC_SUBCMD_REMOTECMD };
+	const u8 *pos, *data, ann_subs[] = {
+		NRC_SUBCMD_WOWLAN_PATTERN, NRC_SUBCMD_ANNOUNCE1,
+		NRC_SUBCMD_ANNOUNCE2, NRC_SUBCMD_ANNOUNCE3,
+		NRC_SUBCMD_ANNOUNCE4, NRC_SUBCMD_ANNOUNCE5
+	};
 	const int OUIT_LEN = 4;
 	u8 i;
 
@@ -1203,12 +1204,10 @@ static int nrc_mac_s1g_monitor_rx(struct nrc *nw, struct sk_buff *skb)
 	}
 #endif
 
-	if (!nrc_mac_is_s1g(nw))
-		return 0;
-
-	nrc_add_rx_s1g_radiotap_header(nw, skb);
-
-	ieee80211_iterate_active_netdev(hw, s1g_monitor_rx, skb);
+	if (nrc_mac_is_s1g(nw)) {
+		nrc_add_rx_s1g_radiotap_header(nw, skb);
+		ieee80211_iterate_active_netdev(hw, s1g_monitor_rx, skb);
+	}
 
 	dev_kfree_skb(skb);
 

@@ -58,7 +58,6 @@ enum nrc_vendor_event {
 	NRC_SUBCMD_ANNOUNCE3,
 	NRC_SUBCMD_ANNOUNCE4,
 	NRC_SUBCMD_ANNOUNCE5,
-	NRC_SUBCMD_REMOTECMD,
 	NRC_SUBCMD_WOWLAN_PATTERN,
 	NUM_VENDOR_EVENT,
 	MAX_VENDOR_EVENT = NUM_VENDOR_EVENT - 1
@@ -68,12 +67,6 @@ enum nrc_vendor_attributes {
 	NRC_VENDOR_ATTR_DATA = 0,
 	NUM_VENDOR_ATTR,
 	MAX_VENDOR_ATTR = NUM_VENDOR_ATTR - 1
-};
-
-struct remotecmd_params {
-	struct wiphy *wiphy;
-	struct wireless_dev *wdev;
-	u8 subcmd;
 };
 
 #endif /* _NRC_VENDOR_H_ */

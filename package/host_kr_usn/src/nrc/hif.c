@@ -795,6 +795,7 @@ int nrc_hif_rx(struct nrc_hif_device *dev, const u8 *data, const u32 len)
 		nrc_wim_rx(nw, skb, hif->subtype);
 		break;
 	default:
+		dev_kfree_skb(skb);
 		BUG();
 	}
 	return 0;
@@ -854,6 +855,7 @@ static int hif_receive_skb(struct nrc_hif_device *dev, struct sk_buff *skb)
 		 *		16, 1, skb->data, hif->len, false);
 		 */
 		nrc_dump_store((char *)skb->data, hif->len);
+		dev_kfree_skb(skb);
 		break;
 #if defined(DEBUG)
 	case HIF_TYPE_LOOPBACK:
@@ -906,6 +908,7 @@ static int hif_receive_skb(struct nrc_hif_device *dev, struct sk_buff *skb)
 		print_hex_dump(KERN_DEBUG, "hif type err ", DUMP_PREFIX_NONE,
 				16, 1, skb->data, skb->len, false);
 		BUG();
+		dev_kfree_skb(skb);
 	}
 	return 0;
 }
