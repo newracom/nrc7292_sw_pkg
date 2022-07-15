@@ -532,7 +532,7 @@ struct wim_bd_param {
 
 #define WIM_MAX_SCAN_SSID       (2)
 #define WIM_MAX_SCAN_BSSID      (2)
-#define WIM_MAX_SCAN_CHANNEL    (50)
+#define WIM_MAX_SCAN_CHANNEL    (55)
 #ifndef IEEE80211_MAX_SSID_LEN
 #define IEEE80211_MAX_SSID_LEN  (32)
 #endif
