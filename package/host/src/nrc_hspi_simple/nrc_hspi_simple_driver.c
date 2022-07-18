@@ -15,6 +15,7 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/version.h>
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/device.h>
@@ -22,6 +23,9 @@
 #include <linux/spi/spi.h>
 #include <linux/gpio.h>
 #include <asm/unaligned.h>
+
+/* From nrc-build-config.h */
+#define NRC_TARGET_KERNEL_VERSION LINUX_VERSION_CODE
 
 
 /* C-SPI command
@@ -73,11 +77,11 @@ int hifspeed = (20*1000*1000);
 module_param(hifspeed, int, 0600);
 MODULE_PARM_DESC(hifspeed, "SPI master max speed");
 
-int spi_bus_num;
+int spi_bus_num = 0;
 module_param(spi_bus_num, int, 0600);
 MODULE_PARM_DESC(spi_bus_num, "SPI controller bus number");
 
-int spi_cs_num;
+int spi_cs_num = 0;
 module_param(spi_cs_num, int, 0600);
 MODULE_PARM_DESC(spi_cs_num, "SPI chip select number");
 
