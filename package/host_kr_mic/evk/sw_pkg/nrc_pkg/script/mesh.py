@@ -13,12 +13,12 @@ def isInterface(interface):
 def getIpAddr(interface):
     cmd = "ip addr show " + interface + " | grep \"inet\\b\" | awk \'{print $2}\' | cut -d/ -f1"
     addr = subprocess.check_output(cmd, shell=True)
-    return addr.strip()
+    return addr.strip().decode('utf-8')
 
 def getNetAddr(interface):
     cmd = "ip addr show " + interface + " | grep \"inet\\b\" | awk \'{print $2}\' | cut -d. -f1,2,3"
     addr = subprocess.check_output(cmd, shell=True)
-    return addr.strip()
+    return addr.strip().decode('utf-8')
 
 def addBridgeMeshAP(wlan, mesh):
     print("bridge " + wlan + " with " + mesh)

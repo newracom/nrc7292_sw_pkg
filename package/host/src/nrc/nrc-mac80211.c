@@ -211,12 +211,13 @@ static struct ieee80211_channel nrc_channels_5ghz_jp[] = {
 	CHAN5G(5190), /* Channel 38 */
 	CHAN5G(5195), /* Channel 39 */
 	CHAN5G(5200), /* Channel 40 */
-	CHAN5G(5205), /* Channel 41 */
 	CHAN5G(5210), /* Channel 42 */
 	CHAN5G(5215), /* Channel 43 */
 	CHAN5G(5220), /* Channel 44 */
 	CHAN5G(5225), /* Channel 45 */
 	CHAN5G(5230), /* Channel 46 */
+	CHAN5G(5235), /* Channel 47 */
+	CHAN5G(5240), /* Channel 48 */
 };
 
 static struct ieee80211_channel nrc_channels_5ghz_tw[] = {
