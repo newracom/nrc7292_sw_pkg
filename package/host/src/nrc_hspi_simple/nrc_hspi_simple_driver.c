@@ -14,6 +14,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include <linux/version.h>
 #include <linux/kernel.h>
 #include <linux/version.h>
 #include <linux/slab.h>
@@ -260,6 +261,6 @@ module_exit(nrc_exit);
 MODULE_AUTHOR("Newracom, Inc.(http://www.newracom.com)");
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_DESCRIPTION("Newracom HSPI simple driver");
-#if KERNEL_VERSION(5, 12, 0) > NRC_TARGET_KERNEL_VERSION
+#if KERNEL_VERSION(5, 12, 0) > LINUX_VERSION_CODE
 MODULE_SUPPORTED_DEVICE("Newracom 802.11 devices");
 #endif
