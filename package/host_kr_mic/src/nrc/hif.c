@@ -282,6 +282,9 @@ static void nrc_hif_ps_work(struct work_struct *work)
 			for (i = 0; i < NRC_QUEUE_MAX; i++) {
 				ntxq = &nw->ntxq[i];
 				skb_queue_purge(&ntxq->queue);
+#ifdef CONFIG_CHECK_DATA_SIZE
+				ntxq->data_size = 0;
+#endif
 			}
 			nrc_ps_dbg("Enter DEEPSLEEP!!!\n");
 			nrc_ps_dbg("sleep_duration: %lld ms\n", p->ps_duration);
@@ -1010,6 +1013,9 @@ int nrc_hif_exit(struct nrc_hif_device *dev)
 	for (i = 0; i < NRC_QUEUE_MAX; i++) {
 		ntxq = &nw->ntxq[i];
 		skb_queue_purge(&ntxq->queue);
+#ifdef CONFIG_CHECK_DATA_SIZE
+		ntxq->data_size = 0;
+#endif
 	}
 
 	if (nw->workqueue != NULL)

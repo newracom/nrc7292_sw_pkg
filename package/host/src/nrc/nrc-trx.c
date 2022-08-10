@@ -888,6 +888,9 @@ static int sta_h_trx_cleanup_sta(struct ieee80211_hw *hw,
 				continue;
 
 			skb_unlink(skb, &nw->ntxq[qid].queue);
+#ifdef CONFIG_CHECK_DATA_SIZE
+			nw->ntxq[qid].data_size -= skb->len;
+#endif
 			skb_queue_tail(&skbs, skb);
 		}
 	}

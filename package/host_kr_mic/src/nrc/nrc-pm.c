@@ -397,7 +397,7 @@ static int sta_h_bss_max_idle_period(struct ieee80211_hw *hw,
 #define state_changed(old, new)	\
 (old_state == IEEE80211_STA_##old && new_state == IEEE80211_STA_##new)
 
-	if (state_changed(ASSOC, AUTH)) {
+	if (state_changed(AUTHORIZED, ASSOC)) {
 		if (i_sta->max_idle.idle_period > 0 &&
 			timer_pending(&i_sta->max_idle.timer)) {
 			nrc_mac_dbg("STA(%pM) deauth. Delete bss_max_idle timer(%u)",

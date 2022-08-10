@@ -1765,7 +1765,6 @@ int nrc_wim_change_sta_state(struct nrc *nw, struct ieee80211_vif *vif,
 				nrc_init_sta_ba_session(sta);
 				nw->ampdu_supported = true;
 				nw->ampdu_reject = false;
-				ieee80211_start_tx_ba_session(sta, 0, 0);
 			} else {
 				nw->ampdu_supported = false;
 				nw->ampdu_reject = true;

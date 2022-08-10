@@ -227,7 +227,7 @@ cmd_tbl_t set_sub_list[] = {
 	{ "drop", cmd_set_drop_frame, "set drop frames from configured mac address", "set drop [vif id] [mac address] {on|off}", SET_DROP_KEY_LIST, 0},
 	{ "tsensor", cmd_set_temp_sensor, "set temperature sensor scl, sda", "set tsensor [GPIO for SCL] [GPIO for SDA]", "", 0},
 	{ "self_config", cmd_set_self_configuration, "set self_config", "set self_config {Country(KR,US...)}{BW}{dwell time}", "", 0},
-	{ "cca_thresh", cmd_set_cca_thresh, "set cca threshold", "set cca_thresh {CCA threshold(unit:dBm, -85~-76)}", "", 0},
+	{ "cca_thresh", cmd_set_cca_thresh, "set cca threshold", "set cca_thresh {CCA threshold(unit:dBm, -85~-75)}", "", 0},
 };
 
 /* sub command list on test */
@@ -1292,8 +1292,11 @@ static int cmd_show_cca_thresh(cmd_tbl_t *t, int argc, char *argv[])
 		if(strcmp(response, response_timeout_str)== 0){
 			ret =  CMD_RET_RESPONSE_TIMEOUT;
 		}else{
-			printf("%s\n",response);
-			ret = CMD_RET_SUCCESS;
+			if(strcmp(response, "-1")== 0){
+				printf("out-of-range\n");
+			} else {
+				printf("%s\n",response);
+			}
 		}
 	}else{
 		ret = CMD_RET_FAILURE;
