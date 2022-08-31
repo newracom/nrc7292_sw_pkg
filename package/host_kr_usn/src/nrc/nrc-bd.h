@@ -46,10 +46,12 @@ struct bd_supp_param {
 	uint16_t nons1g_ch_freq[NRC_BD_MAX_CH_LIST];
 };
 
-#if defined(CONFIG_SUPPORT_BD_TARGET_VERSION)
+#if defined(CONFIG_SUPPORT_BD)
+extern struct bd_supp_param g_supp_ch_list;
+extern bool g_bd_valid;
+
 struct wim_bd_param * nrc_read_bd_tx_pwr(struct nrc *nw, uint8_t *cc);
-#else
-struct wim_bd_param * nrc_read_bd_tx_pwr(uint8_t *cc);
-#endif /* defined(CONFIG_SUPPORT_BD_TARGET_VERSION) */
 int nrc_check_bd(void);
+#endif /* defined(CONFIG_SUPPORT_BD) */
+
 #endif //_NRC_BD_H_

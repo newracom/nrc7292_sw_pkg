@@ -496,6 +496,9 @@ extern bool enable_short_bi;
 extern int credit_ac_be;
 extern bool discard_deauth;
 extern bool enable_legacy_ack;
+#if defined(CONFIG_SUPPORT_BD)
+extern char *bd_name;
+#endif /* CONFIG_SUPPORT_BD */
 
 void nrc_set_bss_max_idle_offset(int value);
 void nrc_set_auto_ba(bool toggle);

@@ -22,10 +22,9 @@
 #include "nrc-recovery.h"
 #include "nrc-mac80211.h"
 
-#if defined(CONFIG_SUPPORT_BD_TARGET_VERSION)
+#if defined(CONFIG_SUPPORT_BD)
 #include "nrc-bd.h"
-extern struct bd_supp_param g_supp_ch_list;
-#endif /* defined(CONFIG_SUPPORT_BD_TARGET_VERSION) */
+#endif /* defined(CONFIG_SUPPORT_BD) */
 
 static void nrc_wim_skb_bind_vif(struct sk_buff *skb, struct ieee80211_vif *vif)
 {
@@ -168,10 +167,10 @@ int nrc_wim_hw_scan(struct nrc *nw, struct ieee80211_vif *vif,
 	struct sk_buff *skb;
 	struct wim_scan_param *p;
 	int i, size = tlv_len(sizeof(struct wim_scan_param));
-#if defined(CONFIG_SUPPORT_BD_TARGET_VERSION)
+#if defined(CONFIG_SUPPORT_BD)
 	int j;
 	bool avail_ch_flag = false;
-#endif /* defined(CONFIG_SUPPORT_BD_TARGET_VERSION) */
+#endif /* defined(CONFIG_SUPPORT_BD) */
 	if (ies) {
 		size += tlv_len(ies->common_ie_len);
 		size += ies->len[NL80211_BAND_2GHZ];
@@ -192,7 +191,7 @@ int nrc_wim_hw_scan(struct nrc *nw, struct ieee80211_vif *vif,
 	p->n_channels = req->n_channels;
 	for (i = 0; i < req->n_channels; i++)
 		p->channel[i] = req->channels[i]->center_freq;
-#if defined(CONFIG_SUPPORT_BD_TARGET_VERSION)
+#if defined(CONFIG_SUPPORT_BD)
 #if BD_DEBUG
 	nrc_dbg(NRC_DBG_MAC, "org_ch_freq");
 	for (i = 0; i < p->n_channels; i++) {
@@ -231,7 +230,7 @@ int nrc_wim_hw_scan(struct nrc *nw, struct ieee80211_vif *vif,
 		}
 #endif
 	}
-#endif /* defined(CONFIG_SUPPORT_BD_TARGET_VERSION) */
+#endif /* defined(CONFIG_SUPPORT_BD) */
 
 	p->n_ssids = req->n_ssids;
 	for (i = 0; i < req->n_ssids; i++) {
@@ -509,10 +508,10 @@ bool nrc_wim_request_keep_alive(struct nrc *nw)
 
 void nrc_wim_handle_fw_ready(struct nrc *nw)
 {
-#if defined(CONFIG_SUPPORT_BD)
 	struct nrc_hif_device *hdev = nw->hif;
-	struct regulatory_request request;
 
+#if defined(CONFIG_SUPPORT_BD)
+	struct regulatory_request request;
 	request.alpha2[0] = nw->alpha2[0];
 	request.alpha2[1] = nw->alpha2[1];
 #endif

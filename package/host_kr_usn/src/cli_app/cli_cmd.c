@@ -2211,10 +2211,6 @@ static int cmd_set_cca_thresh(cmd_tbl_t *t, int argc, char *argv[])
 	memset(response, 0x0, NL_MSG_MAX_RESPONSE_SIZE);
 	memset(param, 0x0, sizeof(param));
 
-	if(cca_thres<-85 || cca_thres >-76){
-		return CMD_RET_FAILURE;
-	}
-
 	if(argc == 3)
 		sprintf(param, "set cca_thresh %s -sr", argv[2]);
 	else if(argc == 4)

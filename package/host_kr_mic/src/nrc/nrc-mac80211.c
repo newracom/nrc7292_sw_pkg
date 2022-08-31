@@ -440,10 +440,6 @@ static const struct ieee80211_iface_combination if_comb_multi[] = {
 	},
 };
 
-#if defined(CONFIG_SUPPORT_BD_TARGET_VERSION)
-extern struct bd_supp_param g_supp_ch_list;
-#endif /* defined(CONFIG_SUPPORT_BD_TARGET_VERSION) */
-
 static bool get_intf_addr(const char *intf_name, char *addr)
 {
 	struct socket *sock	= NULL;
@@ -941,12 +937,12 @@ static int nrc_mac_start(struct ieee80211_hw *hw)
 	struct sk_buff *skb;
 	int alloc_size;
 
-#if defined(CONFIG_SUPPORT_BD_TARGET_VERSION)
+#if defined(CONFIG_SUPPORT_BD)
 	/* Case of Invalid board data */
 	if(nw->bd_valid == false)
 		return -1;
 	else
-#endif /* defined(CONFIG_SUPPORT_BD_TARGET_VERSION) */
+#endif /* defined(CONFIG_SUPPORT_BD) */
 		nw->drv_state = NRC_DRV_RUNNING;
 
 	nw->aid = 0;
@@ -1328,7 +1324,7 @@ static int nrc_mac_config(struct ieee80211_hw *hw, u32 changed)
 	struct nrc_txq *ntxq;
 	int ret = 0;
 	int i;
-#if defined(CONFIG_SUPPORT_BD_TARGET_VERSION)
+#if defined(CONFIG_SUPPORT_BD)
 	bool supp_ch_flag = false;
 
 	if(g_supp_ch_list.num_ch) {
@@ -1347,7 +1343,7 @@ static int nrc_mac_config(struct ieee80211_hw *hw, u32 changed)
 			}
 		}
 	}
-#endif /* defined(CONFIG_SUPPORT_BD_TARGET_VERSION) */
+#endif /* defined(CONFIG_SUPPORT_BD) */
 
 	skb = nrc_wim_alloc_skb(nw, WIM_CMD_SET, WIM_MAX_SIZE);
 
@@ -3010,11 +3006,13 @@ int nrc_reg_notifier(struct wiphy *wiphy,
 #else
 	enum ieee80211_band band;
 #endif
+#if defined(CONFIG_SUPPORT_BD)
 	int i;
+	struct wim_bd_param *bd_param = NULL;
+#endif /* CONFIG_SUPPORT_BD */
 	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
 	struct nrc *nw = hw->priv;
 	struct sk_buff *skb;
-	struct wim_bd_param *bd_param = NULL;
 
 	nrc_mac_dbg("info: cfg80211 regulatory domain callback for %c%c",
 			request->alpha2[0], request->alpha2[1]);
@@ -3040,7 +3038,7 @@ int nrc_reg_notifier(struct wiphy *wiphy,
 		switch (band) {
 		case NL80211_BAND_2GHZ:
 			/* Set Legacy 2.4GHz CHs that are used only for country US (45CHs) */
-			if (nw->alpha2[0] != 'U' && nw->alpha2[0] != 'S') {
+			if (nw->alpha2[0] != 'U' && nw->alpha2[1] != 'S') {
 				if (!(nw->cap.cap_mask & WIM_SYSTEM_CAP_CHANNEL_2G))
 					continue;
 				sband->channels = nrc_channels_2ghz;
@@ -3067,25 +3065,25 @@ int nrc_reg_notifier(struct wiphy *wiphy,
 				with different number of CHs */
 			if (!(nw->cap.cap_mask & WIM_SYSTEM_CAP_CHANNEL_5G))
 				continue;
-			if (nw->alpha2[0] == 'J' && nw->alpha2[0] == 'P') {
+			if (nw->alpha2[0] == 'J' && nw->alpha2[1] == 'P') {
 				sband->channels = nrc_channels_5ghz_jp;
 				sband->n_channels = ARRAY_SIZE(nrc_channels_5ghz_jp);
-			} else if (nw->alpha2[0] == 'T' && nw->alpha2[0] == 'W') {
+			} else if (nw->alpha2[0] == 'T' && nw->alpha2[1] == 'W') {
 				sband->channels = nrc_channels_5ghz_tw;
 				sband->n_channels = ARRAY_SIZE(nrc_channels_5ghz_tw);
-			} else if (nw->alpha2[0] == 'A' && nw->alpha2[0] == 'U') {
+			} else if (nw->alpha2[0] == 'A' && nw->alpha2[1] == 'U') {
 				sband->channels = nrc_channels_5ghz_au;
 				sband->n_channels = ARRAY_SIZE(nrc_channels_5ghz_au);
-			} else if (nw->alpha2[0] == 'N' && nw->alpha2[0] == 'Z') {
+			} else if (nw->alpha2[0] == 'N' && nw->alpha2[1] == 'Z') {
 				sband->channels = nrc_channels_5ghz_nz;
 				sband->n_channels = ARRAY_SIZE(nrc_channels_5ghz_nz);
-			} else if (nw->alpha2[0] == 'E' && nw->alpha2[0] == 'U') {
+			} else if (nw->alpha2[0] == 'E' && nw->alpha2[1] == 'U') {
 				sband->channels = nrc_channels_5ghz_eu;
 				sband->n_channels = ARRAY_SIZE(nrc_channels_5ghz_eu);
-			} else if (nw->alpha2[0] == 'C' && nw->alpha2[0] == 'N') {
+			} else if (nw->alpha2[0] == 'C' && nw->alpha2[1] == 'N') {
 				sband->channels = nrc_channels_5ghz_cn;
 				sband->n_channels = ARRAY_SIZE(nrc_channels_5ghz_cn);
-			} else if (nw->alpha2[0] == 'K' && nw->alpha2[0] == 'R') {
+			} else if (nw->alpha2[0] == 'K' && nw->alpha2[1] == 'R') {
 				if (enable_usn) {
 					sband->channels = nrc_channels_5ghz_k1;
 					sband->n_channels = ARRAY_SIZE(nrc_channels_5ghz_k1);
@@ -3108,7 +3106,6 @@ int nrc_reg_notifier(struct wiphy *wiphy,
 	}
 
 #if defined(CONFIG_SUPPORT_BD)
-#if defined(CONFIG_SUPPORT_BD_TARGET_VERSION)
 	//Read board data and save buffer
 	/* Check the state of undefined CC and update it with default country(US) for intialization of channel list */
 	if((request->alpha2[0] == '0' && request->alpha2[1] == '0') ||
@@ -3117,17 +3114,10 @@ int nrc_reg_notifier(struct wiphy *wiphy,
 	} else {
 		bd_param = nrc_read_bd_tx_pwr(nw, request->alpha2);
 	}
-#else
-	bd_param = nrc_read_bd_tx_pwr(request->alpha2);
-#endif /* defined(CONFIG_SUPPORT_BD_TARGET_VERSION) */
+
 	if(bd_param) {
-#if defined(CONFIG_SUPPORT_BD_TARGET_VERSION)
 		nrc_dbg(NRC_DBG_MAC,"type %04X length %04X checksum %04X target_ver %04X",
 				bd_param->type, bd_param->length, bd_param->checksum, bd_param->hw_version);
-#else
-		nrc_dbg(NRC_DBG_STATE,"type %04X length %04X checksum %04X",
-				bd_param->type, bd_param->length, bd_param->checksum);
-#endif /* defined(CONFIG_SUPPORT_BD_TARGET_VERSION) */
 		for(i=0; i < bd_param->length - 4;) {
 			nrc_dbg(NRC_DBG_MAC,"%02d %02d %02d %02d %02d %02d %02d %02d %02d %02d %02d %02d",
 				(bd_param->value[i]), (bd_param->value[i+1]), (bd_param->value[i+2]),
@@ -3137,10 +3127,8 @@ int nrc_reg_notifier(struct wiphy *wiphy,
 				);
 			i += 12;
 		}
-	}
-#if defined(CONFIG_SUPPORT_BD_TARGET_VERSION)
-	/* Default policy is that if board data is invalid, block loading of FW */
-	else {
+	} else {
+		/* Default policy is that if board data is invalid, block loading of FW */
 		nrc_mac_dbg("BD file is invalid..Exit!!");
 		nw->bd_valid = false;
 		nw->drv_state = NRC_DRV_STOP;
@@ -3150,7 +3138,6 @@ int nrc_reg_notifier(struct wiphy *wiphy,
 		return -1;
 #endif
 	}
-#endif /* defined(CONFIG_SUPPORT_BD_TARGET_VERSION) */
 #endif /* defined(CONFIG_SUPPORT_BD) */
 
 	nw->alpha2[0] = request->alpha2[0];

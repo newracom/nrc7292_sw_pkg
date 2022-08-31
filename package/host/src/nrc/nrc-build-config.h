@@ -117,7 +117,6 @@
 #define CONFIG_SUPPORT_NEW_MAC_TX
 #define CONFIG_SUPPORT_P2P
 #define CONFIG_SUPPORT_BD
-#define CONFIG_SUPPORT_BD_TARGET_VERSION
 /* To use JPPC board data file & FW */
 #undef CONFIG_SUPPORT_JPPC
 #endif

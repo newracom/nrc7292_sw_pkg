@@ -28,6 +28,8 @@
 #include "nrc-debug.h"
 #include "nrc-wim-types.h"
 
+#if defined(CONFIG_SUPPORT_BD)
+
 #define NRC_BD_FILE_MAX_LENGTH	4096
 #define NRC_BD_MAX_DATA_LENGTH	546
 #define NRC_BD_HEADER_LENGTH	16
@@ -46,7 +48,6 @@ enum {
 	CC_MAX,
 }CC_TYPE;
 
-#if defined(CONFIG_SUPPORT_BD_TARGET_VERSION)
 const struct bd_ch_table *g_bd_ch_table_base;
 struct bd_supp_param g_supp_ch_list;
 
@@ -434,7 +435,6 @@ static const struct bd_ch_table g_bd_ch_table_usn[CC_MAX][NRC_BD_MAX_CH_LIST] = 
 	},
 };
 
-#endif /* defined(CONFIG_SUPPORT_BD_TARGET_VERSION) */
 static uint16_t nrc_checksum_16(uint16_t len, uint8_t* buf)
 {
 	uint32_t checksum = 0;
@@ -460,8 +460,6 @@ static uint16_t nrc_checksum_16(uint16_t len, uint8_t* buf)
 	return checksum;
 }
 
-extern char *bd_name;
-#if defined(CONFIG_SUPPORT_BD_TARGET_VERSION)
 static void * nrc_dump_load(int len)
 {
 	struct file *filp;
@@ -531,33 +529,7 @@ static void * nrc_dump_load(int len)
 
 	return buf;
 }
-#else
-static void * nrc_dump_load(int len)
-{
-	int i;
 
-	if(!g_bd_size)
-		return NULL;
-
-	for(i=0; i < g_bd_size;) {
-		nrc_dbg(NRC_DBG_STATE,"%02X %02X %02X %02X %02X %02X %02X %02X ",
-	                         g_bd_buf[i],
-	                         g_bd_buf[i+1],
-	                         g_bd_buf[i+2],
-	                         g_bd_buf[i+3],
-	                         g_bd_buf[i+4],
-	                         g_bd_buf[i+5],
-	                         g_bd_buf[i+6],
-	                         g_bd_buf[i+7]
-	                         );
-		i += 8;
-	}
-
-	return &g_bd_buf[0];
-}
-#endif /* defined(CONFIG_SUPPORT_BD_TARGET_VERSION) */
-
-#if defined(CONFIG_SUPPORT_BD_TARGET_VERSION)
 uint16_t nrc_get_non_s1g_freq(uint8_t cc_index, uint8_t s1g_ch_index)
 {
 	int i;
@@ -753,123 +725,6 @@ struct wim_bd_param * nrc_read_bd_tx_pwr(struct nrc *nw, uint8_t *country_code)
 		return NULL;
 	}
 }
-#else
-struct wim_bd_param * nrc_read_bd_tx_pwr(uint8_t *country_code)
-{
-	uint8_t cc_index = CC_US;
-	uint16_t ret = 0;
-	uint16_t len = 0;
-	uint8_t type = 0;
-	int i, j;
-	struct BDF *bd;
-	uint8_t cc[2] = {0,0};
-	struct wim_bd_param *bd_sel;
-	bool check_bd_flag=false;
-
-	bd_sel = kmalloc(sizeof(*bd_sel), GFP_KERNEL);
-	if (!bd_sel) {
-		nrc_dbg(NRC_DBG_STATE,"bd_sel is NULL");
-		return NULL;
-	}
-	memset(bd_sel, 0, sizeof(*bd_sel));
-
-	cc[0] = *country_code;
-	cc[1] = *(country_code + 1);
-
-	if(cc[0] == 'J' && cc[1] == 'P')
-		cc_index = CC_JP;
-	else if(cc[0] == 'K' && cc[1] == 'R')
-		cc_index = CC_KR;
-	else if(cc[0] == 'T' && cc[1] == 'W')
-		cc_index = CC_TW;
-	else if(cc[0] == 'U' && cc[1] == 'S')
-		cc_index = CC_US;
-	else if(cc[0] == 'D' && cc[1] == 'E')
-		cc_index = CC_EU;
-	else if(cc[0] == 'E' && cc[1] == 'U')
-		cc_index = CC_EU;
-	else if(cc[0] == 'C' && cc[1] == 'N')
-		cc_index = CC_CN;
-	else if(cc[0] == 'N' && cc[1] == 'Z')
-		cc_index = CC_NZ;
-	else if(cc[0] == 'A' && cc[1] == 'U')
-		cc_index = CC_AU;
-	else {
-		nrc_dbg(NRC_DBG_STATE,
-			"Invalid country code(%c%c). Set default value(%d)",
-			cc[0], cc[1], cc_index);
-		kfree(bd_sel);
-		return NULL;
-	}
-
-	bd = (struct BDF*)nrc_dump_load(NRC_BD_MAX_DATA_LENGTH + NRC_BD_HEADER_LENGTH);
-
-	if(!bd) {
-		nrc_dbg(NRC_DBG_STATE,"bd is NULL");
-		kfree(bd_sel);
-		return NULL;
-	}
-
-	nrc_dbg(NRC_DBG_STATE, "Major %02X Minor %02X Total len %04X Num_country %04X Checksum %04X",
-		bd->ver_major, bd->ver_minor, bd->total_len, bd->num_data_groups, bd->checksum_data);
-
-	for(i=0; i < bd->total_len;) {
-		nrc_dbg(NRC_DBG_MAC,"%02X %02X %02X %02X %02X %02X %02X %02X",
-				bd->data[i],
-				bd->data[i+1],
-				bd->data[i+2],
-				bd->data[i+3],
-				bd->data[i+4],
-				bd->data[i+5],
-				bd->data[i+6],
-				bd->data[i+7]
-				);
-		i += 8;
-	}
-
-	// checksum for all country code's data
-	ret = nrc_checksum_16(bd->total_len, (uint8_t *)&bd->data[0]);
-
-	if(ret != bd->checksum_data) {
-		nrc_dbg(NRC_DBG_STATE, "Invalid checksum(%u : %u)",
-			bd->checksum_data, ret);
-		kfree(bd_sel);
-		return NULL;
-	}
-
-	for(i = 0; i < bd->num_data_groups; i++) {
-		type = g_bd_buf[NRC_BD_HEADER_LENGTH + len + 4*i];
-		nrc_dbg(NRC_DBG_STATE, "type : %u, cc_index: %u",type, cc_index);
-		if(type == cc_index) {
-			// copy data for specific country code
-			nrc_dbg(NRC_DBG_STATE, "cc_index is matched(%u : %u)",
-				type, cc_index);
-			bd_sel->type = (uint16_t)type;
-			bd_sel->length = (uint16_t)(g_bd_buf[NRC_BD_HEADER_LENGTH + 2 + len + 4*i] +
-					(g_bd_buf[NRC_BD_HEADER_LENGTH + 3 + len + 4*i]<<8));
-			bd_sel->checksum = (uint16_t)(g_bd_buf[NRC_BD_HEADER_LENGTH + 4 + len + 4*i] +
-					(g_bd_buf[NRC_BD_HEADER_LENGTH + 5 + len + 4*i]<<8));
-
-			for(j=0; j < bd_sel->length -2; j++) {
-				bd_sel->value[j] = g_bd_buf[NRC_BD_HEADER_LENGTH + 6 + len + 4*i + j];
-			}
-			check_bd_flag = true;
-			nrc_dbg(NRC_DBG_STATE, "type %04X, len %04X, checksum %04X",
-				bd_sel->type, bd_sel->length, bd_sel->checksum);
-			break;
-		}
-		len += (uint16_t)(g_bd_buf[NRC_BD_HEADER_LENGTH + 2 + len + 4*i] +
-					(g_bd_buf[NRC_BD_HEADER_LENGTH + 3 + len + 4*i]<<8));
-	}
-
-	if(check_bd_flag)
-		return bd_sel;
-	else {
-		kfree(bd_sel);
-		return NULL;
-	}
-}
-#endif /* defined(CONFIG_SUPPORT_BD_TARGET_VERSION) */
 
 int nrc_check_bd(void)
 {
@@ -879,13 +734,10 @@ int nrc_check_bd(void)
 #if KERNEL_VERSION(5, 10, 0) <= NRC_TARGET_KERNEL_VERSION
 	int rc;
 #endif
-#if defined(CONFIG_SUPPORT_BD_TARGET_VERSION)
+
 	struct kstat *stat;
 	char *buf;
 	size_t length;
-#else
-	size_t length = (size_t) (NRC_BD_MAX_DATA_LENGTH + NRC_BD_HEADER_LENGTH);
-#endif /* defined(CONFIG_SUPPORT_BD_TARGET_VERSION) */
 	int ret;
 	mm_segment_t old_fs;
 	char filepath[64];
@@ -912,7 +764,6 @@ int nrc_check_bd(void)
 		return -EIO;
 	}
 
-#if defined(CONFIG_SUPPORT_BD_TARGET_VERSION)
 	stat = (struct kstat *) kmalloc(sizeof(struct kstat), GFP_KERNEL);
 	if(!stat)
 		return -ENOMEM;
@@ -940,34 +791,22 @@ int nrc_check_bd(void)
 #else
 	g_bd_size = kernel_read(filp, pos, buf, (int)length);
 #endif
-#else
-#if KERNEL_VERSION(4, 14, 0) <= NRC_TARGET_KERNEL_VERSION
-	g_bd_size = kernel_read(filp, g_bd_buf, length, &pos);
-#else
-	g_bd_size = kernel_read(filp, pos, g_bd_buf, length);
-#endif
-#endif /* defined(CONFIG_SUPPORT_BD_TARGET_VERSION) */
-
 	filp_close(filp, NULL);
 #if KERNEL_VERSION(5,10,0) > NRC_TARGET_KERNEL_VERSION
 	set_fs(old_fs);
 #else
 	force_uaccess_end(old_fs);
 #endif
-#if defined(CONFIG_SUPPORT_BD_TARGET_VERSION)
 	kfree(stat);
-#endif /* defined(CONFIG_SUPPORT_BD_TARGET_VERSION) */
 
 	if(g_bd_size < NRC_BD_HEADER_LENGTH) {
 		pr_err("Invalid data size(%d)", g_bd_size);
 		kfree(buf);
 		return -EINVAL;
 	}
-#if defined(CONFIG_SUPPORT_BD_TARGET_VERSION)
+
 	bd = (struct BDF *)buf;
-#else
-	bd = (struct BDF*)&g_bd_buf[0];
-#endif /* defined(CONFIG_SUPPORT_BD_TARGET_VERSION) */
+
 	if((bd->total_len > g_bd_size-NRC_BD_HEADER_LENGTH) || (bd->total_len < NRC_BD_HEADER_LENGTH)) {
 		pr_err("Invalid total length(%d)", bd->total_len);
 		kfree(buf);
@@ -981,9 +820,8 @@ int nrc_check_bd(void)
 		return -EINVAL;
 	}
 
-#if defined(CONFIG_SUPPORT_BD_TARGET_VERSION)
 	kfree(buf);
-#endif /* defined(CONFIG_SUPPORT_BD_TARGET_VERSION) */
 
 	return 0;
 }
+#endif /* #if defined(CONFIG_SUPPORT_BD) */
