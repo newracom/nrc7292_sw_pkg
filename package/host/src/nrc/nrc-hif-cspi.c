@@ -189,6 +189,7 @@ struct nrc_spi_priv {
 
 	int polling_interval;
 	struct task_struct *polling_kthread;
+	int polling_exit;
 };
 
 struct nrc_cspi_ops {
@@ -1402,8 +1403,10 @@ static int spi_poll_thread (void *data)
 		else {
 			ret = gpio_get_value_cansleep(gpio);
 
-			if (ret < 0)
+			if (ret < 0) {
 				pr_err("%s: gpio_get_value_cansleep() failed, ret=%d", __func__, ret);
+				break;
+			}
 			else if (ret == !!(CSPI_EIRQ_MODE & 1))
 				spi_irq(gpio, hdev);
 		}
@@ -1411,6 +1414,8 @@ static int spi_poll_thread (void *data)
 		usleep_range(interval, interval + 100);
 	}
 
+	priv->polling_exit = 1;
+	
 	return 0;
 }
 
@@ -1907,12 +1912,24 @@ static int spi_resume_rx_thread(struct nrc_hif_device *hdev)
 	return 0;
 }
 
+static int inline polling_is_exiting(struct spi_device *spi)
+{
+	struct nrc_hif_device *hdev = spi->dev.platform_data;
+	struct nrc_spi_priv *priv = hdev->priv;
+
+	return priv->polling_exit;
+}
+
 static int spi_check_target(struct nrc_hif_device *hdev, u8 reg)
 {
 	struct nrc_spi_priv *priv = hdev->priv;
 	struct spi_device *spi = priv->spi;
 	struct spi_status_reg *status = &priv->hw.status;
 	int ret;
+
+	if(polling_is_exiting(spi)) {
+		return 0;
+	}
 
 	ret = c_spi_read_regs(spi, C_SPI_EIRQ_MODE, (void *)status,
 			sizeof(*status));
@@ -2074,6 +2091,7 @@ static int c_spi_probe(struct spi_device *spi)
 	priv->loopback_write_usec = 0;
 	priv->fastboot = false;
 	priv->polling_interval = spi_polling_interval;
+	priv->polling_exit = 0;
 
 	init_waitqueue_head(&priv->wait);
 	spin_lock_init(&priv->lock);
