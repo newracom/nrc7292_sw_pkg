@@ -188,155 +188,6 @@ static struct ieee80211_channel nrc_channels_5ghz[] = {
 	CHAN5G(5820), /* Channel 164 */
 	CHAN5G(5825), /* Channel 165 */
 };
-
-static struct ieee80211_channel nrc_channels_5ghz_k1[] = {
-	CHAN5G(5220), /* Channel 44 */
-	CHAN5G(5225), /* Channel 45 */
-};
-
-static struct ieee80211_channel nrc_channels_5ghz_k2[] = {
-	CHAN5G(5180), /* Channel 36 */
-	CHAN5G(5185), /* Channel 37 */
-	CHAN5G(5190), /* Channel 38 */
-	CHAN5G(5195), /* Channel 39 */
-	CHAN5G(5200), /* Channel 40 */
-	CHAN5G(5205), /* Channel 41 */
-	CHAN5G(5210), /* Channel 42 */
-	CHAN5G(5215), /* Channel 43 */
-};
-
-static struct ieee80211_channel nrc_channels_5ghz_jp[] = {
-	CHAN5G(5180), /* Channel 36 */
-	CHAN5G(5185), /* Channel 37 */
-	CHAN5G(5190), /* Channel 38 */
-	CHAN5G(5195), /* Channel 39 */
-	CHAN5G(5200), /* Channel 40 */
-	CHAN5G(5210), /* Channel 42 */
-	CHAN5G(5215), /* Channel 43 */
-	CHAN5G(5220), /* Channel 44 */
-	CHAN5G(5225), /* Channel 45 */
-	CHAN5G(5230), /* Channel 46 */
-	CHAN5G(5235), /* Channel 47 */
-	CHAN5G(5240), /* Channel 48 */
-};
-
-static struct ieee80211_channel nrc_channels_5ghz_tw[] = {
-	CHAN5G(5180), /* Channel 36 */
-	CHAN5G(5185), /* Channel 37 */
-	CHAN5G(5190), /* Channel 38 */
-	CHAN5G(5195), /* Channel 39 */
-	CHAN5G(5200), /* Channel 40 */
-	CHAN5G(5205), /* Channel 41 */
-	CHAN5G(5210), /* Channel 42 */
-	CHAN5G(5215), /* Channel 43 */
-	CHAN5G(5220), /* Channel 44 */
-	CHAN5G(5225), /* Channel 45 */
-	CHAN5G(5230), /* Channel 46 */
-	CHAN5G(5235), /* Channel 47 */
-	CHAN5G(5240), /* Channel 48 */
-	CHAN5G(5745), /* Channel 149 */
-	CHAN5G(5750), /* Channel 150 */
-	CHAN5G(5755), /* Channel 151 */
-	CHAN5G(5760), /* Channel 152 */
-	CHAN5G(5765), /* Channel 153 */
-	CHAN5G(5770), /* Channel 154 */
-	CHAN5G(5775), /* Channel 155 */
-	CHAN5G(5780), /* Channel 156 */
-	CHAN5G(5785), /* Channel 157 */
-};
-
-static struct ieee80211_channel nrc_channels_5ghz_eu[] = {
-	CHAN5G(5180), /* Channel 36 */
-	CHAN5G(5185), /* Channel 37 */
-	CHAN5G(5190), /* Channel 38 */
-	CHAN5G(5195), /* Channel 39 */
-	CHAN5G(5200), /* Channel 40 */
-	CHAN5G(5205), /* Channel 41 */
-	CHAN5G(5210), /* Channel 42 */
-};
-
-static struct ieee80211_channel nrc_channels_5ghz_cn[] = {
-	CHAN5G(5180), /* Channel 36 */
-	CHAN5G(5185), /* Channel 37 */
-	CHAN5G(5190), /* Channel 38 */
-	CHAN5G(5195), /* Channel 39 */
-	CHAN5G(5200), /* Channel 40 */
-	CHAN5G(5205), /* Channel 41 */
-	CHAN5G(5210), /* Channel 42 */
-	CHAN5G(5215), /* Channel 43 */
-	CHAN5G(5220), /* Channel 44 */
-	CHAN5G(5225), /* Channel 45 */
-	CHAN5G(5230), /* Channel 46 */
-	CHAN5G(5235), /* Channel 47 */
-	CHAN5G(5240), /* Channel 48 */
-	CHAN5G(5745), /* Channel 149 */
-	CHAN5G(5750), /* Channel 150 */
-	CHAN5G(5755), /* Channel 151 */
-	CHAN5G(5760), /* Channel 152 */
-	CHAN5G(5765), /* Channel 153 */
-	CHAN5G(5770), /* Channel 154 */
-	CHAN5G(5775), /* Channel 155 */
-	CHAN5G(5780), /* Channel 156 */
-	CHAN5G(5785), /* Channel 157 */
-	CHAN5G(5790), /* Channel 158 */
-	CHAN5G(5795), /* Channel 159 */
-	CHAN5G(5800), /* Channel 160 */
-	CHAN5G(5805), /* Channel 161 */
-	CHAN5G(5810), /* Channel 162 */
-	CHAN5G(5815), /* Channel 163 */
-	CHAN5G(5820), /* Channel 164 */
-	CHAN5G(5825), /* Channel 165 */
-};
-
-static struct ieee80211_channel nrc_channels_5ghz_nz[] = {
-	CHAN5G(5180), /* Channel 36 */
-	CHAN5G(5185), /* Channel 37 */
-	CHAN5G(5190), /* Channel 38 */
-	CHAN5G(5195), /* Channel 39 */
-	CHAN5G(5200), /* Channel 40 */
-	CHAN5G(5205), /* Channel 41 */
-	CHAN5G(5210), /* Channel 42 */
-	CHAN5G(5215), /* Channel 43 */
-	CHAN5G(5220), /* Channel 44 */
-	CHAN5G(5225), /* Channel 45 */
-	CHAN5G(5230), /* Channel 46 */
-	CHAN5G(5235), /* Channel 47 */
-	CHAN5G(5240), /* Channel 48 */
-	CHAN5G(5765), /* Channel 153 */
-	CHAN5G(5770), /* Channel 154 */
-	CHAN5G(5775), /* Channel 155 */
-	CHAN5G(5780), /* Channel 156 */
-	CHAN5G(5785), /* Channel 157 */
-	CHAN5G(5790), /* Channel 158 */
-	CHAN5G(5810), /* Channel 162 */
-	CHAN5G(5815), /* Channel 163 */
-	CHAN5G(5820), /* Channel 164 */
-};
-
-static struct ieee80211_channel nrc_channels_5ghz_au[] = {
-	CHAN5G(5180), /* Channel 36 */
-	CHAN5G(5185), /* Channel 37 */
-	CHAN5G(5190), /* Channel 38 */
-	CHAN5G(5195), /* Channel 39 */
-	CHAN5G(5200), /* Channel 40 */
-	CHAN5G(5205), /* Channel 41 */
-	CHAN5G(5210), /* Channel 42 */
-	CHAN5G(5215), /* Channel 43 */
-	CHAN5G(5220), /* Channel 44 */
-	CHAN5G(5225), /* Channel 45 */
-	CHAN5G(5230), /* Channel 46 */
-	CHAN5G(5235), /* Channel 47 */
-	CHAN5G(5240), /* Channel 48 */
-	CHAN5G(5765), /* Channel 153 */
-	CHAN5G(5770), /* Channel 154 */
-	CHAN5G(5775), /* Channel 155 */
-	CHAN5G(5780), /* Channel 156 */
-	CHAN5G(5785), /* Channel 157 */
-	CHAN5G(5790), /* Channel 158 */
-	CHAN5G(5810), /* Channel 162 */
-	CHAN5G(5815), /* Channel 163 */
-	CHAN5G(5820), /* Channel 164 */
-};
 #endif /* CONFIG_S1G_CHANNEL */
 
 
@@ -645,7 +496,7 @@ nrc_txq_pullable(struct nrc_txq *ntxq)
 		return true;
 	}
 	else {
-		pr_err("overrun, tx size:%d\n", ntxq->data_size);
+		pr_info("overrun, tx size:%d\n", ntxq->data_size);
 		return false;
 	}
 	return (ntxq->data_size < NR_NRC_MAX_TXQ_SIZE);
@@ -677,18 +528,21 @@ void nrc_wake_tx_queue(struct ieee80211_hw *hw, struct ieee80211_txq *txq)
 
 	local = &nw->ntxq[priv_ntxq->hw_queue];
 
-	while (nrc_txq_pullable(local) && max--) {
+	while (max--) {
 		skb = ieee80211_tx_dequeue(nw->hw, txq);
 		if (!skb)
 			break;
-
-		spin_lock_bh(&nw->txq_lock);
-		skb_queue_tail(&local->queue, skb);
+		if (nrc_txq_pullable(local)) {
+			spin_lock_bh(&nw->txq_lock);
+			skb_queue_tail(&local->queue, skb);
 #ifdef CONFIG_CHECK_DATA_SIZE
-		local->data_size += skb->len;
-		//pr_err("enqueue tx size:%d\n", local->data_size);
+			local->data_size += skb->len;
+			//pr_err("enqueue tx size:%d\n", local->data_size);
 #endif
-		spin_unlock_bh(&nw->txq_lock);
+			spin_unlock_bh(&nw->txq_lock);
+		} else {
+			dev_kfree_skb(skb);
+		}
 	}
 
 	if (nw->drv_state == NRC_DRV_PS) {
@@ -1645,9 +1499,35 @@ void nrc_mac_bss_info_changed(struct ieee80211_hw *hw,
 		nrc_mac_dbg("%s(changed:%s)", __func__,
 				"BSS_CHANGED_IDLE");
 #ifdef CONFIG_SUPPORT_AFTER_KERNEL_3_0_36
-	if (changed & BSS_CHANGED_TXPOWER)
-		nrc_mac_dbg("%s(changed:%s[PW=%d])", __func__,
-			"BSS_CHANGED_TXPOWER", info->txpower);
+	if (changed & BSS_CHANGED_TXPOWER) {
+		int txpower = info->txpower;
+		uint16_t txpower_type = info->txpower_type;
+		nrc_mac_dbg("%s(changed:%s[PW=%d TYPE=%s])", __func__,
+			"BSS_CHANGED_TXPOWER", txpower,
+			txpower_type == TXPWR_LIMIT ? "limit" : txpower_type ? "fixed" : "auto");
+#ifdef CONFIG_SUPPORT_IW_TXPWR
+#ifdef CONFIG_SUPPORT_BD
+		/**
+		 * cli_app cannot be used on openWRT system. so use "iw phy nrc80211 set txpower"
+		 * But, txpower could be limited smaller than expected by user in this cse
+		 * since the max value of txpower via iw command should comply the regulations.
+		 * So, it's necessary to change it forcibly in here when txpower type is limit(1) or auto(0).
+		 * Then, the actual txpower will be assigned as the value in bd file finally.
+		 */
+		if (txpower_type < TXPWR_FIXED && txpower < 24) {
+			nrc_mac_dbg("%s max txpower was changed (%d -> 30)",__func__, txpower);
+			txpower = 24;
+		}
+#endif /* CONFIG_SUPPORT_BD */
+		if (txpower < 1 || txpower > 30) {
+			nrc_mac_dbg("%s invalid txpowr (%d)", __func__, txpower);
+		} else {
+			u32 p = txpower_type;
+			p = (p << 16) | txpower;
+			nrc_wim_skb_add_tlv(skb, WIM_TLV_SET_TXPOWER, sizeof(u32), &p);
+		}
+#endif /* CONFIG_SUPPORT_IW_TXPWR */
+	}
 	if (changed & BSS_CHANGED_P2P_PS) {
 		nrc_mac_dbg("%s(changed:%s)", __func__,
 				"BSS_CHANGED_P2P_PS");
@@ -3000,12 +2880,6 @@ int nrc_reg_notifier(struct wiphy *wiphy,
 		struct regulatory_request *request)
 #endif
 {
-	struct ieee80211_supported_band *sband = NULL;
-#ifdef CONFIG_USE_NEW_BAND_ENUM
-	enum nl80211_band band;
-#else
-	enum ieee80211_band band;
-#endif
 #if defined(CONFIG_SUPPORT_BD)
 	int i;
 	struct wim_bd_param *bd_param = NULL;
@@ -3026,83 +2900,6 @@ int nrc_reg_notifier(struct wiphy *wiphy,
 #else
 		return 0;
 #endif
-	}
-
-#ifdef CONFIG_USE_NEW_BAND_ENUM
-	for (band = NL80211_BAND_2GHZ; band < NUM_NL80211_BANDS; band++) {
-#else
-	for (band = NL80211_BAND_2GHZ; band < IEEE80211_NUM_BANDS; band++) {
-#endif
-		sband = &nw->bands[band];
-
-		switch (band) {
-		case NL80211_BAND_2GHZ:
-			/* Set Legacy 2.4GHz CHs that are used only for country US (45CHs) */
-			if (nw->alpha2[0] != 'U' && nw->alpha2[1] != 'S') {
-				if (!(nw->cap.cap_mask & WIM_SYSTEM_CAP_CHANNEL_2G))
-					continue;
-				sband->channels = nrc_channels_2ghz;
-				sband->n_channels = ARRAY_SIZE(nrc_channels_2ghz);
-				sband->bitrates = nrc_rates;
-				sband->n_bitrates = ARRAY_SIZE(nrc_rates);
-				sband->band = NL80211_BAND_2GHZ;
-				sband->ht_cap.ht_supported = true;
-				sband->ht_cap.cap = IEEE80211_HT_CAP_SGI_20;
-				sband->ht_cap.cap |= IEEE80211_HT_CAP_SGI_40;
-				sband->ht_cap.cap |= IEEE80211_HT_CAP_SUP_WIDTH_20_40;
-				sband->ht_cap.cap |= IEEE80211_HT_CAP_DSSSCCK40;
-				sband->ht_cap.cap |=
-					(1 << IEEE80211_HT_CAP_RX_STBC_SHIFT);
-				sband->ht_cap.ampdu_factor =
-					IEEE80211_HT_MAX_AMPDU_16K;
-				sband->ht_cap.ampdu_density =
-					IEEE80211_HT_MPDU_DENSITY_8;
-			}
-			break;
-
-		case NL80211_BAND_5GHZ:
-			/* Set Legacy 5Hz CHs that are used for all the counties
-				with different number of CHs */
-			if (!(nw->cap.cap_mask & WIM_SYSTEM_CAP_CHANNEL_5G))
-				continue;
-			if (nw->alpha2[0] == 'J' && nw->alpha2[1] == 'P') {
-				sband->channels = nrc_channels_5ghz_jp;
-				sband->n_channels = ARRAY_SIZE(nrc_channels_5ghz_jp);
-			} else if (nw->alpha2[0] == 'T' && nw->alpha2[1] == 'W') {
-				sband->channels = nrc_channels_5ghz_tw;
-				sband->n_channels = ARRAY_SIZE(nrc_channels_5ghz_tw);
-			} else if (nw->alpha2[0] == 'A' && nw->alpha2[1] == 'U') {
-				sband->channels = nrc_channels_5ghz_au;
-				sband->n_channels = ARRAY_SIZE(nrc_channels_5ghz_au);
-			} else if (nw->alpha2[0] == 'N' && nw->alpha2[1] == 'Z') {
-				sband->channels = nrc_channels_5ghz_nz;
-				sband->n_channels = ARRAY_SIZE(nrc_channels_5ghz_nz);
-			} else if (nw->alpha2[0] == 'E' && nw->alpha2[1] == 'U') {
-				sband->channels = nrc_channels_5ghz_eu;
-				sband->n_channels = ARRAY_SIZE(nrc_channels_5ghz_eu);
-			} else if (nw->alpha2[0] == 'C' && nw->alpha2[1] == 'N') {
-				sband->channels = nrc_channels_5ghz_cn;
-				sband->n_channels = ARRAY_SIZE(nrc_channels_5ghz_cn);
-			} else if (nw->alpha2[0] == 'K' && nw->alpha2[1] == 'R') {
-				if (enable_usn) {
-					sband->channels = nrc_channels_5ghz_k1;
-					sband->n_channels = ARRAY_SIZE(nrc_channels_5ghz_k1);
-				} else {
-					sband->channels = nrc_channels_5ghz_k2;
-					sband->n_channels = ARRAY_SIZE(nrc_channels_5ghz_k2);
-				}
-			}
-			break;
-		default:
-			continue;
-		}
-
-		memset(&sband->ht_cap.mcs, 0, sizeof(sband->ht_cap.mcs));
-
-		sband->ht_cap.mcs.rx_mask[0] = 0xff;
-		sband->ht_cap.mcs.tx_params = IEEE80211_HT_MCS_TX_DEFINED;
-
-		hw->wiphy->bands[band] = sband;
 	}
 
 #if defined(CONFIG_SUPPORT_BD)
@@ -3715,11 +3512,27 @@ int nrc_register_hw(struct nrc *nw)
 			sband->ht_cap.ampdu_density =
 				IEEE80211_HT_MPDU_DENSITY_8;
 			break;
-		/**
-		 * this 2GHz band is only necessary when CC is 'US' and
-		 * it will be assigned in 'nrc_reg_notifier()' later.
-		 */
+
 		case NL80211_BAND_2GHZ:
+			if (!(nw->cap.cap_mask & WIM_SYSTEM_CAP_CHANNEL_2G))
+				continue;
+			sband->channels = nrc_channels_2ghz;
+			sband->n_channels = ARRAY_SIZE(nrc_channels_2ghz);
+			sband->bitrates = nrc_rates;
+			sband->n_bitrates = ARRAY_SIZE(nrc_rates);
+			sband->band = NL80211_BAND_2GHZ;
+			sband->ht_cap.ht_supported = true;
+			sband->ht_cap.cap = IEEE80211_HT_CAP_SGI_20;
+			sband->ht_cap.cap |= IEEE80211_HT_CAP_SGI_40;
+			sband->ht_cap.cap |= IEEE80211_HT_CAP_SUP_WIDTH_20_40;
+			sband->ht_cap.cap |= IEEE80211_HT_CAP_DSSSCCK40;
+			sband->ht_cap.cap |=
+				(1 << IEEE80211_HT_CAP_RX_STBC_SHIFT);
+			sband->ht_cap.ampdu_factor =
+				IEEE80211_HT_MAX_AMPDU_16K;
+			sband->ht_cap.ampdu_density =
+				IEEE80211_HT_MPDU_DENSITY_8;
+			break;
 #endif /* CONFIG_S1G_CHANNEL */
 		default:
 			continue;

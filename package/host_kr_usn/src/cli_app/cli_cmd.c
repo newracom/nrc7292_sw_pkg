@@ -210,7 +210,7 @@ cmd_tbl_t show_sub_list[] = {
 
 /* sub command list on set */
 cmd_tbl_t set_sub_list[] = {
-	{ "gi", cmd_set_guard_interval, "set guard interval", "set gi {short|long|auto}", "", 0},
+	{ "gi", cmd_set_guard_interval, "set guard interval", "set gi {short|long|auto} [0|1]", "", 0},
 	{ "maxagg", cmd_set_max_aggregation, "set aggregation", "set maxagg {AC(0-3)} <Max(0-8(1Mhz),0-16(2,4Mhz),0:off)> {size:default=0}", SET_MAXAGG_KEY_LIST, 0},
 	//{ "config", cmd_set_config, "set ack, aggregation, mcs", "set config {ack(0,1)} {agg(0,1)} [mcs]", SET_CONFIG_KEY_LIST, 0},
 	{ "ack_mode", cmd_set_ackmode, "set ack mode", "set ack_mode {no|ndp|normal|show}", SET_ACK_MODE_LIST, 0},
@@ -1597,7 +1597,7 @@ static int cmd_set_guard_interval(cmd_tbl_t *t, int argc, char *argv[])
 		cmd_help(NULL, 0, NULL);
 		ret = CMD_RET_FAILURE;
 	}else{
-		sprintf(param, "set gi %s", argv[2]);
+		sprintf(param, "set gi %s %s", argv[2], argv[3]);
 		netlink_ret = netlink_send_data(NL_SHELL_RUN, param, response);
 		if(!netlink_ret){
 			if(strcmp(response, response_timeout_str)== 0){

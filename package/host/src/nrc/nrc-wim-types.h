@@ -208,6 +208,7 @@ enum WIM_TLV_ID {
 	WIM_TLV_SAE_PARAM,
 	WIM_TLV_DRV_INFO,
 	WIM_TLV_NDP_ACK_1M, //65
+	WIM_TLV_SET_TXPOWER,
 	WIM_TLV_LEGACY_ACK,
 	WIM_TLV_MAX,
 };
@@ -858,6 +859,12 @@ struct wim_s1g_channel_param {
 	uint16_t op_freq;
 	uint16_t width;
 	uint16_t flags;
+};
+
+enum WIM_TXPWR_TYPE {
+	TXPWR_AUTO = 0,
+	TXPWR_LIMIT,
+	TXPWR_FIXED,
 };
 
 #endif /* _NRC_WIM_TYPES_H_ */

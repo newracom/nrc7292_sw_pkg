@@ -128,6 +128,9 @@ bitmap_encoding   = 1         # 0 (disable) or 1 (enable)
 #--------------------------------------------------------------------------------#
 # User scrambler reversely (NRC7292 only)
 reverse_scrambler = 1         # 0 (disable) or 1 (enable)
+#--------------------------------------------------------------------------------#
+# Use bridge setup with br0, wlan0, eth(n) (AP & STA)
+use_bridge_setup = 0         # 0 (not use bridge setup) or n (use bridge setup with eth(n-1))
 ##################################################################################
 
 def check(interface):
@@ -635,6 +638,15 @@ def run_sta(interface):
     country = str(sys.argv[3])
     os.system("sudo killall -9 wpa_supplicant")
 
+    if strSTA() == 'STA' and int(use_bridge_setup) > 0:
+        bridge = '-b br0 '
+        eth = 'eth' + str(int(use_bridge_setup) - 1)
+        print('[*] STA bridge configuration')
+        os.system('sudo brctl addbr br0; sudo ifconfig {e} up; sudo ifconfig wlan0 0.0.0.0; sudo ifconfig {e} 0.0.0.0; sudo iw wlan0 set 4addr on; sudo brctl addif br0 wlan0; sudo brctl addif br0 {e}; sudo ifconfig br0 up'.format(e=eth))
+        os.system('sudo brctl show')
+    else:
+        bridge = ''
+
     if int(supplicant_debug) == 1:
         debug = '-dddd'
     else:
@@ -646,15 +658,15 @@ def run_sta(interface):
 
     print("[6] Start wpa_supplicant on " + interface)
     if strSecurity() == 'OPEN':
-        os.system("sudo wpa_supplicant -i" + interface + " -c /home/pi/nrc_pkg/script/conf/" + country + "/sta_halow_open.conf " + debug + " &")
+        os.system("sudo wpa_supplicant -i" + interface + " -c /home/pi/nrc_pkg/script/conf/" + country + "/sta_halow_open.conf " + bridge + debug + " &")
     elif strSecurity() == 'WPA2-PSK':
-        os.system("sudo wpa_supplicant -i" + interface + " -c /home/pi/nrc_pkg/script/conf/" + country + "/sta_halow_wpa2.conf " + debug + " &")
+        os.system("sudo wpa_supplicant -i" + interface + " -c /home/pi/nrc_pkg/script/conf/" + country + "/sta_halow_wpa2.conf " + bridge + debug + " &")
     elif strSecurity() == 'WPA3-OWE':
-        os.system("sudo wpa_supplicant -i" + interface + " -c /home/pi/nrc_pkg/script/conf/" + country + "/sta_halow_owe.conf " + debug + " &")
+        os.system("sudo wpa_supplicant -i" + interface + " -c /home/pi/nrc_pkg/script/conf/" + country + "/sta_halow_owe.conf " + bridge + debug + " &")
     elif strSecurity() == 'WPA3-SAE':
-        os.system("sudo wpa_supplicant -i" + interface + " -c /home/pi/nrc_pkg/script/conf/" + country + "/sta_halow_sae.conf " + debug + " &")
+        os.system("sudo wpa_supplicant -i" + interface + " -c /home/pi/nrc_pkg/script/conf/" + country + "/sta_halow_sae.conf " + bridge + debug + " &")
     elif strSecurity() == 'WPA-PBC':
-        os.system("sudo wpa_supplicant -i" + interface + " -c /home/pi/nrc_pkg/script/conf/" + country + "/sta_halow_pbc.conf " + debug + " &")
+        os.system("sudo wpa_supplicant -i" + interface + " -c /home/pi/nrc_pkg/script/conf/" + country + "/sta_halow_pbc.conf " + bridge + debug + " &")
         time.sleep(1)
         os.system("sudo wpa_cli wps_pbc")
     time.sleep(3)
@@ -689,8 +701,28 @@ def launch_hostapd(interface, orig_hostapd_conf_file, country, debug, channel):
 
 def run_ap(interface):
     country = str(sys.argv[3])
+    conf_path = script_path + "conf/" + country
+    conf_file = ""
     global self_config
     channel = None
+
+    if strSecurity() == "OPEN" :
+        conf_file+="/ap_halow_open.conf"
+    elif strSecurity() == 'WPA2-PSK' :
+        conf_file+="/ap_halow_wpa2.conf"
+    elif strSecurity() == 'WPA3-OWE' :
+        conf_file+="/ap_halow_owe.conf"
+    elif strSecurity() == 'WPA3-SAE' :
+        conf_file+="/ap_halow_sae.conf"
+    elif strSecurity() == 'WPA-PBC' :
+        conf_file+="/ap_halow_pbc.conf"
+
+    if strSTA() == 'AP' and int(use_bridge_setup) > 0:
+        # Remove '#' before wds_sta, bridge in conf file
+        os.system("sed -i /wds_sta/,/bridge/s/##*// " + conf_path + conf_file)
+    else:
+        # Add '#' before wds_sta, bridge in conf file
+        os.system("sed -i /wds_sta/,/bridge/'s/^/#/;/wds_sta/,/bridge/s/##*/#/' " + conf_path + conf_file)
 
     if len(sys.argv) > 4 :
         channel = str(sys.argv[4])
@@ -720,19 +752,18 @@ def run_ap(interface):
             time.sleep(1)
             os.system("sudo hostapd_cli wps_pbc")
     else:
-        if strSecurity() == 'OPEN':
-            launch_hostapd( interface, '/home/pi/nrc_pkg/script/conf/'+country+'/ap_halow_open.conf', country, debug ,channel )
-        elif strSecurity() == 'WPA2-PSK':
-            launch_hostapd( interface, '/home/pi/nrc_pkg/script/conf/'+country+'/ap_halow_wpa2.conf', country, debug ,channel )
-        elif strSecurity() == 'WPA3-OWE':
-            launch_hostapd( interface, '/home/pi/nrc_pkg/script/conf/'+country+'/ap_halow_owe.conf', country, debug, channel )
-        elif strSecurity() == 'WPA3-SAE':
-            launch_hostapd( interface, '/home/pi/nrc_pkg/script/conf/'+country+'/ap_halow_sae.conf', country, debug, channel )
-        elif strSecurity() == 'WPA-PBC':
-            launch_hostapd( interface, '/home/pi/nrc_pkg/script/conf/'+country+'/ap_halow_pbc.conf', country, debug, channel )
+        launch_hostapd( interface, '/home/pi/nrc_pkg/script/conf/' + country + conf_file, country, debug, channel )
+        if strSecurity() == 'WPA-PBC':            
             time.sleep(1)
             os.system("sudo hostapd_cli wps_pbc")
     time.sleep(3)
+
+    if strSTA() == 'AP' and int(use_bridge_setup) > 0:
+        print('[*] AP bridge configuration')
+        eth = 'eth' + str(int(use_bridge_setup) - 1)
+        os.system('sudo ifconfig {e} up; sudo ifconfig wlan0 0.0.0.0; sudo ifconfig {e} 0.0.0.0; sudo brctl addif br0 {e}; sudo ifconfig br0 up; sudo dhclient br0 -v '.format(e=eth))
+        os.system('sudo brctl show')
+        time.sleep(3)
 
     print("[7] Start NAT")
     startNAT()
