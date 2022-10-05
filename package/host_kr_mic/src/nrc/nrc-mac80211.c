@@ -56,6 +56,18 @@
 	.center_freq_fractional = (_freq_partial) \
 }
 
+char nrc_cc[2];
+
+#define US_BASE_FREQ	2412
+#define K1_BASE_FREQ	5220
+#define K2_BASE_FREQ	5180
+#define JP_BASE_FREQ	5180
+#define TW_BASE_FREQ	5180
+#define EU_BASE_FREQ	5180
+#define CN_BASE_FREQ	5180
+#define NZ_BASE_FREQ	5180
+#define AU_BASE_FREQ	5180
+
 #define CHAN2G(freq)			\
 {								\
 	.band = NL80211_BAND_2GHZ,	\
@@ -1118,6 +1130,36 @@ get_wim_channel_width(enum nl80211_chan_width width)
 	}
 }
 
+uint16_t get_base_freq (void)
+{
+	uint16_t ret_freq = 0;
+
+	if (nrc_cc[0] == 'U' && nrc_cc[1] == 'S') {
+		ret_freq = US_BASE_FREQ;
+	} else if (nrc_cc[0] == 'J' && nrc_cc[1] == 'P') {
+		ret_freq = JP_BASE_FREQ;
+	} else if (nrc_cc[0] == 'T' && nrc_cc[1] == 'W') {
+		ret_freq = TW_BASE_FREQ;
+	} else if (nrc_cc[0] == 'A' && nrc_cc[1] == 'U') {
+		ret_freq = AU_BASE_FREQ;
+	} else if (nrc_cc[0] == 'N' && nrc_cc[1] == 'Z') {
+		ret_freq = NZ_BASE_FREQ;
+	} else if (nrc_cc[0] == 'E' && nrc_cc[1] == 'U') {
+		ret_freq = EU_BASE_FREQ;
+	} else if (nrc_cc[0] == 'C' && nrc_cc[1] == 'N') {
+		ret_freq = CN_BASE_FREQ;
+	} else if (nrc_cc[0] == 'K' && nrc_cc[1] == 'R') {
+		if (enable_usn) {
+			ret_freq = K1_BASE_FREQ;
+		} else {
+			ret_freq = K2_BASE_FREQ;
+		}
+	}
+	else {
+	}
+	return ret_freq;
+}
+
 #ifdef CONFIG_SUPPORT_CHANNEL_INFO
 void nrc_mac_add_tlv_channel(struct sk_buff *skb,
 					struct cfg80211_chan_def *chandef)
@@ -1176,11 +1218,24 @@ static int nrc_mac_config(struct ieee80211_hw *hw, u32 changed)
 	struct wim_pm_param *p;
 	struct sk_buff *skb;
 	struct nrc_txq *ntxq;
-	int ret = 0;
-	int i;
+	int ret = 0, i;
+	struct ieee80211_channel ch = {0,};
 #if defined(CONFIG_SUPPORT_BD)
 	bool supp_ch_flag = false;
+#endif /* defined(CONFIG_SUPPORT_BD) */
+#ifdef CONFIG_SUPPORT_CHANNEL_INFO
+	struct cfg80211_chan_def chandef = {0,};
+	memcpy(&chandef, &hw->conf.chandef, sizeof(struct cfg80211_chan_def));
+	memcpy(&ch, hw->conf.chandef.chan, sizeof(struct ieee80211_channel));
+	chandef.chan = &ch;
+#else
+	struct ieee80211_conf chandef = {0,};
+	memcpy(&chandef, &hw->conf, sizeof(struct ieee80211_conf));
+	memcpy(&ch, hw->conf.channel, sizeof(struct ieee80211_channel));
+	chandef.channel = &ch;
+#endif
 
+#if defined(CONFIG_SUPPORT_BD)
 	if(g_supp_ch_list.num_ch) {
 		if (changed & IEEE80211_CONF_CHANGE_CHANNEL) {
 			for(i=0; i < g_supp_ch_list.num_ch; i++) {
@@ -1190,12 +1245,30 @@ static int nrc_mac_config(struct ieee80211_hw *hw, u32 changed)
 					break;
 				}
 			}
+			if (!supp_ch_flag && nw->alpha2[0] != 'U' && nw->alpha2[1] != 'S' &&
+				hw->conf.chandef.chan->center_freq == 2412) {
+				supp_ch_flag = true;
+#ifdef CONFIG_SUPPORT_CHANNEL_INFO
+				chandef.chan->center_freq = g_supp_ch_list.nons1g_ch_freq[0];
+#else
+				chandef.channel->center_freq = g_supp_ch_list.nons1g_ch_freq[0];
+#endif /* CONFIG_SUPPORT_CHANNEL_INFO */
+			}
 			if(!supp_ch_flag) {
 				nrc_mac_dbg("%s: Not supported channel %u",
 					__func__, hw->conf.chandef.chan->center_freq);
 				return -EINVAL;
 			}
 		}
+	}
+#else
+	if (nw->alpha2[0] != 'U' && nw->alpha2[1] != 'S' &&
+			hw->conf.chandef.chan->center_freq == 2412) {
+#ifdef CONFIG_SUPPORT_CHANNEL_INFO
+		chandef.chan->center_freq = get_base_freq();
+#else
+		chandef.channel->center_freq = get_base_freq();
+#endif /* CONFIG_SUPPORT_CHANNEL_INFO */
 	}
 #endif /* defined(CONFIG_SUPPORT_BD) */
 
@@ -1213,11 +1286,7 @@ static int nrc_mac_config(struct ieee80211_hw *hw, u32 changed)
 #endif
 
 		if (!atomic_read(&nw->d_deauth.delayed_deauth)) {
-#ifdef CONFIG_SUPPORT_CHANNEL_INFO
-			nrc_mac_add_tlv_channel(skb, &hw->conf.chandef);
-#else
-			nrc_mac_add_tlv_channel(skb, &hw->conf);
-#endif
+			nrc_mac_add_tlv_channel(skb, &chandef);
 		} else {
 #ifdef CONFIG_SUPPORT_CHANNEL_INFO
 			memcpy(&nw->d_deauth.c, &hw->conf.chandef, sizeof(struct cfg80211_chan_def));
@@ -2891,7 +2960,8 @@ int nrc_reg_notifier(struct wiphy *wiphy,
 	nrc_mac_dbg("info: cfg80211 regulatory domain callback for %c%c",
 			request->alpha2[0], request->alpha2[1]);
 	nrc_mac_dbg("request->initiator:%d", request->initiator);
-
+	nrc_cc[0] = request->alpha2[0];
+	nrc_cc[1] = request->alpha2[1];
 	if((request->alpha2[0] == '0' && request->alpha2[1] == '0') ||
 		(request->alpha2[0] == '9' && request->alpha2[1] == '9')) {
 		nrc_mac_dbg("CC is 00 or 99. Skip loading BD and setting CC");

@@ -441,7 +441,6 @@ int cmd_sta_umac_info_mini_result_parse(char *value, int *display_start_index, i
 	return more;
 }
 
-
 int cmd_set_maxagg_result_parse(char *value)
 {
 	const char *str_ac[4] ={"BK", "BE", "VI", "VO"};
@@ -462,16 +461,16 @@ int cmd_set_maxagg_result_parse(char *value)
 
 	printf("-- updated aggregation\n");
 
-	if(maxagg_info->is_ap)
-		printf("[STA AID: %4d]\n",  maxagg_info->aid);
+	if(maxagg_info->is_ap && maxagg_info->aid) {
+		printf("[STA AID: %4d]\n", maxagg_info->aid);
+	}
 
 	printf("AC(%s): STATUS(%s) MAXNUM(%2d) SIZE(%d)\n",
 		str_ac[maxagg_info->ac], str_state[maxagg_info->state],
-		maxagg_info->max_agg_num, 	maxagg_info->agg_num_size);
+		maxagg_info->max_agg_num, maxagg_info->agg_num_size);
 
 	return 0;
 }
-
 
 int cmd_show_maxagg_result_parse(char *value, int *display_start_index)
 {

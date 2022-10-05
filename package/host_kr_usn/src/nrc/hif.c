@@ -909,8 +909,7 @@ static int hif_receive_skb(struct nrc_hif_device *dev, struct sk_buff *skb)
 #endif
 	default:
 		print_hex_dump(KERN_DEBUG, "hif type err ", DUMP_PREFIX_NONE,
-				16, 1, skb->data, skb->len, false);
-		BUG();
+				16, 1, skb->data, skb->len > 32 ? 32 : skb->len, false);
 		dev_kfree_skb(skb);
 	}
 	return 0;
