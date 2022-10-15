@@ -438,6 +438,11 @@ int nrc_wim_set_sta_type(struct nrc *nw, struct ieee80211_vif *vif)
 	struct sk_buff *skb;
 	int sta_type, skb_len;
 
+	if ((nw->vif[0] && nw->vif[1])
+	    || vif->type == NL80211_IFTYPE_MESH_POINT) {
+		sw_enc = 1;
+	}
+
 	sta_type = to_wim_sta_type(ieee80211_iftype_p2p(vif->type, vif->p2p));
 	if (sta_type < 0)
 		return -ENOTSUPP;
