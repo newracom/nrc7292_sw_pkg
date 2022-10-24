@@ -606,7 +606,6 @@ static struct sk_buff *spi_rx_skb(struct spi_device *spi,
 				skb->data, 480, false);
 		priv->slot[RX_SLOT].tail++;
 		msleep(100);
-		//BUG();
 		goto fail;
 	}
 

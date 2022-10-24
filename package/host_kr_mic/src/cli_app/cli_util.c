@@ -441,7 +441,6 @@ int cmd_sta_umac_info_mini_result_parse(char *value, int *display_start_index, i
 	return more;
 }
 
-
 int cmd_set_maxagg_result_parse(char *value)
 {
 	const char *str_ac[4] ={"BK", "BE", "VI", "VO"};
@@ -462,16 +461,16 @@ int cmd_set_maxagg_result_parse(char *value)
 
 	printf("-- updated aggregation\n");
 
-	if(maxagg_info->is_ap)
-		printf("[STA AID: %4d]\n",  maxagg_info->aid);
+	if(maxagg_info->is_ap && maxagg_info->aid) {
+		printf("[STA AID: %4d]\n", maxagg_info->aid);
+	}
 
 	printf("AC(%s): STATUS(%s) MAXNUM(%2d) SIZE(%d)\n",
 		str_ac[maxagg_info->ac], str_state[maxagg_info->state],
-		maxagg_info->max_agg_num, 	maxagg_info->agg_num_size);
+		maxagg_info->max_agg_num, maxagg_info->agg_num_size);
 
 	return 0;
 }
-
 
 int cmd_show_maxagg_result_parse(char *value, int *display_start_index)
 {
@@ -504,9 +503,18 @@ int cmd_show_maxagg_result_parse(char *value, int *display_start_index)
 		}
 
 		for (int j=0; j<4; j++) {
+#if 0
 			printf("AC_%s: %3s (%2d, %4d bytes), BA session: %s\n",
 				str_ac[maxagg_info->ac], str_state[maxagg_info->state], maxagg_info->max_agg_num,
 				maxagg_info->agg_num_size, str_ba_session[maxagg_info->ba_session]);
+#else
+			printf("AC_%s: %3s",str_ac[maxagg_info->ac], str_state[maxagg_info->state]);
+			if (maxagg_info->state) {
+				printf(" (%2d, %4d bytes)\n",maxagg_info->max_agg_num, maxagg_info->agg_num_size);
+			} else {
+				printf("\n");
+			}
+#endif
 			index += sizeof(xfer_maxagg_info);
 			maxagg_info = (xfer_maxagg_info*) &value[index];
 		}

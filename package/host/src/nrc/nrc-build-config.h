@@ -151,4 +151,7 @@
 /* Check tx queue total data size, not just queue length */
 #define CONFIG_CHECK_DATA_SIZE
 
+/* uncomment define below to set tx power via iw */
+/* #define CONFIG_SUPPORT_IW_TXPWR */
+
 #endif
