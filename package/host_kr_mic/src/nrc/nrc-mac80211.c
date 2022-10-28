@@ -1571,11 +1571,11 @@ void nrc_mac_bss_info_changed(struct ieee80211_hw *hw,
 	if (changed & BSS_CHANGED_TXPOWER) {
 		int txpower = info->txpower;
 		uint16_t txpower_type = info->txpower_type;
-		nrc_mac_dbg("%s(changed:%s[PW=%d TYPE=%s])", __func__,
+		nrc_common_dbg("%s(changed:%s[PW=%d TYPE=%s])", __func__,
 			"BSS_CHANGED_TXPOWER", txpower,
 			txpower_type == TXPWR_LIMIT ? "limit" : txpower_type ? "fixed" : "auto");
 #ifdef CONFIG_SUPPORT_IW_TXPWR
-#ifdef CONFIG_SUPPORT_BD
+#if 0 //def CONFIG_SUPPORT_BD
 		/**
 		 * cli_app cannot be used on openWRT system. so use "iw phy nrc80211 set txpower"
 		 * But, txpower could be limited smaller than expected by user in this cse
@@ -1584,12 +1584,12 @@ void nrc_mac_bss_info_changed(struct ieee80211_hw *hw,
 		 * Then, the actual txpower will be assigned as the value in bd file finally.
 		 */
 		if (txpower_type < TXPWR_FIXED && txpower < 24) {
-			nrc_mac_dbg("%s max txpower was changed (%d -> 30)",__func__, txpower);
+			nrc_common_dbg("%s max txpower was changed (%d -> 30)",__func__, txpower);
 			txpower = 24;
 		}
 #endif /* CONFIG_SUPPORT_BD */
 		if (txpower < 1 || txpower > 30) {
-			nrc_mac_dbg("%s invalid txpowr (%d)", __func__, txpower);
+			nrc_common_dbg("%s invalid txpowr (%d)", __func__, txpower);
 		} else {
 			u32 p = txpower_type;
 			p = (p << 16) | txpower;
@@ -2983,10 +2983,10 @@ int nrc_reg_notifier(struct wiphy *wiphy,
 	}
 
 	if(bd_param) {
-		nrc_dbg(NRC_DBG_MAC,"type %04X length %04X checksum %04X target_ver %04X",
+		nrc_dbg(NRC_DBG_BD,"type %04X length %04X checksum %04X target_ver %04X",
 				bd_param->type, bd_param->length, bd_param->checksum, bd_param->hw_version);
 		for(i=0; i < bd_param->length - 4;) {
-			nrc_dbg(NRC_DBG_MAC,"%02d %02d %02d %02d %02d %02d %02d %02d %02d %02d %02d %02d",
+			nrc_dbg(NRC_DBG_BD,"%02d %02d %02d %02d %02d %02d %02d %02d %02d %02d %02d %02d",
 				(bd_param->value[i]), (bd_param->value[i+1]), (bd_param->value[i+2]),
 				(bd_param->value[i+3]), (bd_param->value[i+4]), (bd_param->value[i+5]),
 				(bd_param->value[i+6]), (bd_param->value[i+7]), (bd_param->value[i+8]),
