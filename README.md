@@ -2,6 +2,7 @@
 
 ## Notice
 ### Release roadmap
+- v1.3.4_rev13 (2022.11.30)
 - v1.3.4_rev12 (2022.10.28)
 - v1.3.4_rev11 (2022.10.14)
 - v1.3.4_rev10 (2022.10.05)
@@ -21,7 +22,7 @@
 - v1.3.0 (2020.05.30)
 
 ### Latest release
-- [NRC7292_SW_PKG_v1.3.4_rev12](https://github.com/newracom/nrc7292_sw_pkg/releases/tag/v1.3.4_rev12)
+- [NRC7292_SW_PKG_v1.3.4_rev13](https://github.com/newracom/nrc7292_sw_pkg/releases/tag/v1.3.4_rev13)
 
 ### Release package contents
 - host: NRC7292 software package for global regulatory domains
@@ -117,7 +118,7 @@ There are a couple of configurable parameters as below.
 max_cpuclock      = 1         # Set Max CPU Clock : 0(off) or 1(on)
 ##################################################################################
 # Firmware Conf.
-model             = 7292      # 7292 or 7192
+model             = 7292      # 7292
 fw_download       = 1         # 0(FW Download off) or 1(FW Download on)
 fw_name           = 'uni_s1g.bin'
 ##################################################################################
@@ -132,33 +133,49 @@ supplicant_debug  = 0         # WPA Supplicant debug option : 0(off) or 1(on)
 hostapd_debug     = 0         # Hostapd debug option    : 0(off) or 1(on)
 #################################################################################
 # CSPI Conf. (Default)
-spi_clock         = 20000000  # SPI Master Clock Frequency
-spi_bus_num       = 0         # SPI Master Bus Number
-spi_cs_num        = 0         # SPI Master Chipselect Number
-spi_gpio_irq      = 5         # CSPI_EIRQ GPIO Number, BBB is 60 recommanded.
-spi_gpio_poll     = -1        # CSPI_EIRQ GPIO Polling Interval (if negative, irq mode)
+spi_clock    = 20000000       # SPI Master Clock Frequency
+spi_bus_num  = 0              # SPI Master Bus Number
+spi_cs_num   = 0              # SPI Master Chipselect Number
+spi_gpio_irq = 5              # NRC-CSPI EIRQ GPIO Number
+                              # BBB is 60 recommanded.
+spi_polling_interval = 0      # NRC-CSPI Polling Interval (msec)
+
+#
+# NOTE:
+#  - NRC-CSPI EIRQ Input Interrupt: spi_gpio_irq >= 0 and spi_polling_interval <= 0
+#  - NRC-CSPI EIRQ Input Polling  : spi_gpio_irq >= 0 and spi_polling_interval > 0
+#  - NRC-CSPI Registers Polling   : spi_gpio_irq < 0 and spi_polling_interval > 0
+#
 #--------------------------------------------------------------------------------#
 # FT232H USB-SPI Conf. (FT232H CSPI Conf)
-ft232h_usb_spi    = 0         # FTDI FT232H USB-SPI bridge : 0(off) or 1(on)
+ft232h_usb_spi = 0            # FTDI FT232H USB-SPI bridge
+                              # 0 : Unused
+                              # 1 : NRC-CSPI_EIRQ Input Polling
+                              # 2 : NRC-CSPI Registers Polling
 #################################################################################
 # RF Conf.
-# Board Data includes TX Power per MCS and CH
-txpwr_val         = 17       # TX Power
+# Max TX PWR
 txpwr_max_default = 24       # Board Data Max TX Power
-bd_download       = 0        # 0(Board Data Download off) or 1(Board Data Download on)
-bd_name           = 'nrc7292_bd.dat'
 #--------------------------------------------------------------------------------#
-# Calibration usage option
-#  If this value is changed, the device should be restarted for applying the value
-cal_use            = 1       # 0(disable) or 1(enable)
+
 ##################################################################################
 # PHY Conf.
 guard_int         = 'long'   # Guard Interval ('long'(LGI) or 'short'(SGI))
 ##################################################################################
 # MAC Conf.
+# S1G Short Beacon (AP & MESH Only)
+#  If disabled, AP sends only S1G long beacon every BI
+#  Recommend using S1G short beacon for network efficiency (Default: enabled)
+short_bcn_enable  = 1        # 0 (disable) or 1 (enable)
+#--------------------------------------------------------------------------------#
 # AMPDU (Aggregated MPDU)
 #  Enable AMPDU for full channel utilization and throughput enhancement
 ampdu_enable      = 1        # 0 (disable) or 1 (enable)
+#--------------------------------------------------------------------------------#
+# Legacy ACK enable (AP & STA)
+#  If disabled, AP/STA sends only NDP ack frame
+#  Recommend using NDP ack mode  (Default: disable)
+legacy_ack_enable  = 0        # 0 (NDP ack mode) or 1 (legacy ack mode)
 #--------------------------------------------------------------------------------#
 # 1M NDP (Block) ACK (AP Only)
 #  Enable 1M NDP ACK on 2/4MHz BW for robustness (default: 2M NDP ACK on 2/4MH BW)
@@ -168,7 +185,7 @@ ndp_ack_1m        = 0        # 0 (disable) or 1 (enable)
 #--------------------------------------------------------------------------------#
 # NDP Probe Request
 #  For STA, "scan_ssid=1" in wpa_supplicant's conf should be set to use
-ndp_preq          = 1        # 0 (Legacy Probe Req) 1 (NDP Probe Req)
+ndp_preq          = 0        # 0 (Legacy Probe Req) 1 (NDP Probe Req)
 #--------------------------------------------------------------------------------#
 # CQM (Channel Quality Manager) (STA Only)
 #  STA can disconnect according to Channel Quality (Beacon Loss or Poor Signal)
@@ -194,7 +211,7 @@ listen_interval   = 1000     # STA (listen interval in BI unit) (max:65535)
 #  Period is in unit of 1000TU(1024ms, 1TU=1024us)
 #  Note: if disabled, AP removes STAs' info only with explicit disconnection like deauth
 bss_max_idle_enable = 1      # 0 (disable) or 1 (enable)
-bss_max_idle        = 180    # time interval (e.g. 60: 614400ms) (1 ~ 65535)
+bss_max_idle        = 180    # time interval (e.g. 60: 61440ms) (1 ~ 65535)
 #--------------------------------------------------------------------------------#
 # Mesh Options (Mesh Only)
 #  SW encryption by MAC80211 for Mesh Point
@@ -206,11 +223,20 @@ static_ip           = 0     # 0 (disable) or Static IP Address
 # Self configuration (AP Only)
 #  AP scans the clearest CH and then starts with it
 self_config       = 0        # 0 (disable)  or 1 (enable)
-prefer_bw         = 4        # 0: no preferred bandwidth, 1: 1M, 2: 2M, 4: 4M
+prefer_bw         = 0        # 0: no preferred bandwidth, 1: 1M, 2: 2M, 4: 4M
 dwell_time        = 100      # max dwell is 1000 (ms), min: 10ms, default: 100ms
 #--------------------------------------------------------------------------------#
-# Credit num of AC_BE for flow control between host and target (Internal use only)
+# Credit num of AC_BE for flow control between host and target (Test only)
 credit_ac_be      = 40        # number of buffer (min: 40, max: 120)
+#--------------------------------------------------------------------------------#
+# Use bitmap encoding for block ack operation (NRC7292 only)
+bitmap_encoding   = 1         # 0 (disable) or 1 (enable)
+#--------------------------------------------------------------------------------#
+# User scrambler reversely (NRC7292 only)
+reverse_scrambler = 1         # 0 (disable) or 1 (enable)
+#--------------------------------------------------------------------------------#
+# Use bridge setup with br0, wlan0, eth(n) (AP & STA)
+use_bridge_setup = 0         # 0 (not use bridge setup) or n (use bridge setup with eth(n-1))
 ##################################################################################
 ```
 You can apply your parameters by updating start.py script file.

@@ -47,7 +47,7 @@
 #define TAB_TO_SPACE_LENGTH 8
 
 static char log_file_prefix[64] = "nrc_signal";
-static FILE *fp_log_file;
+static FILE *fp_log_file = NULL;
 
 /*******************************************************************************
 * util functions
@@ -664,23 +664,26 @@ int signal_log_display(char* mac_addr, int snr_sum, int snr_sum_sqrs, int rssi_s
 	printf(" std_dev  : %.3lf\n", std_dev_snr);
 	printf("--------------------------------------------------\n");
 
-	fprintf(fp_log_file, "--------------------------------------------------\n");
-	fprintf(fp_log_file, "[MAC Addr]: %s\n", mac_addr_temp);
-	fprintf(fp_log_file, "[Total]   : %d\n", n);
-	fprintf(fp_log_file, "[RSSI]\n");
-	fprintf(fp_log_file, " average  : %.3lf\n", avg_rssi);
-	fprintf(fp_log_file, " std_dev  : %.3lf\n", std_dev_rssi);
-	fprintf(fp_log_file, "[SNR]\n");
-	fprintf(fp_log_file, " average  : %.3lf\n", avg_snr);
-	fprintf(fp_log_file, " std_dev  : %.3lf\n", std_dev_snr);
-	fprintf(fp_log_file, "--------------------------------------------------\n");
-
+	if(fp_log_file != NULL) {
+		fprintf(fp_log_file, "--------------------------------------------------\n");
+		fprintf(fp_log_file, "[MAC Addr]: %s\n", mac_addr_temp);
+		fprintf(fp_log_file, "[Total]   : %d\n", n);
+		fprintf(fp_log_file, "[RSSI]\n");
+		fprintf(fp_log_file, " average  : %.3lf\n", avg_rssi);
+		fprintf(fp_log_file, " std_dev  : %.3lf\n", std_dev_rssi);
+		fprintf(fp_log_file, "[SNR]\n");
+		fprintf(fp_log_file, " average  : %.3lf\n", avg_snr);
+		fprintf(fp_log_file, " std_dev  : %.3lf\n", std_dev_snr);
+		fprintf(fp_log_file, "--------------------------------------------------\n");
+	}
 	return 0;
 }
 
 int signal_log_update(int device_number, char* mac_addr, int rssi, int snr){
 	printf("Mac Addr : %s\trssi: %d  \tsnr: %d\n", mac_addr, rssi, snr);
-	fprintf(fp_log_file, "Mac Addr : %s\trssi: %d  \tsnr: %d\n", mac_addr, rssi, snr);
+	if(fp_log_file != NULL) {
+		fprintf(fp_log_file, "Mac Addr : %s\trssi: %d  \tsnr: %d\n", mac_addr, rssi, snr);
+	}
 	return 0;
 }
 

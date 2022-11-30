@@ -674,6 +674,18 @@ static int nrc_wim_event_handler(struct nrc *nw,
 	case WIM_EVENT_CH_SWITCH:
 		ieee80211_chswitch_done(vif, true);
 		break;
+	case WIM_EVENT_LBT_ENABLED:
+		if (!enable_usn) {
+			enable_usn = true;
+			nrc_dbg(NRC_DBG_HIF, "lbt enabled");
+		}
+		break;
+	case WIM_EVENT_LBT_DISABLED:
+		if (enable_usn) {
+			enable_usn = false;
+			nrc_dbg(NRC_DBG_HIF, "lbt disabled");
+		}
+		break;
 	}
 
 	return 0;
