@@ -30,11 +30,13 @@ enum NRC_DEBUG_MASK {
 	NRC_DBG_PS		= 6,
 	NRC_DBG_STATS	= 7,
 	NRC_DBG_STATE	= 8,
+	NRC_DBG_BD	= 9,
+	NRC_DBG_COMMON	= 10,
 };
 #define NRC_DBG_MASK_ANY   (0xFFFFFFFF)
 
 #define DEFAULT_NRC_DBG_MASK_ALL (NRC_DBG_MASK_ANY)
-#define DEFAULT_NRC_DBG_MASK (BIT(NRC_DBG_PS) | BIT(NRC_DBG_STATE))
+#define DEFAULT_NRC_DBG_MASK (BIT(NRC_DBG_PS) | BIT(NRC_DBG_STATE) | BIT(NRC_DBG_COMMON))
 
 #define NRC_DBG_PRINT_FRAME 0 /* print trx frames for debug */
 
@@ -78,5 +80,5 @@ void nrc_exit_debugfs(void);
 #define nrc_mac_dbg(fmt, ...) nrc_dbg(NRC_DBG_MAC, fmt, ##__VA_ARGS__)
 #define nrc_ps_dbg(fmt, ...) nrc_dbg(NRC_DBG_PS, fmt, ##__VA_ARGS__)
 #define nrc_stats_dbg(fmt, ...) nrc_dbg(NRC_DBG_STATS, fmt, ##__VA_ARGS__)
-
+#define nrc_common_dbg(fmt, ...) nrc_dbg(NRC_DBG_COMMON, fmt, ##__VA_ARGS__)
 #endif

@@ -274,15 +274,10 @@ struct nrc {
 	/* this must be assigned via nrc_mac_set_wakeup() */
 	bool wowlan_enabled;
 
-	/* work for fake frames */
-	struct delayed_work fake_bcn;
-	struct delayed_work fake_prb_resp;
-
-	/* cloned beacon for cqm in deepsleep */
-	struct sk_buff *c_bcn;
-
-	/* cloned probe response for cqm in deepsleep */
-	struct sk_buff *c_prb_resp;
+	/* CQM offload */
+	struct timer_list bcn_mon_timer;
+	unsigned long beacon_timeout;
+	bool associated;
 
 	/* for processing deauth when deepsleep */
 	struct nrc_delayed_deauth d_deauth;
@@ -499,6 +494,7 @@ extern bool enable_legacy_ack;
 #if defined(CONFIG_SUPPORT_BD)
 extern char *bd_name;
 #endif /* CONFIG_SUPPORT_BD */
+extern int beacon_loss_count;
 
 void nrc_set_bss_max_idle_offset(int value);
 void nrc_set_auto_ba(bool toggle);

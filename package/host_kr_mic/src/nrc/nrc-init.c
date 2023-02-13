@@ -128,7 +128,7 @@ module_param(bss_max_idle_usf_format, bool, 0600);
 MODULE_PARM_DESC(bss_max_idle_usf_format, "BSS Max Idle specified in units of usf");
 
 /**
- * default enable_short_bi
+ * enable/disable the s1g short beacon
  */
 bool enable_short_bi = 1;
 module_param(enable_short_bi, bool, 0600);
@@ -273,6 +273,13 @@ bool reverse_scrambler = true;
 module_param(reverse_scrambler , bool, 0600);
 MODULE_PARM_DESC(reverse_scrambler , "(NRC7292 only) Apply scrambler reversely");
 
+/**
+ * Maximum beacon loss count
+ */
+int beacon_loss_count = 7;
+module_param(beacon_loss_count, int, 0600);
+MODULE_PARM_DESC(beacon_loss_count, "Number of beacon intervals before we decide beacon was lost");
+
 static bool has_macaddr_param(uint8_t *dev_mac)
 {
 	int res;
@@ -281,8 +288,8 @@ static bool has_macaddr_param(uint8_t *dev_mac)
 		return false;
 
 	res = sscanf(macaddr, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
-			   &dev_mac[0], &dev_mac[1], &dev_mac[2],
-			   &dev_mac[3], &dev_mac[4], &dev_mac[5]);
+				&dev_mac[0], &dev_mac[1], &dev_mac[2],
+				&dev_mac[3], &dev_mac[4], &dev_mac[5]);
 
 	return (res == 6);
 }
@@ -491,14 +498,12 @@ static void nrc_check_start(struct work_struct *work)
 
 #if defined(CONFIG_CHECK_READY)
 	while (!nrc_hif_check_ready(nw->hif)) {
-		nrc_dbg(NRC_DBG_HIF, "Target doesn't ready yet.\n");
+		nrc_dbg(NRC_DBG_HIF, "Target doesn't ready yet.");
 		mdelay(100);
 	}
 #endif /* defined(CONFIG_CHECK_READY) */
 
 	nw->drv_state = NRC_DRV_START;
-	nw->c_bcn = NULL;
-	nw->c_prb_resp = NULL;
 
 	nrc_hif_resume(nw->hif);
 
@@ -523,13 +528,13 @@ static void nrc_check_start(struct work_struct *work)
 
 	ret = nrc_register_hw(nw);
 	if (ret) {
-		pr_err("failed to register hw\n");
+		pr_err("failed to register hw");
 		goto fail_start;
 	}
 
 	ret = nrc_netlink_init(nw);
 	if (ret) {
-		pr_err("failed to register netlink\n");
+		pr_err("failed to register netlink");
 		goto fail_start;
 	}
 
@@ -609,22 +614,6 @@ static int nrc_platform_remove(struct platform_device *pdev)
 	nw->drv_state = NRC_DRV_CLOSING;
 
 	cancel_delayed_work(&nw->check_start);
-	cancel_delayed_work(&nw->fake_bcn);
-	flush_delayed_work(&nw->fake_bcn);
-	cancel_delayed_work(&nw->fake_prb_resp);
-	flush_delayed_work(&nw->fake_prb_resp);
-	if (nw->c_bcn) {
-		dev_kfree_skb_any(nw->c_bcn);
-		nw->c_bcn = NULL;
-	}
-	if (nw->c_prb_resp) {
-		dev_kfree_skb_any(nw->c_prb_resp);
-		nw->c_prb_resp = NULL;
-	}
-
-	if (ieee80211_hw_check(nw->hw, SUPPORTS_DYNAMIC_PS)) {
-		del_timer_sync(&nw->dynamic_ps_timer);
-	}
 
 	if (!loopback) {
 		nrc_netlink_exit();

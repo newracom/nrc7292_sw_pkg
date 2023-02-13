@@ -277,6 +277,9 @@ static void nrc_hif_ps_work(struct work_struct *work)
 		nw->ps_drv_state = nw->ps_enabled;
 
 		if (power_save >= NRC_PS_DEEPSLEEP_TIM) {
+			if (!disable_cqm) {
+				del_timer(&nw->bcn_mon_timer);
+			}
 			p->ps_duration = (uint64_t) sleep_duration[0] * (sleep_duration[1] ? 1000 : 1);
 			ieee80211_stop_queues(nw->hw);
 			for (i = 0; i < NRC_QUEUE_MAX; i++) {
@@ -453,7 +456,8 @@ int nrc_xmit_wim(struct nrc *nw, struct sk_buff *skb, enum HIF_SUBTYPE stype)
 	int len = skb->len;
 	int ret = 0;
 
-	if ((nw->drv_state == NRC_DRV_PS) && atomic_read(&nw->d_deauth.delayed_deauth)) {
+	if ((nw->drv_state == NRC_DRV_PS) &&
+		atomic_read(&nw->d_deauth.delayed_deauth)) {
 		dev_kfree_skb(skb);
 		return 0;
 	}
@@ -522,8 +526,8 @@ int nrc_xmit_wim_response(struct nrc *nw, struct sk_buff *skb)
  *
  */
 static u32 nrc_skb_append_tx_info(struct nrc *nw, u16 aid,
-		   struct sk_buff *skb,
-		   bool frame_injection)
+			struct sk_buff *skb,
+			bool frame_injection)
 {
 	struct ieee80211_tx_info *txi = IEEE80211_SKB_CB(skb);
 	struct frame_tx_info_param *p;
@@ -561,9 +565,9 @@ static u32 nrc_skb_append_tx_info(struct nrc *nw, u16 aid,
  * nrc_xmit_injected_frame - transmit a injected 802.11 frame
  */
 int nrc_xmit_injected_frame(struct nrc *nw,
-		   struct ieee80211_vif *vif,
-		   struct ieee80211_sta *sta,
-		   struct sk_buff *skb)
+			struct ieee80211_vif *vif,
+			struct ieee80211_sta *sta,
+			struct sk_buff *skb)
 {
 	struct ieee80211_hdr *hdr = (void *)skb->data;
 	struct frame_hdr *fh;
@@ -623,7 +627,7 @@ int nrc_xmit_injected_frame(struct nrc *nw,
  * nrc_xmit_frame - transmit a 802.11 frame
  */
 int nrc_xmit_frame(struct nrc *nw, s8 vif_index, u16 aid,
-		   struct sk_buff *skb)
+			struct sk_buff *skb)
 {
 	struct ieee80211_hdr *hdr = (void *)skb->data;
 	struct frame_hdr *fh;
@@ -728,15 +732,15 @@ int nrc_xmit_frame(struct nrc *nw, s8 vif_index, u16 aid,
 		WARN_ON(true);
 	}
 
-    if (nullfunc_enable) {
-        if (ieee80211_is_pspoll(fc)) {
-            print_hex_dump(KERN_DEBUG, "tx ps-poll ", DUMP_PREFIX_NONE, 16, 1,
-                    fh, 20, false);
-        }
-    }
+	if (nullfunc_enable) {
+		if (ieee80211_is_pspoll(fc)) {
+			print_hex_dump(KERN_DEBUG, "tx ps-poll ", DUMP_PREFIX_NONE, 16, 1,
+				fh, 20, false);
+		}
+	}
 #if defined(CONFIG_NRC_HIF_PRINT_TX_DATA)
 	print_hex_dump(KERN_DEBUG, "frame: ", DUMP_PREFIX_NONE, 16, 1,
-		       skb->data, skb->len, false);
+		skb->data, skb->len, false);
 #endif
 	credit = DIV_ROUND_UP(skb->len, nw->fwinfo.buffer_size);
 #ifdef CONFIG_NRC_HIF_PRINT_FLOW_CONTROL
@@ -874,7 +878,7 @@ static int hif_receive_skb(struct nrc_hif_device *dev, struct sk_buff *skb)
 		}
 		if (hif_new->index == 0) {
 			rcv_time_first = rcv_time_last;
-			pr_err("[Loopback Test] First frame received time: %llu\n", rcv_time_first);
+			pr_err("[Loopback Test] First frame received time: %llu", rcv_time_first);
 		}
 
 		if (hif_new->subtype == LOOPBACK_MODE_TX_ONLY) {

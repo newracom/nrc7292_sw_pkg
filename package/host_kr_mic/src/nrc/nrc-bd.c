@@ -672,9 +672,9 @@ struct wim_bd_param * nrc_read_bd_tx_pwr(struct nrc *nw, uint8_t *country_code)
 	//find target version from board data file and compare it with one getting from serial flash 
 	target_version = nw->fwinfo.hw_version;
 
-	// if a value of h/w version is invalid, then set it to 0xFFFF
-	if(target_version > 0x7FF && target_version != 0xFFFF)
-		target_version = 0xFFFF;
+	// if a value of h/w version is invalid, then set it to 0
+	if(target_version > 0x7FF)
+		target_version = 0;
 
 	for(i = 0; i < bd->num_data_groups; i++)
 	{
@@ -689,7 +689,7 @@ struct wim_bd_param * nrc_read_bd_tx_pwr(struct nrc *nw, uint8_t *country_code)
 					(bd->data[7 + len + 4*i]<<8));
 
 			// Add a condition if target version is initial value(65535)
-			if((target_version == bd_sel->hw_version) || (target_version == 0xFFFF)) {
+			if(target_version == bd_sel->hw_version) {
 				nrc_dbg(NRC_DBG_STATE, "target version is matched(%u : %u)",
 						target_version, bd_sel->hw_version);
 
@@ -771,7 +771,7 @@ int nrc_check_bd(void)
 #if KERNEL_VERSION(5, 10, 0) <= NRC_TARGET_KERNEL_VERSION
 	rc = vfs_getattr(&filp->f_path, stat, STATX_SIZE, AT_STATX_SYNC_AS_STAT);
 	if(rc != 0){
-        printk("vfs_getattr Error");
+        nrc_common_dbg("vfs_getattr Error");
     }
 	length = (size_t)stat->size;
 #else

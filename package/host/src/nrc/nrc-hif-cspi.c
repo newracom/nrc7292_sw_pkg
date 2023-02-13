@@ -315,11 +315,18 @@ static int _c_spi_write_dummy(struct spi_device *spi)
 {
 	struct spi_transfer xfer[2] = {{0},};
 	u32 dummy=0xffffffff;
-	u8 tx[8], rx[8];
+	u8 tx[8];
+#ifndef CONFIG_SPI_HALF_DUPLEX
+	u8 rx[8];
+#endif
 	ssize_t status;
 
 	memset(tx, 0xff, sizeof(tx));
+#ifndef CONFIG_SPI_HALF_DUPLEX
 	spi_set_transfer(&xfer[0], tx, rx, 8);
+#else
+	spi_set_transfer(&xfer[0], tx, NULL, 8);
+#endif
 	dummy = 0xffffffff;
 	spi_set_transfer(&xfer[1], &dummy, NULL, sizeof(dummy));
 
@@ -333,7 +340,10 @@ static int _c_spi_read_regs(struct spi_device *spi,
 {
 	struct spi_transfer xfer[4] = {{0},};
 	u32 cmd, crc, dummy;
-	u8 tx[8], rx[8];
+	u8 tx[8];
+#ifndef CONFIG_SPI_HALF_DUPLEX
+	u8 rx[8];
+#endif
 	ssize_t status;
 	int arr_len;
 
@@ -349,7 +359,11 @@ static int _c_spi_read_regs(struct spi_device *spi,
 	put_unaligned_be32(cmd, (u32 *)tx);
 	tx[4] = (compute_crc7(tx, 4) << 1) | 0x1;
 
+#ifndef CONFIG_SPI_HALF_DUPLEX
 	spi_set_transfer(&xfer[0], tx, rx, 8);
+#else
+	spi_set_transfer(&xfer[0], tx, NULL, 8);
+#endif
 	spi_set_transfer(&xfer[1], NULL, buf, size);
 	spi_set_transfer(&xfer[2], NULL, &crc, sizeof(crc));
 
@@ -362,12 +376,20 @@ static int _c_spi_read_regs(struct spi_device *spi,
 	arr_len = (size > 1) ? ARRAY_SIZE(xfer) : 2;
 	status = spi_sync_transfer(spi, xfer, arr_len);
 
+#ifndef CONFIG_SPI_HALF_DUPLEX
 	if (status < 0 || WARN_ON(rx[7] != C_SPI_ACK))
+#else
+	if (status < 0)
+#endif
 		return -EIO;
-
+#ifndef CONFIG_SPI_HALF_DUPLEX
 	if (size == 1)
 		buf[0] = rx[6];
-
+#else
+	/* Half duplex can't handle size 1 and 2 */
+	if (size <= 2)
+		nrc_common_dbg("[%s] Half duplex can't handle size 1 and 2...\n", __func__);
+#endif
 	return 0;
 }
 
@@ -375,14 +397,20 @@ static int _c_spi_write_reg(struct spi_device *spi, u8 addr, u8 data)
 {
 	struct spi_transfer xfer[2] = {{0},};
 	u32 cmd, dummy;
-	u8 tx[8], rx[8];
+	u8 tx[8];
+#ifndef CONFIG_SPI_HALF_DUPLEX
+	u8 rx[8];
+#endif
 	ssize_t status;
 
 	cmd = C_SPI_WRITE | C_SPI_FIXED | C_SPI_ADDR(addr) | C_SPI_WDATA(data);
 	put_unaligned_be32(cmd, (u32 *)tx);
 	tx[4] = (compute_crc7(tx, 4) << 1) | 0x1;
-
+#ifndef CONFIG_SPI_HALF_DUPLEX
 	spi_set_transfer(&xfer[0], tx, rx, 8);
+#else
+	spi_set_transfer(&xfer[0], tx, NULL, 8);
+#endif
 	dummy = 0xffffffff;
 	spi_set_transfer(&xfer[1], &dummy, NULL, sizeof(dummy));
 
@@ -393,7 +421,11 @@ static int _c_spi_write_reg(struct spi_device *spi, u8 addr, u8 data)
 		if (status < 0)
 			return -EIO;
 	} else {
+#ifndef CONFIG_SPI_HALF_DUPLEX
 		if (status < 0 || WARN_ON(rx[7] != C_SPI_ACK))
+#else
+		if (status < 0)
+#endif
 			return -EIO;
 	}
 
@@ -404,7 +436,10 @@ static ssize_t _c_spi_read(struct spi_device *spi, u8 *buf, ssize_t size)
 {
 	struct spi_transfer xfer[4] = {{0},};
 	u32 cmd, crc, dummy;
-	u8 tx[8], rx[8];
+	u8 tx[8];
+#ifndef CONFIG_SPI_HALF_DUPLEX
+	u8 rx[8];
+#endif
 	ssize_t status;
 
 	if (size == 0 || buf == NULL)
@@ -416,7 +451,11 @@ static ssize_t _c_spi_read(struct spi_device *spi, u8 *buf, ssize_t size)
 	tx[4] = (compute_crc7(tx, 4) << 1) | 0x1;
 	tx[5] = 0xff;
 
+#ifndef CONFIG_SPI_HALF_DUPLEX
 	spi_set_transfer(&xfer[0], tx, rx, 8);
+#else
+	spi_set_transfer(&xfer[0], tx, NULL, 8);
+#endif
 	spi_set_transfer(&xfer[1], NULL, buf, size);
 	spi_set_transfer(&xfer[2], NULL, &crc, sizeof(crc));
 
@@ -424,7 +463,11 @@ static ssize_t _c_spi_read(struct spi_device *spi, u8 *buf, ssize_t size)
 	spi_set_transfer(&xfer[3], &dummy, NULL, sizeof(dummy));
 	status = spi_sync_transfer(spi, xfer, ARRAY_SIZE(xfer));
 
+#ifndef CONFIG_SPI_HALF_DUPLEX
 	if (status < 0 || WARN_ON(rx[7] != C_SPI_ACK))
+#else
+	if (status < 0)
+#endif
 		return -EIO;
 
 	return size;
@@ -435,7 +478,10 @@ static ssize_t _c_spi_write(struct spi_device *spi, u8 *buf, ssize_t size)
 
 	struct spi_transfer xfer[4] = {{0},};
 	u32 cmd, dummy = 0xffffffff;
-	u8 tx[8], rx[8];
+	u8 tx[8];
+#ifndef CONFIG_SPI_HALF_DUPLEX
+	u8 rx[8];
+#endif
 	ssize_t status;
 
 	if (size == 0 || buf == NULL)
@@ -447,14 +493,22 @@ static ssize_t _c_spi_write(struct spi_device *spi, u8 *buf, ssize_t size)
 	tx[4] = (compute_crc7(tx, 4) << 1) | 0x1;
 	tx[5] = 0xff;
 
+#ifndef CONFIG_SPI_HALF_DUPLEX
 	spi_set_transfer(&xfer[0], tx, rx, 8);
+#else
+	spi_set_transfer(&xfer[0], tx, NULL, 8);
+#endif
 	spi_set_transfer(&xfer[1], buf, NULL, size);
 	spi_set_transfer(&xfer[2], &dummy, NULL, sizeof(dummy));
 	dummy = 0xffffffff;
 	spi_set_transfer(&xfer[3], &dummy, NULL, sizeof(dummy));
 
 	status = spi_sync_transfer(spi, xfer, ARRAY_SIZE(xfer));
+#ifndef CONFIG_SPI_HALF_DUPLEX
 	if (status < 0 || WARN_ON(rx[7] != C_SPI_ACK))
+#else
+	if (status < 0)
+#endif
 		return -EIO;
 
 	return size;
@@ -569,7 +623,7 @@ static struct sk_buff *spi_rx_skb(struct spi_device *spi,
 
 		if ((backoff % 3) != 0) {
 #ifdef CONFIG_NRC_HIF_PRINT_FLOW_CONTROL
-			nrc_dbg(NRC_DBG_HIF, "rx-irq: backoff=%d\n", backoff);
+			nrc_dbg(NRC_DBG_HIF, "rx-irq: backoff=%d", backoff);
 #endif
 			usleep_range(800, 1000);
 		}
@@ -580,7 +634,7 @@ static struct sk_buff *spi_rx_skb(struct spi_device *spi,
 	if (c_spi_num_slots(priv, RX_SLOT) > 32) {
 		SYNC_UNLOCK(hdev);
 		if (cnt1++ < 10) {
-			pr_err("!!!!! garbage rx data\n");
+			pr_err("!!!!! garbage rx data");
 		}
 		goto fail;
 	}
@@ -600,12 +654,12 @@ static struct sk_buff *spi_rx_skb(struct spi_device *spi,
 	hif = (void *)skb->data;
 
 	if (hif->type >= HIF_TYPE_MAX || hif->len == 0) {
-		nrc_dbg(NRC_DBG_HIF, "rxslot:(h=%d,t=%d)\n",
+		nrc_dbg(NRC_DBG_HIF, "rxslot:(h=%d,t=%d)",
 				priv->slot[RX_SLOT].head, priv->slot[RX_SLOT].tail);
 		print_hex_dump(KERN_DEBUG, "rxskb ", DUMP_PREFIX_NONE, 16, 1,
 				skb->data, 480, false);
 		priv->slot[RX_SLOT].tail++;
-		msleep(100);
+		mdelay(100);
 		goto fail;
 	}
 
@@ -659,7 +713,7 @@ static struct sk_buff *spi_rx_skb(struct spi_device *spi,
 	if (c_spi_num_slots(priv, RX_SLOT) > 32) {
 		SYNC_UNLOCK(hdev);
 		if (cnt2++ < 10) {
-			pr_err("@@@@@@ garbage rx data\n");
+			pr_err("@@@@@@ garbage rx data");
 		}
 		goto fail;
 	}
@@ -674,7 +728,7 @@ static struct sk_buff *spi_rx_skb(struct spi_device *spi,
 out:
 	skb_put(skb, sizeof(*hif) + hif->len);
 #ifdef CONFIG_NRC_HIF_PRINT_FLOW_CONTROL
-	nrc_dbg(NRC_DBG_HIF, "rx-irq: skb=%p len:%d, hif_type=%d\n",
+	nrc_dbg(NRC_DBG_HIF, "rx-irq: skb=%p len:%d, hif_type=%d",
 			skb, skb->len, hif->type);
 #endif
 	return skb;
@@ -735,7 +789,7 @@ static void spi_credit_skb(struct spi_device *spi)
 		cr->v.ac[i] = priv->credit_max[i] - room;
 
 #ifdef CONFIG_NRC_HIF_PRINT_FLOW_CONTROL
-		nrc_dbg(NRC_DBG_HIF, "credit[%d] %d f:%d, r:%d\n",
+		nrc_dbg(NRC_DBG_HIF, "credit[%d] %d f:%d, r:%d",
 				i, cr->v.ac[i], priv->front[i],
 				priv->rear[i]);
 #endif
@@ -870,6 +924,7 @@ loopback_tx:
 end:
 	if(skb)
 		dev_kfree_skb(skb);
+
 	return ret;
 }
 
@@ -892,7 +947,7 @@ static int spi_rx_thread(void *data)
 			ret = spi_loopback(spi, priv, nw->lb_count);
 			if (ret <= 0)
 				nrc_dbg(NRC_DBG_HIF,
-						"loopback (%d) error.\n", ret);
+						"loopback (%d) error.", ret);
 			continue;
 		}
 
@@ -937,7 +992,7 @@ static int spi_update_status(struct spi_device *spi)
 #ifdef CONFIG_NRC_HIF_PRINT_FLOW_CONTROL
 	int cpuid = smp_processor_id();
 
-	nrc_dbg(NRC_DBG_HIF, "+[%d] %s\n", cpuid,  __func__);
+	nrc_dbg(NRC_DBG_HIF, "+[%d] %s", cpuid,  __func__);
 #endif
 
 	if (cspi_suspend) return 0;
@@ -950,7 +1005,6 @@ static int spi_update_status(struct spi_device *spi)
 		return ret;
 
 	if (status->eirq.status & 0x04) {
-
 #if 0 // for debugging
 		nrc_dbg(NRC_DBG_HIF, "drv_state:%d status:0x%02x mode:0x%02x enable:0x%02x 0x%08X",
 			nw->drv_state, status->eirq.status, status->eirq.mode,
@@ -1064,8 +1118,12 @@ static int spi_update_status(struct spi_device *spi)
 				if (nw->drv_state >= NRC_DRV_RUNNING &&
 					nw->hw->conf.dynamic_ps_timeout > 0) {
 					mod_timer(&nw->dynamic_ps_timer,
-					jiffies + msecs_to_jiffies(nw->hw->conf.dynamic_ps_timeout));
+						jiffies + msecs_to_jiffies(nw->hw->conf.dynamic_ps_timeout));
 				}
+			}
+			if (!disable_cqm) {
+				mod_timer(&nw->bcn_mon_timer,
+					jiffies + msecs_to_jiffies(nw->beacon_timeout));
 			}
 
 			if (atomic_read(&nw->d_deauth.delayed_deauth)) {
@@ -1126,7 +1184,7 @@ static int spi_update_status(struct spi_device *spi)
 	//Workaround (TODO : why the device returns 0x0505)
 	if(priv->slot[RX_SLOT].head == 0x0505 && priv->slot[RX_SLOT].tail == 0) {
 		priv->slot[RX_SLOT].head = 0;
-		nrc_dbg(NRC_DBG_HIF, "[%s,L%d] WRONG HEAD VALUE 0x0505!!!!!!!\n", __func__, __LINE__);
+		nrc_dbg(NRC_DBG_HIF, "[%s,L%d] WRONG HEAD VALUE 0x0505!!!!!!!", __func__, __LINE__);
 	}
 
 	if (nw->loopback)
@@ -1171,9 +1229,11 @@ static int spi_update_status(struct spi_device *spi)
 	}
 
 	spi_credit_skb(spi);
+
 #ifdef CONFIG_NRC_HIF_PRINT_FLOW_CONTROL
-	nrc_dbg(NRC_DBG_HIF, "-%s\n", __func__);
+	nrc_dbg(NRC_DBG_HIF, "-%s", __func__);
 #endif
+
 	return 0;
 }
 
@@ -1187,7 +1247,7 @@ static irqreturn_t spi_irq(int irq, void *data)
 	//struct nrc *nw = hdev->nw;
 
 #ifdef CONFIG_NRC_HIF_PRINT_FLOW_CONTROL
-	nrc_dbg(NRC_DBG_HIF, "%s\n", __func__);
+	nrc_dbg(NRC_DBG_HIF, "%s", __func__);
 #endif
 
 	spi_update_status(spi);
@@ -1215,7 +1275,7 @@ static void irq_worker(struct work_struct *work)
 	struct spi_device *spi = priv->spi;
 
 #ifdef CONFIG_NRC_HIF_PRINT_FLOW_CONTROL
-	nrc_dbg(NRC_DBG_HIF, "%s\n", __func__);
+	nrc_dbg(NRC_DBG_HIF, "%s", __func__);
 #endif
 
 	spi_update_status(spi);
@@ -1235,17 +1295,17 @@ static bool spi_check_fw(struct nrc_hif_device *hdev)
 	struct spi_sys_reg sys;
 	int ret;
 
-	nrc_dbg(NRC_DBG_HIF, "[%s++]\n", __func__);
+	nrc_dbg(NRC_DBG_HIF, "[%s++]", __func__);
 	ret = c_spi_read_regs(priv->spi, C_SPI_WAKE_UP, (void *)&sys,
 			sizeof(sys));
 	sys.sw_id = be32_to_cpu(sys.sw_id);
-	nrc_dbg(NRC_DBG_HIF, "[%s, %d] sys.sw_id = 0x%x\n",
+	nrc_dbg(NRC_DBG_HIF, "[%s, %d] sys.sw_id = 0x%x",
 			__func__, __LINE__, sys.sw_id);
 	if (ret < 0) {
-		nrc_dbg(NRC_DBG_HIF, "failed to read register 0x0\n");
+		nrc_dbg(NRC_DBG_HIF, "failed to read register 0x0");
 		return false;
 	}
-	nrc_dbg(NRC_DBG_HIF, "[%s--]\n", __func__);
+	nrc_dbg(NRC_DBG_HIF, "[%s--]", __func__);
 	return (sys.sw_id == SW_MAGIC_FOR_BOOT);
 }
 
@@ -1268,7 +1328,7 @@ static int spi_wait_ack(struct nrc_hif_device *hdev, u8 *data, u32 len)
 		ret = c_spi_read_regs(priv->spi, C_SPI_EIRQ_MODE,
 				(void *)&status, sizeof(status));
 		if (ret < 0) {
-			nrc_dbg(NRC_DBG_HIF, "[%s, %d] Failed to read regs\n",
+			nrc_dbg(NRC_DBG_HIF, "[%s, %d] Failed to read regs",
 					__func__, __LINE__);
 			return ret;
 		}
@@ -1336,7 +1396,7 @@ static int spi_xmit(struct nrc_hif_device *hdev, struct sk_buff *skb)
 
 		if ((backoff % 3) == 0) {
 #ifdef CONFIG_NRC_HIF_PRINT_FLOW_CONTROL
-			nrc_dbg(NRC_DBG_HIF, "%s: backoff=%d\n",
+			nrc_dbg(NRC_DBG_HIF, "%s: backoff=%d",
 				__func__, backoff);
 #endif
 			usleep_range(800, 1000);
@@ -1349,7 +1409,7 @@ static int spi_xmit(struct nrc_hif_device *hdev, struct sk_buff *skb)
 			(nr_slot * priv->slot[TX_SLOT].size));
 #ifdef CONFIG_NRC_HIF_PRINT_FLOW_CONTROL
 	nrc_dbg(NRC_DBG_HIF,
-	"%s ac=%d skb=%p, slot=%d(%d/%d),fwpend:%d/%d, pending=%d\n",
+	"%s ac=%d skb=%p, slot=%d(%d/%d),fwpend:%d/%d, pending=%d",
 			__func__,
 			fh->flags.tx.ac, skb, nr_slot,
 			priv->slot[TX_SLOT].head, priv->slot[TX_SLOT].tail,
@@ -1370,7 +1430,7 @@ static void spi_poll_status(struct work_struct *work)
 	struct spi_device *spi = priv->spi;
 
 #ifdef CONFIG_NRC_HIF_PRINT_FLOW_CONTROL
-	nrc_dbg(NRC_DBG_HIF, "%s\n", __func__);
+	nrc_dbg(NRC_DBG_HIF, "%s", __func__);
 #endif
 
 	if (cspi_suspend) return;
@@ -1428,7 +1488,7 @@ static int spi_start(struct nrc_hif_device *dev)
 	/* Start rx thread */
 	priv->kthread = kthread_run(spi_rx_thread, dev, "nrc-spi-rx");
 	if (IS_ERR(priv->kthread)) {
-		pr_err("kthread_run() is failed\n");
+		pr_err("kthread_run() is failed");
 		return PTR_ERR(priv->kthread);
 	}
 
@@ -1458,9 +1518,9 @@ static int spi_start(struct nrc_hif_device *dev)
 
 		if (ret < 0) {
 #ifdef CONFIG_SUPPORT_THREADED_IRQ
-			pr_err("request_irq() is failed\n");
+			pr_err("request_irq() is failed");
 #else
-			pr_err("request_threaded_irq() is failed\n");
+			pr_err("request_threaded_irq() is failed");
 #endif
 			goto kill_kthread;
 		}
@@ -1494,12 +1554,11 @@ static int spi_suspend(struct nrc_hif_device *dev)
 	struct spi_device *spi = priv->spi;
 	struct nrc *nw = dev->nw;
 
-	nrc_ps_dbg("[%s] drv_state:%d wowlan_enabled:%x power_save:%d\n",
+	nrc_ps_dbg("[%s] drv_state:%d wowlan_enabled:%x power_save:%d",
 			__func__, nw->drv_state, nw->wowlan_enabled, power_save);
-	if (nw->drv_state == NRC_DRV_RUNNING && 
+	if (nw->drv_state == NRC_DRV_RUNNING &&
 		(nw->wowlan_enabled || (power_save >= NRC_PS_DEEPSLEEP_TIM))) {
 		nw->drv_state = NRC_DRV_PS;
-		//nrc_recovery_wdt_clear(nw);
 		/**
 		 * this delay is necessary to achive sending WIM meg completly.
 		 * (especially, WIM_TLV_PS_ENABLE)
@@ -1517,10 +1576,6 @@ static int spi_suspend(struct nrc_hif_device *dev)
 			 */
 			//disable_irq(gpio_to_irq(spi->irq));
 			//atomic_set(&irq_enabled, 0);
-		}
-
-		if (power_save >= NRC_PS_DEEPSLEEP_TIM) {
-			schedule_delayed_work(&dev->nw->fake_bcn, msecs_to_jiffies(nw->beacon_int));
 		}
 
 		nrc_hif_flush_wq(dev);
@@ -1573,7 +1628,7 @@ static void spi_set_default_credit(struct nrc_spi_priv *priv)
 		priv->credit_max[9] = 4;
 		priv->fastboot = false;
 		break;
-	
+
 	case 0x6201:
 		priv->credit_max[0] = CREDIT_AC0;
 		priv->credit_max[1] = CREDIT_AC1;
@@ -1601,12 +1656,11 @@ static int spi_resume(struct nrc_hif_device *dev)
 	int ret;
 
 	if (power_save >= NRC_PS_DEEPSLEEP_TIM) {
-		nrc_ps_dbg("[%s] drv_state:%d wowlan_enabled:%x power_save:%d\n", __func__,
+		nrc_ps_dbg("[%s] drv_state:%d wowlan_enabled:%x power_save:%d", __func__,
 				dev->nw->drv_state, dev->nw->wowlan_enabled, power_save);
 		if (dev->nw->drv_state == NRC_DRV_PS) {
 			ret = c_spi_read_regs(spi, C_SPI_WAKE_UP, (void *)sys, sizeof(*sys));
 			dev->nw->drv_state = NRC_DRV_RUNNING;
-			//nrc_recovery_wdt_kick(dev->nw);
 			ieee80211_wake_queues(dev->nw->hw);
 			gpio_set_value(RPI_GPIO_FOR_PS, 0);
 		} else {
@@ -1728,10 +1782,10 @@ int spi_test(struct nrc_hif_device *hdev)
 	struct spi_sys_reg *sys = &priv->hw.sys;
 	int ret;
 
-	nrc_dbg(NRC_DBG_HIF, "+ read sys\n");
+	nrc_dbg(NRC_DBG_HIF, "+ read sys");
 	ret = c_spi_read_regs(spi, C_SPI_WAKE_UP, (void *)sys,
 			sizeof(*sys));
-	nrc_dbg(NRC_DBG_HIF, "- read sys\n");
+	nrc_dbg(NRC_DBG_HIF, "- read sys");
 
 	print_hex_dump(KERN_DEBUG, "sys ", DUMP_PREFIX_NONE, 16, 1,
 			sys, sizeof(*sys), false);
@@ -1739,10 +1793,10 @@ int spi_test(struct nrc_hif_device *hdev)
 	if (ret < 0)
 		return ret;
 
-	nrc_dbg(NRC_DBG_HIF, "+ read status\n");
+	nrc_dbg(NRC_DBG_HIF, "+ read status");
 	ret = c_spi_read_regs(spi, C_SPI_EIRQ_MODE, (void *)status,
 			sizeof(*status));
-	nrc_dbg(NRC_DBG_HIF, "- read status\n");
+	nrc_dbg(NRC_DBG_HIF, "- read status");
 
 	print_hex_dump(KERN_DEBUG, "status ", DUMP_PREFIX_NONE, 16, 1,
 			status, sizeof(*status), false);
@@ -1993,7 +2047,6 @@ static struct nrc_hif_ops spi_ops = {
 
 static void c_spi_enable_irq(struct spi_device *spi, bool enable)
 {
-
 	if (enable) {
 		c_spi_write_reg(spi, C_SPI_EIRQ_MODE, CSPI_EIRQ_MODE);
 		c_spi_write_reg(spi, C_SPI_EIRQ_ENABLE, CSPI_EIRQ_ENABLE);
@@ -2037,18 +2090,18 @@ static void c_spi_config(struct spi_device *spi)
 		break;
 	default:
 		nrc_dbg(NRC_DBG_HIF,
-			"Unknown Newracom IEEE80211 chipset %04x\n",
+			"Unknown Newracom IEEE80211 chipset %04x",
 			sys->chip_id);
 		BUG();
 	}
 
 	nrc_dbg(NRC_DBG_HIF,
-	"Newracom IEEE802.11 C-SPI: chipid=%04x, sw_id=%04x, board_id=%04X\n",
+	"Newracom IEEE802.11 C-SPI: chipid=%04x, sw_id=%04x, board_id=%04X",
 		sys->chip_id, sys->sw_id, sys->board_id);
 	if (sys->sw_id == SW_MAGIC_FOR_BOOT)
-		nrc_dbg(NRC_DBG_HIF, "Boot loader\n");
+		nrc_dbg(NRC_DBG_HIF, "Boot loader");
 	else if (sys->sw_id == SW_MAGIC_FOR_FW)
-		nrc_dbg(NRC_DBG_HIF, "Firmware\n");
+		nrc_dbg(NRC_DBG_HIF, "Firmware");
 
 	c_spi_enable_irq(spi, spi->irq >= 0 ? true : false);
 }
@@ -2107,7 +2160,7 @@ static int c_spi_probe(struct spi_device *spi)
 	/* Read the register */
 	ret = c_spi_read_regs(spi, C_SPI_WAKE_UP, (void *)sys, sizeof(*sys));
 	if (ret < 0) {
-		pr_err("[Error] failed to read register(0x0).\n");
+		pr_err("[Error] failed to read register(0x0).");
 		priv->spi = NULL;
 		goto fail;
 	}
@@ -2125,7 +2178,7 @@ static int c_spi_probe(struct spi_device *spi)
 	if (spi->irq >= 0) {
 		/* Claim gpio used for irq */
 		if (gpio_request(spi->irq, "nrc-spi-irq") < 0) {
-			pr_err("[Error] gpio_reqeust() is failed\n");
+			pr_err("[Error] gpio_reqeust() is failed");
 			gpio_free(spi->irq);
 			goto fail;
 		}
@@ -2135,7 +2188,7 @@ static int c_spi_probe(struct spi_device *spi)
 #if defined(SPI_DBG)
 	/* Claim gpio used for debugging */
 	if (gpio_request(SPI_DBG, "nrc-spi-dgb") < 0) {
-		pr_err("[Error] gpio_reqeust() is failed\n");
+		pr_err("[Error] gpio_reqeust() is failed");
 		gpio_free(SPI_DBG);
 		goto fail;
 	}
@@ -2143,7 +2196,7 @@ static int c_spi_probe(struct spi_device *spi)
 #endif
 #if defined(ENABLE_HW_RESET)
 	if (gpio_request(RPI_GPIO_FOR_RST, "nrc-reset") < 0) {
-		pr_err("[Error] gpio_reqeust(nrc-reset) is failed\n");
+		pr_err("[Error] gpio_reqeust(nrc-reset) is failed");
 		gpio_free(RPI_GPIO_FOR_RST);
 		goto fail;
 	}
@@ -2222,12 +2275,12 @@ struct nrc_hif_device *nrc_hif_cspi_init(void)
 	bi.platform_data = hdev;
 	bi.max_speed_hz = hifspeed;
 
-	nrc_dbg(NRC_DBG_HIF, "max_speed_hz = %d\n", bi.max_speed_hz);
+	nrc_common_dbg("max_speed_hz = %d\n", bi.max_speed_hz);
 
 	/* Find the spi master that our device is attached to */
 	master = spi_busnum_to_master(spi_bus_num);
 	if (!master) {
-		pr_err("[Error] could not find spi master with the bus number %d.\n",
+		pr_err("[Error] could not find spi master with the bus number %d.",
 			spi_bus_num);
 		goto fail;
 	}
@@ -2235,14 +2288,14 @@ struct nrc_hif_device *nrc_hif_cspi_init(void)
 	/* Instantiate and add a spi device */
 	spi = spi_new_device(master, &bi);
 	if (!spi) {
-		pr_err("[Error] failed to instantiate a new spi device.\n");
+		pr_err("[Error] failed to instantiate a new spi device.");
 		goto fail;
 	}
 
 	/* Register spi driver */
 	ret = spi_register_driver(&spi_driver);
 	if (ret) {
-		pr_err("[Error] failed to register spi driver(%s).\n",
+		pr_err("[Error] failed to register spi driver(%s).",
 			spi_driver.driver.name);
 		goto unregister_device;
 	}

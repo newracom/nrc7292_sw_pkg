@@ -167,6 +167,8 @@ static int show_signal_periodic_timer;
 static int show_signal_try_number;
 const char response_timeout_str[] = "Failed";
 const char no_self_conf_str[] = "no_self_conf";
+const char not_matched_cc_str[] = "not_matched_country";
+const char not_matched_cc_msg[] = "is not the currently set country";
 
 /*******************************************************************************
 * command list
@@ -2036,7 +2038,7 @@ static int cmd_set_tx_time(cmd_tbl_t *t, int argc, char *argv[])
 	memset(param, 0x0, sizeof(param));
 
 	if(argc == 4){
-		sprintf(param, "test tx_time %s %s -sr", argv[2], argv[3]);
+		sprintf(param, "test tx_time %s %s", argv[2], argv[3]);
 	}else{
 		return CMD_RET_FAILURE;
 	}
@@ -2130,19 +2132,22 @@ static int cmd_set_self_configuration(cmd_tbl_t *t, int argc, char *argv[])
 	memset(response, 0x0, NL_MSG_MAX_RESPONSE_SIZE);
 	memset(param, 0x0, sizeof(param));
 
-	if(argc == 5){
+	if (argc == 5)
 		sprintf(param, "set self_config %s %s %s -sr", argv[2], argv[3], argv[4]);
-	} else {
+	else
 		return CMD_RET_FAILURE;
-	}
 
 	netlink_ret = netlink_send_data(NL_SHELL_RUN_RAW, param, response);
 
-	if(!netlink_ret){
-		if(strcmp(response, response_timeout_str)== 0){
+	if (!netlink_ret) {
+		if (strcmp(response, response_timeout_str) == 0) {
 			ret =  CMD_RET_RESPONSE_TIMEOUT;
-		} else if (strcmp(response, no_self_conf_str)==0){
+		} else if (strcmp(response, no_self_conf_str) == 0) {
 			printf("%s\n",no_self_conf_str);
+			ret = CMD_RET_FAILURE;
+		} else if (strcmp(response, not_matched_cc_str) == 0) {
+			printf("[%s] %s\n", argv[2], not_matched_cc_msg);
+			ret = CMD_RET_FAILURE;
 		} else {
 			printf("\tFrequency\tCCA\tbandwidth\n");
 
@@ -2155,7 +2160,7 @@ static int cmd_set_self_configuration(cmd_tbl_t *t, int argc, char *argv[])
 			memcpy(&best_nons1g_freq_idx, &response[result_idx_ptr], sizeof(best_nons1g_freq_idx));
 			result_idx_ptr+=2;
 
-			for ( ; result_idx_ptr< NL_MSG_MAX_RESPONSE_SIZE ; ){
+			for ( ; result_idx_ptr< NL_MSG_MAX_RESPONSE_SIZE ; ) {
 				unsigned short freq =0 ;
 				unsigned short cca =0 ;
 				char bw=0;
@@ -2173,13 +2178,13 @@ static int cmd_set_self_configuration(cmd_tbl_t *t, int argc, char *argv[])
 				result_idx_ptr+=1;
 
 				// Outputs only the results for the preferred bandwidth.
-				if (atoi(argv[3]) == 1){
+				if (atoi(argv[3]) == 1) {
 					if (bw == 0)
 						printf("--\t%4.1f MHz\t%3.1f%%\t%dM\n", freq/10.0, cca/10.0, (bw == 0)?1:(bw == 1)?2:4);
-				} else if (atoi(argv[3]) == 2){
+				} else if (atoi(argv[3]) == 2) {
 					if (bw == 1)
 						printf("--\t%4.1f MHz\t%3.1f%%\t%dM\n", freq/10.0, cca/10.0, (bw == 0)?1:(bw == 1)?2:4);
-				} else if (atoi(argv[3]) == 4){
+				} else if (atoi(argv[3]) == 4) {
 					if (bw == 2)
 						printf("--\t%4.1f MHz\t%3.1f%%\t%dM\n", freq/10.0, cca/10.0, (bw == 0)?1:(bw == 1)?2:4);
 				} else {
@@ -2193,7 +2198,7 @@ static int cmd_set_self_configuration(cmd_tbl_t *t, int argc, char *argv[])
 
 			ret = CMD_RET_SUCCESS;
 		}
-	}else{
+	} else {
 		ret = CMD_RET_FAILURE;
 	}
 	return ret;
@@ -2433,7 +2438,7 @@ void *showRxThreadRun(cmd_tbl_t *t)
 	char param[NRC_MAX_CMDLINE_SIZE];
 	char response[NL_MSG_MAX_RESPONSE_SIZE];
 	int netlink_ret = 0;
-	int rssi, snr;
+	int rssi = 0, snr = 0;
 	int i = 0;
 	int device_number = 0;
 
@@ -2454,14 +2459,13 @@ void *showRxThreadRun(cmd_tbl_t *t)
 	memset(mac_addr, 0x0, MAX_ADDR_SIZE);
 
 	/* create log file and initialize value */
-	if(signal_log_create(show_signal_periodic_timer) == 0){
-		for(i=0; i<MAX_CONECTION_NUM; i++){
-			 rssi_sum[i] = 0;
-			 rssi_sum_sqrs[i] = 0;
-			 snr_sum[i] = 0;
-			 snr_sum_sqrs[i] =0;
-		}
-		 try_count = 0;
+	signal_log_create(show_signal_periodic_timer);
+
+	for(i=0; i<MAX_CONECTION_NUM; i++){
+		rssi_sum[i] = 0;
+		rssi_sum_sqrs[i] = 0;
+		snr_sum[i] = 0;
+		snr_sum_sqrs[i] =0;
 	}
 
 	while(1)

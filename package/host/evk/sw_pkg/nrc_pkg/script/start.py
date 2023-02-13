@@ -49,9 +49,7 @@ ft232h_usb_spi = 0            # FTDI FT232H USB-SPI bridge
 # Max TX PWR
 txpwr_max_default = 24       # Board Data Max TX Power
 #--------------------------------------------------------------------------------#
-# Calibration usage option
-#  If this value is changed, the device should be restarted for applying the value
-cal_use           = 1        # 0(disable) or 1(enable)
+
 ##################################################################################
 # PHY Conf.
 guard_int         = 'long'   # Guard Interval ('long'(LGI) or 'short'(SGI))
@@ -300,7 +298,6 @@ def argv_print():
     print("STA Type         : " + strSTA())
     print("Country          : " + str(sys.argv[3]))
     print("Security Mode    : " + strSecurity())
-    print("CAL. USE         : " + strOnOff(cal_use))
     print("AMPDU            : " + strOnOff(ampdu_enable))
     if strSTA() == 'STA':
         print("CQM              : " + strOnOff(cqm_enable))
@@ -623,12 +620,6 @@ def run_common():
 
     print("[5] Set guard interval")
     os.system('/home/pi/nrc_pkg/script/cli_app set gi ' + guard_int)
-
-    print("[6] Set cal_use")
-    if int(cal_use) == 1:
-        os.system('/home/pi/nrc_pkg/script/cli_app set cal_use on')
-    else:
-        os.system('/home/pi/nrc_pkg/script/cli_app set cal_use off')
 
     print("[*] Start DHCPCD and DNSMASQ")
     startDHCPCD()

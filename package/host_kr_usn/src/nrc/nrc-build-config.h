@@ -30,11 +30,15 @@
 
 /*#define NRC_TEST_SUPPRESS_STA_KEEEP_ALIVE*/
 
+/*#define CONFIG_SPI_HALF_DUPLEX*/
+
 /*
  * README This is a temporary feature.
  * Use only NRC7392
  */
+#ifndef CONFIG_SPI_HALF_DUPLEX
 #define CONFIG_CHECK_READY
+#endif
 
 /*
  * README This is a temporary feature.

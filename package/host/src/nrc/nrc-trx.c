@@ -125,10 +125,6 @@ void nrc_mac_tx(struct ieee80211_hw *hw,
 					tx.nw->d_deauth.vif_index = hw_vifindex(tx.vif);
 					tx.nw->d_deauth.aid = tx.sta->aid;
 				}
-				if (ieee80211_is_probe_req(mh->frame_control)) {
-					nrc_ps_dbg("[%s,L%d][prob_req] drv_state:%d\n", __func__, __LINE__, tx.nw->drv_state);
-					schedule_delayed_work(&tx.nw->fake_prb_resp, msecs_to_jiffies(30));
-				}
 				if (ieee80211_is_qos_nullfunc(mh->frame_control)) {
 					nrc_ps_dbg("[%s,L%d][qos_null] make target wake for keep-alive\n", __func__, __LINE__);
 					gpio_set_value(RPI_GPIO_FOR_PS, 1);
@@ -147,7 +143,8 @@ void nrc_mac_tx(struct ieee80211_hw *hw,
 			}
 		}
 
-		if (ieee80211_hw_check(hw, SUPPORTS_DYNAMIC_PS)) {
+		if (ieee80211_hw_check(hw, SUPPORTS_DYNAMIC_PS) &&
+			hw->conf.dynamic_ps_timeout > 0) {
 			mod_timer(&tx.nw->dynamic_ps_timer,
 				jiffies + msecs_to_jiffies(hw->conf.dynamic_ps_timeout));
 		}
@@ -495,7 +492,8 @@ static void nrc_mac_rx_h_status(struct nrc *nw, struct sk_buff *skb)
 	if (fh->flags.rx.iv_stripped)
 		status->flag |= RX_FLAG_IV_STRIPPED;
 
-#if KERNEL_VERSION(4, 4, 132) <= NRC_TARGET_KERNEL_VERSION
+#if ((KERNEL_VERSION(4, 4, 132) <= NRC_TARGET_KERNEL_VERSION) && (KERNEL_VERSION(4, 5, 0) > NRC_TARGET_KERNEL_VERSION)) ||\
+	(KERNEL_VERSION(4, 7, 0) <= NRC_TARGET_KERNEL_VERSION)
 	if(mh->frame_control & 0x0400)
 	{
 		status->flag |= RX_FLAG_ALLOW_SAME_PN;
@@ -507,35 +505,6 @@ static void nrc_mac_rx_h_status(struct nrc *nw, struct sk_buff *skb)
 		//nrc_stats_print();
 	}
 
-}
-
-static int nrc_skb_copy(struct nrc *nw, struct sk_buff *skb)
-{
-	struct ieee80211_hdr *mh = (void*)skb->data;
-	__le16 fc;
-
-	fc = mh->frame_control;
-	if (nw->drv_state == NRC_DRV_RUNNING) {
-		/* Clone probe response frame */
-		if (fc & 0x50) {
-			if (nw->c_prb_resp) {
-				dev_kfree_skb(nw->c_prb_resp);
-				nw->c_prb_resp = NULL;
-			}
-			nw->c_prb_resp = skb_copy(skb, GFP_ATOMIC);
-		}
-
-		/* Clone beacon frame */
-		if (fc & 0x80) {
-			if (nw->c_bcn) {
-				dev_kfree_skb(nw->c_bcn);
-				nw->c_bcn = NULL;
-			}
-			nw->c_bcn = skb_copy(skb, GFP_ATOMIC);
-		}
-	}
-
-	return 1;
 }
 
 static void nrc_rx_handler(void *data, u8 *mac, struct ieee80211_vif *vif)
@@ -566,9 +535,6 @@ static void nrc_rx_handler(void *data, u8 *mac, struct ieee80211_vif *vif)
 			goto rxh_out;
 	}
 
-	if (!disable_cqm && (power_save >= NRC_PS_DEEPSLEEP_TIM))
-		nrc_skb_copy(rx->nw, rx->skb);
-
 rxh_out:
 	rcu_read_unlock();
 	rx->result = res;
@@ -588,7 +554,8 @@ int nrc_mac_rx(struct nrc *nw, struct sk_buff *skb)
 	int ret = 0;
 	u64 now = 0, diff = 0;
 
-	if (!((nw->drv_state == NRC_DRV_RUNNING) || (nw->drv_state == NRC_DRV_PS)) ||
+	if (!((nw->drv_state == NRC_DRV_RUNNING) ||
+		(nw->drv_state == NRC_DRV_PS)) ||
 		atomic_read(&nw->d_deauth.delayed_deauth)) {
 		nrc_mac_dbg("Target not ready, discarding frame)");
 		dev_kfree_skb(skb);
@@ -625,6 +592,14 @@ int nrc_mac_rx(struct nrc *nw, struct sk_buff *skb)
 	if (!rx.result) {
 		struct ieee80211_hdr *mh = (void*)skb->data;
 		__le16 fc = mh->frame_control;
+
+		if (!disable_cqm) {
+			if (nw->associated && ieee80211_is_probe_resp(fc)) {
+				mod_timer(&nw->bcn_mon_timer,
+					jiffies + msecs_to_jiffies(nw->beacon_timeout));
+			}
+		}
+
 		ieee80211_rx_irqsafe(nw->hw, rx.skb);
 		if (ieee80211_hw_check(nw->hw, SUPPORTS_DYNAMIC_PS)) {
 			if (ieee80211_is_data(fc) && nw->ps_enabled &&
@@ -748,6 +723,12 @@ static int rx_h_vendor(struct nrc_trx_data *rx)
 
 	if (!ieee80211_is_beacon(fc))
 		return 0;
+	else {
+		if (!disable_cqm && rx->nw->associated) {
+			mod_timer(&rx->nw->bcn_mon_timer,
+				jiffies + msecs_to_jiffies(rx->nw->beacon_timeout));
+		}
+	}
 
 	ies_offset = offsetof(struct ieee80211_mgmt,
 			u.beacon.variable);

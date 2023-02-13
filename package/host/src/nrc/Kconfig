@@ -1,0 +1,8 @@
+
+config NRC7292
+	tristate "Newracom 802.11ah Wi-Fi halow driver (NRC7292)"
+	depends on MAC80211
+	depends on SPI
+	---help---
+		The Host Driver for Newracom 802.11ah Wi-Fi halow device (NRC7292)
+

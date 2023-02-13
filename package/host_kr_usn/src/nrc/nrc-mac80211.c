@@ -508,7 +508,7 @@ nrc_txq_pullable(struct nrc_txq *ntxq)
 		return true;
 	}
 	else {
-		pr_info("overrun, tx size:%d\n", ntxq->data_size);
+		pr_info_ratelimited("overrun, tx size:%d\n", ntxq->data_size);
 		return false;
 	}
 	return (ntxq->data_size < NR_NRC_MAX_TXQ_SIZE);
@@ -959,8 +959,10 @@ static int nrc_mac_add_interface(struct ieee80211_hw *hw,
 	 */
 	/* vif->driver_flags |= IEEE80211_VIF_SUPPORTS_UAPSD; */
 #endif
-
 	memset(i_vif, 0, sizeof(*i_vif));
+
+	if (WARN_ON(nrc_alloc_vif_index(nw, vif) < 0))
+		return -1;
 
 	if (vif->type == NL80211_IFTYPE_MONITOR) {
 		/*
@@ -974,9 +976,6 @@ static int nrc_mac_add_interface(struct ieee80211_hw *hw,
 	}
 
 	nw->promisc = false;
-
-	if (WARN_ON(nrc_alloc_vif_index(nw, vif) < 0))
-		return -1;
 
 	hw_queue_start = i_vif->index * NR_NRC_VIF_HW_QUEUE;
 	if (i_vif->index)
@@ -1040,9 +1039,9 @@ static int nrc_mac_add_interface(struct ieee80211_hw *hw,
 }
 
 static int nrc_mac_change_interface(struct ieee80211_hw *hw,
-				    struct ieee80211_vif *vif,
-				    enum nl80211_iftype newtype,
-				    bool newp2p)
+				struct ieee80211_vif *vif,
+				enum nl80211_iftype newtype,
+				bool newp2p)
 {
 	struct nrc *nw = hw->priv;
 
@@ -1064,7 +1063,7 @@ static int nrc_mac_change_interface(struct ieee80211_hw *hw,
 }
 
 static void nrc_mac_remove_interface(struct ieee80211_hw *hw,
-				     struct ieee80211_vif *vif)
+				struct ieee80211_vif *vif)
 {
 	struct nrc *nw = hw->priv;
 	struct nrc_vif *i_vif = to_i_vif(vif);
@@ -1208,7 +1207,7 @@ void nrc_mac_add_tlv_channel(struct sk_buff *skb,
 		ch_param.width = ch_type;
 
 	nrc_wim_skb_add_tlv(skb, WIM_TLV_CHANNEL,
-				   sizeof(ch_param), &ch_param);
+				sizeof(ch_param), &ch_param);
 }
 #endif
 
@@ -1455,10 +1454,23 @@ void nrc_mac_bss_info_changed(struct ieee80211_hw *hw,
 	skb = nrc_wim_alloc_skb_vif(nw, vif, WIM_CMD_SET, WIM_MAX_SIZE);
 
 	if (changed & BSS_CHANGED_ASSOC) {
-		if (info->assoc)
+		nw->associated = info->assoc;
+		if (info->assoc) {
 			nrc_bss_assoc(hw, vif, info, skb);
+			if (!disable_cqm) {
+				mod_timer(&nw->bcn_mon_timer,
+					jiffies + msecs_to_jiffies(nw->beacon_timeout));
+			}
+		} else {
+			if (!disable_cqm) {
+				nw->beacon_timeout = 0;
+				del_timer(&nw->bcn_mon_timer);
+			}
+		}
+		nrc_mac_dbg("[BSS_CHANGED_ASSOC] assoc:%d beacon_timeout:%lu",
+			nw->associated, nw->beacon_timeout);
 	}
-
+	
 	if (changed & BSS_CHANGED_BASIC_RATES) {
 		nrc_mac_dbg("basic_rate: %08x", info->basic_rates);
 		nrc_wim_skb_add_tlv(skb, WIM_TLV_BASIC_RATE,
@@ -1489,18 +1501,22 @@ void nrc_mac_bss_info_changed(struct ieee80211_hw *hw,
 		u8 dtim_period = info->dtim_period;
 
 		nrc_mac_dbg("beacon: %s, interval=%u, dtim_period:%u",
-			    info->enable_beacon ? "enabled" : "disabled",
-			    info->beacon_int,
+				info->enable_beacon ? "enabled" : "disabled",
+				info->beacon_int,
 				info->dtim_period);
 
 		nw->beacon_int = bi = info->beacon_int;
-		if ((vif->type == NL80211_IFTYPE_AP || (vif->type == NL80211_IFTYPE_MESH_POINT) 
-#if defined (CONFIG_SUPPORT_IBSS)
-			|| (vif->type == NL80211_IFTYPE_ADHOC)
-#endif
-		) && nrc_mac_is_s1g(nw) && enable_short_bi) {
+		if (!disable_cqm) {
+			if (vif->type == NL80211_IFTYPE_STATION) {
+				nw->beacon_timeout = beacon_loss_count * bi;
+				nrc_mac_dbg("[BSS_CHANGED_BEACON_INT] assoc:%d beacon_timeout:%lu",
+					nw->associated, nw->beacon_timeout);
+			}
+		}
+		if ((vif->type == NL80211_IFTYPE_AP || (vif->type == NL80211_IFTYPE_MESH_POINT)) &&
+			nrc_mac_is_s1g(nw) && enable_short_bi) {
 			/**
-			 * AP/MESH : When 'enable_short_bi' is true(AP will send S1G beacons with both(full/minimum) set), 
+			 * AP/MESH : When 'enable_short_bi' is true(AP will send S1G beacons with both(full/minimum) set),
 			 *           the Short Beacon Interval is 'beacon_int' value in hostap/wpa_supplicant conf. file
 			 *           and the Beacon Interval will be 'Short Beacon Interval * 10'.
 			 *           Otherwise, 'beacon_int' is used for the value of Beacon Interval and
@@ -1571,11 +1587,11 @@ void nrc_mac_bss_info_changed(struct ieee80211_hw *hw,
 	if (changed & BSS_CHANGED_TXPOWER) {
 		int txpower = info->txpower;
 		uint16_t txpower_type = info->txpower_type;
-		nrc_mac_dbg("%s(changed:%s[PW=%d TYPE=%s])", __func__,
+		nrc_common_dbg("%s(changed:%s[PW=%d TYPE=%s])", __func__,
 			"BSS_CHANGED_TXPOWER", txpower,
 			txpower_type == TXPWR_LIMIT ? "limit" : txpower_type ? "fixed" : "auto");
 #ifdef CONFIG_SUPPORT_IW_TXPWR
-#ifdef CONFIG_SUPPORT_BD
+#if 0 //def CONFIG_SUPPORT_BD
 		/**
 		 * cli_app cannot be used on openWRT system. so use "iw phy nrc80211 set txpower"
 		 * But, txpower could be limited smaller than expected by user in this cse
@@ -1584,12 +1600,12 @@ void nrc_mac_bss_info_changed(struct ieee80211_hw *hw,
 		 * Then, the actual txpower will be assigned as the value in bd file finally.
 		 */
 		if (txpower_type < TXPWR_FIXED && txpower < 24) {
-			nrc_mac_dbg("%s max txpower was changed (%d -> 30)",__func__, txpower);
+			nrc_common_dbg("%s max txpower was changed (%d -> 30)",__func__, txpower);
 			txpower = 24;
 		}
 #endif /* CONFIG_SUPPORT_BD */
 		if (txpower < 1 || txpower > 30) {
-			nrc_mac_dbg("%s invalid txpowr (%d)", __func__, txpower);
+			nrc_common_dbg("%s invalid txpowr (%d)", __func__, txpower);
 		} else {
 			u32 p = txpower_type;
 			p = (p << 16) | txpower;
@@ -1735,7 +1751,7 @@ int nrc_mac_sta_state(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 	struct nrc *nw = (struct nrc*)hw->priv;
 
 	nrc_dbg(NRC_DBG_STATE, "%s: sta:%pM, %d->%d", __func__, sta->addr,
-		    old_state, new_state);
+		old_state, new_state);
 
 	i_sta->state = new_state;
 
@@ -1846,42 +1862,40 @@ int nrc_mac_conf_tx(struct ieee80211_hw *hw,
 #endif
 {
 	struct nrc *nw = hw->priv;
-	struct wim_tx_queue_param *q;
 	struct sk_buff *skb;
+	static struct wim_tx_queue_param tqp[NRC_QUEUE_MAX];
 #ifdef CONFIG_SUPPORT_AFTER_KERNEL_3_0_36
 #else
 	struct ieee80211_vif *vif = nw->vif[0];
 #endif
 
-#if 0
-	nrc_mac_dbg("%s: ac=%d txop=%d cw_min=%d cw_max=%d aifs=%d uapsd=%d",
-		    __func__, ac, params->txop, params->cw_min,
-		    params->cw_max, params->aifs, params->uapsd);
+#ifdef CONFIG_SUPPORT_AFTER_KERNEL_3_0_36
+	ac = vif->hw_queue[ac];
 #endif
 
 	if (atomic_read(&nw->d_deauth.delayed_deauth))
 		memcpy(&nw->d_deauth.tqp[ac], params, sizeof(struct ieee80211_tx_queue_params));
 
-    if (nw->drv_state >= NRC_DRV_RUNNING) {
-		skb = nrc_wim_alloc_skb_vif(nw, vif, WIM_CMD_SET, tlv_len(sizeof(*q)));
+	if (nw->drv_state >= NRC_DRV_RUNNING) {
+		if (tqp[ac].txop != params->txop || tqp[ac].cw_min != params->cw_min ||
+			tqp[ac].cw_max != params->cw_max || tqp[ac].aifsn != params->aifs ||
+			tqp[ac].uapsd != params->uapsd || tqp[ac].ac != ac) {
+			skb = nrc_wim_alloc_skb_vif(nw, vif, WIM_CMD_SET, tlv_len(sizeof(struct wim_tx_queue_param)));
+			tqp[ac].ac = ac;
+			tqp[ac].txop = params->txop;
+			tqp[ac].cw_min = params->cw_min;
+			tqp[ac].cw_max = params->cw_max;
+			tqp[ac].aifsn = params->aifs;
+			tqp[ac].uapsd = params->uapsd;
+			nrc_wim_skb_add_tlv(skb, WIM_TLV_TXQ_PARAM, sizeof(struct wim_tx_queue_param), &tqp[ac]);
 
-		q = nrc_wim_skb_add_tlv(skb, WIM_TLV_TXQ_PARAM, sizeof(*q), NULL);
-#ifdef CONFIG_SUPPORT_AFTER_KERNEL_3_0_36
-		q->ac = vif->hw_queue[ac];
-#else
-		q->ac = (u8)ac;
-#endif
-		q->txop = params->txop;
-		q->cw_min = params->cw_min;
-		q->cw_max = params->cw_max;
-		q->aifsn = params->aifs;
-		q->uapsd = params->uapsd;
-		q->sta_type = 0; /* FIXME */
+			nrc_mac_dbg("%s: ac=%d txop=%d cw_min=%d cw_max=%d aifs=%d uapsd=%d", __func__,
+				ac, params->txop, params->cw_min, params->cw_max, params->aifs, params->uapsd);
 
-		return nrc_xmit_wim_request(nw, skb);
-    } else {
-        return 0;
+			return nrc_xmit_wim_request(nw, skb);
+		}
 	}
+	return 0;
 }
 
 static int nrc_mac_get_survey(struct ieee80211_hw *hw, int idx,
@@ -2352,11 +2366,11 @@ static int nrc_mac_set_key(struct ieee80211_hw *hw, enum set_key_cmd cmd,
 	}
 
 	if (cmd == DISABLE_KEY) {
-		nrc_mac_dbg("%s delete key (flag:%d, cipher:%d)\n",
+		nrc_mac_dbg("%s delete key (flag:%u, cipher:%u)",
 			__func__, key->flags, key->cipher);
 
 		if ((key->flags & IEEE80211_KEY_FLAG_PAIRWISE) && sta == NULL) {
-			nrc_mac_dbg("%s delete ptk but sta is null! (key->flag:%u)\n",
+			nrc_mac_dbg("%s delete ptk but sta is null! (key->flag:%u)",
 				__func__, key->flags);
 			return 1;
 		}
@@ -2364,7 +2378,7 @@ static int nrc_mac_set_key(struct ieee80211_hw *hw, enum set_key_cmd cmd,
 		if (key->cipher == WLAN_CIPHER_SUITE_AES_CMAC ||
 			key->cipher == WLAN_CIPHER_SUITE_BIP_GMAC_128 ||
 			key->cipher == WLAN_CIPHER_SUITE_BIP_GMAC_256) {
-			nrc_mac_dbg("%s delete key but not supported key cipher (key->cipher:%u)\n",
+			nrc_mac_dbg("%s delete key but not supported key cipher (key->cipher:%u)",
 				__func__, key->cipher);
 			return 1;
 		}
@@ -2746,7 +2760,7 @@ int nrc_mac_suspend(struct ieee80211_hw *hw, struct cfg80211_wowlan *wowlan)
 	struct nrc_txq *ntxq;
 	struct wim_pm_param *p;
 
-	nrc_ps_dbg("[%s,L%d] any:%d patterns(%p) n_patterns(%d)\n", __func__, __LINE__, 
+	nrc_ps_dbg("[%s,L%d] any:%d patterns(%p) n_patterns(%d)", __func__, __LINE__,
 			wowlan->any, wowlan->patterns, wowlan->n_patterns);
 
 	/*
@@ -2755,7 +2769,6 @@ int nrc_mac_suspend(struct ieee80211_hw *hw, struct cfg80211_wowlan *wowlan)
 	 * and then the wowlan info should be transferred.
 	 */
 	if (nw->drv_state == NRC_DRV_PS) {
-		cancel_delayed_work(&nw->hif->nw->fake_bcn);
 		gpio_set_value(RPI_GPIO_FOR_PS, 1);
 		while (nw->drv_state == NRC_DRV_PS) {
 			msleep(100);
@@ -2802,13 +2815,15 @@ int nrc_mac_suspend(struct ieee80211_hw *hw, struct cfg80211_wowlan *wowlan)
 	msleep(100);
 	nrc_hif_flush_wq(nw->hif);
 
-	/* SPI suspend for deepsleep  */
-	if (!ieee80211_hw_check(nw->hw, SUPPORTS_DYNAMIC_PS)) {
-		nrc_hif_suspend(nw->hif);
-		cancel_delayed_work(&nw->hif->nw->fake_bcn);
-		msleep(100);
+	if (!disable_cqm) {
+		del_timer(&nw->bcn_mon_timer);
 	}
-	nrc_ps_dbg("[%s,L%d] Enter DEEPSLEEP(%d)!!!\n", __func__, __LINE__, ret);
+
+	/* SPI suspend for deepsleep  */
+	if (!ieee80211_hw_check(hw, SUPPORTS_DYNAMIC_PS)) {
+		nrc_hif_suspend(nw->hif);
+	}
+	nrc_ps_dbg("[%s,L%d] Enter DEEPSLEEP(%d)!!!", __func__, __LINE__, ret);
 
 	return 0;
 }
@@ -2972,6 +2987,11 @@ int nrc_reg_notifier(struct wiphy *wiphy,
 #endif
 	}
 
+	if (!strncmp("JP", request->alpha2,2)) {
+		nrc_mac_dbg("CC is JP. LBT is enabled");
+		enable_usn = true;
+	}
+
 #if defined(CONFIG_SUPPORT_BD)
 	//Read board data and save buffer
 	/* Check the state of undefined CC and update it with default country(US) for intialization of channel list */
@@ -2983,10 +3003,10 @@ int nrc_reg_notifier(struct wiphy *wiphy,
 	}
 
 	if(bd_param) {
-		nrc_dbg(NRC_DBG_MAC,"type %04X length %04X checksum %04X target_ver %04X",
+		nrc_dbg(NRC_DBG_BD,"type %04X length %04X checksum %04X target_ver %04X",
 				bd_param->type, bd_param->length, bd_param->checksum, bd_param->hw_version);
 		for(i=0; i < bd_param->length - 4;) {
-			nrc_dbg(NRC_DBG_MAC,"%02d %02d %02d %02d %02d %02d %02d %02d %02d %02d %02d %02d",
+			nrc_dbg(NRC_DBG_BD,"%02d %02d %02d %02d %02d %02d %02d %02d %02d %02d %02d %02d",
 				(bd_param->value[i]), (bd_param->value[i+1]), (bd_param->value[i+2]),
 				(bd_param->value[i+3]), (bd_param->value[i+4]), (bd_param->value[i+5]),
 				(bd_param->value[i+6]), (bd_param->value[i+7]), (bd_param->value[i+8]),
@@ -3069,7 +3089,7 @@ static int nrc_vendor_update(struct nrc *nw, u8 subcmd,
 
 	// Remove old data first
 	pos = nrc_vendor_remove(nw, subcmd);
-	
+
 	/* Append new data */
 	pos = skb_put(nw->vendor_skb, new_elem_len);
 	*pos++ = WLAN_EID_VENDOR_SPECIFIC;
@@ -3300,60 +3320,6 @@ static const struct nl80211_vendor_cmd_info nrc_vendor_events[] = {
 	},
 };
 
-#define MAC_FRAME_HEADER_LENGTH 24
-#define TIMESTAMP_LENGTH 8
-static void nrc_processing_fake_beacon(struct work_struct *work)
-{
-	struct nrc *nw = container_of(work, struct nrc, fake_bcn.work);
-
-	if (nw->drv_state == NRC_DRV_PS) {
-		struct ieee80211_hdr *mh;
-        if (nw->c_bcn) {
-			u8 *p = (void*)nw->c_bcn->data;
-			u64 *tstamp = (u64*)(p + MAC_FRAME_HEADER_LENGTH);
-			u64 t = *tstamp;
-			struct sk_buff* cskb;
-			mh = (void*)p;
-			t = (t << 32) + (t >> 32);
-			mh->seq_ctrl += 0x10;
-			t += nw->beacon_int * 1024;
-			t = (t << 32) + (t >> 32);
-			*tstamp = t;
-			cskb = skb_copy(nw->c_bcn, GFP_ATOMIC);
-			if (cskb && !atomic_read(&nw->d_deauth.delayed_deauth)) {
-				ieee80211_rx_irqsafe(nw->hw, cskb);
-				//schedule_delayed_work(&nw->fake_bcn, usecs_to_jiffies(nw->beacon_int * 1024));
-				schedule_delayed_work(&nw->fake_bcn, msecs_to_jiffies(nw->beacon_int));
-			}
-		}
-	}
-}
-
-static void nrc_processing_fake_probe_response(struct work_struct *work)
-{
-	struct nrc *nw = container_of(work, struct nrc, fake_prb_resp.work);
-	struct ieee80211_hdr *mh;
-
-	if (nw->c_prb_resp) {
-		u8 *p = (void*)nw->c_prb_resp->data;
-		u64 *tstamp = (u64*)(p + MAC_FRAME_HEADER_LENGTH);
-		u64 *tstamp2;
-		u64 t = *tstamp;
-		struct sk_buff* cskb;
-		mh = (void*)p;
-		mh->seq_ctrl += 0x10;
-		p = (void*)nw->c_bcn->data;
-		tstamp2 = (u64*)(p + MAC_FRAME_HEADER_LENGTH);
-		/* add an arbitrary time gap(100ms) into the timestamp of the current fake beacon */
-		t += *tstamp2 + 100;
-		*tstamp = t;
-		cskb = skb_copy(nw->c_prb_resp, GFP_ATOMIC);
-		if (cskb) {
-			ieee80211_rx_irqsafe(nw->hw, cskb);
-		}
-	}
-}
-
 static void nrc_rm_vendor_ie_wowlan_pattern(struct work_struct *work)
 {
 	struct nrc *nw = container_of(work, struct nrc, rm_vendor_ie_wowlan_pattern.work);
@@ -3362,6 +3328,22 @@ static void nrc_rm_vendor_ie_wowlan_pattern(struct work_struct *work)
 	nrc_vendor_remove(nw, NRC_SUBCMD_WOWLAN_PATTERN);
 	/* Update beacon */
 	nrc_vendor_update_beacon(nw->hw, nw->vif[0]);
+}
+
+#if KERNEL_VERSION(4, 15, 0) > LINUX_VERSION_CODE
+static void nrc_bcn_mon_timer(unsigned long data)
+{
+	struct nrc *nw = (struct nrc *)data;
+#else
+static void nrc_bcn_mon_timer(struct timer_list *t)
+{
+	struct nrc *nw = from_timer(nw, t, bcn_mon_timer);
+#endif
+	if (nw->drv_state == NRC_DRV_PS) {
+		nrc_mac_dbg("In PS state, ignore bcn_mon_timeout\n");
+		return;
+	}
+	ieee80211_beacon_loss(nw->vif[0]);
 }
 
 #if defined(ENABLE_DYNAMIC_PS)
@@ -3477,10 +3459,16 @@ int nrc_register_hw(struct nrc *nw)
 #ifdef CONFIG_USE_MONITOR_VIF
 	ieee80211_hw_set(hw, WANT_MONITOR_VIF);
 #endif
-
-	if (disable_cqm) {
+	ieee80211_hw_set(hw, CONNECTION_MONITOR);
+	if (!disable_cqm) {
 		nrc_mac_dbg("CQM is disabled");
-		ieee80211_hw_set(hw, CONNECTION_MONITOR);
+		nw->beacon_timeout = 0;
+#if KERNEL_VERSION(4, 15, 0) > LINUX_VERSION_CODE
+		setup_timer(&nw->bcn_mon_timer,
+			nrc_bcn_mon_timer, (unsigned long)nw);
+#else
+		timer_setup(&nw->bcn_mon_timer, nrc_bcn_mon_timer, 0);
+#endif
 	}
 
 	if (power_save >= NRC_PS_MODEMSLEEP) {
@@ -3574,7 +3562,7 @@ int nrc_register_hw(struct nrc *nw)
 			 * but we use other 5Ghz channels to match S1G channels.
 			 *
 			 * sband->ht_cap.cap |= IEEE80211_HT_CAP_SUP_WIDTH_20_40;
-			*/
+			 */
 			sband->ht_cap.cap |=
 				(1 << IEEE80211_HT_CAP_RX_STBC_SHIFT);
 			sband->ht_cap.ampdu_factor =
@@ -3661,8 +3649,6 @@ int nrc_register_hw(struct nrc *nw)
 	nw->ampdu_reject = false;
 
 	INIT_DELAYED_WORK(&nw->roc_finish, nrc_mac_roc_finish);
-	INIT_DELAYED_WORK(&nw->fake_bcn, nrc_processing_fake_beacon);
-	INIT_DELAYED_WORK(&nw->fake_prb_resp, nrc_processing_fake_probe_response);
 	INIT_DELAYED_WORK(&nw->rm_vendor_ie_wowlan_pattern, nrc_rm_vendor_ie_wowlan_pattern);
 
 	/* trx */
@@ -3693,9 +3679,13 @@ void nrc_unregister_hw(struct nrc *nw)
 	ieee80211_unregister_hw(nw->hw);
 	SET_IEEE80211_DEV(nw->hw, NULL);
 	nrc_hif_cleanup(nw->hif);
-	
+
 	if (ieee80211_hw_check(nw->hw, SUPPORTS_DYNAMIC_PS)) {
 		del_timer(&nw->dynamic_ps_timer);
+	}
+
+	if (!disable_cqm) {
+		del_timer(&nw->bcn_mon_timer);
 	}
 
 	if (nw->workqueue != NULL) {

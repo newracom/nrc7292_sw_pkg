@@ -27,7 +27,7 @@ lib$(TARGET).so: $(LIB_SRCS)
 	@$(CC) -shared -o $@ $(LIB_OBJS)
 	@$(RM) *.o
 
-$(TARGET): $(EXE_SRCS)
+$(TARGET): $(EXE_SRCS) lib$(TARGET).a
 	@echo "$@"
 	@$(CC) $^ -o $@ $(CFLAGS) $(LFLAGS)
 
