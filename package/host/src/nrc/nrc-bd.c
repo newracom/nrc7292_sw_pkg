@@ -464,12 +464,13 @@ static void * nrc_dump_load(int len)
 {
 	struct file *filp;
 	loff_t pos=0;
-	mm_segment_t old_fs;
 	char filepath[64];
 	char *buf = NULL;
 #if BD_DEBUG
 	int i;
 #endif
+#if NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(5,19,0)
+	mm_segment_t old_fs;
 
 	sprintf(filepath, "/lib/firmware/%s", bd_name);
 #if KERNEL_VERSION(5,0,0) > NRC_TARGET_KERNEL_VERSION
@@ -481,14 +482,19 @@ static void * nrc_dump_load(int len)
 #else
 	old_fs = force_uaccess_begin();
 #endif
+#else
+	sprintf(filepath, "/lib/firmware/%s", bd_name);
+#endif
 
 	filp = filp_open(filepath, O_RDONLY, 0);
 	if (IS_ERR(filp)) {
 		pr_err("Failed to load board data, error:%d",IS_ERR(filp));
+#if NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(5,19,0)
 #if KERNEL_VERSION(5,10,0) > NRC_TARGET_KERNEL_VERSION
 	set_fs(old_fs);
 #else
 	force_uaccess_end(old_fs);
+#endif
 #endif
 		return NULL;
 	}
@@ -506,10 +512,12 @@ static void * nrc_dump_load(int len)
 #endif
 
 	filp_close(filp, NULL);
+#if NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(5,19,0)
 #if KERNEL_VERSION(5,10,0) > NRC_TARGET_KERNEL_VERSION
 	set_fs(old_fs);
 #else
 	force_uaccess_end(old_fs);
+#endif
 #endif
 
 #if BD_DEBUG
@@ -739,9 +747,10 @@ int nrc_check_bd(void)
 	char *buf;
 	size_t length;
 	int ret;
-	mm_segment_t old_fs;
 	char filepath[64];
-
+#if NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(5,19,0)
+	mm_segment_t old_fs;
+	
 	sprintf(filepath, "/lib/firmware/%s", bd_name);
 #if KERNEL_VERSION(5,0,0) > NRC_TARGET_KERNEL_VERSION
 	old_fs = get_fs();
@@ -752,14 +761,19 @@ int nrc_check_bd(void)
 #else
 	old_fs = force_uaccess_begin();
 #endif
-
+#else
+	sprintf(filepath, "/lib/firmware/%s", bd_name);
+#endif
+	
 	filp = filp_open(filepath, O_RDONLY, 0);
 	if (IS_ERR(filp)) {
 		pr_err("Failed to load board data :error: %d",IS_ERR(filp));
+#if NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(5,19,0)
 #if KERNEL_VERSION(5,10,0) > NRC_TARGET_KERNEL_VERSION
 		set_fs(old_fs);
 #else
 		force_uaccess_end(old_fs);
+#endif
 #endif
 		return -EIO;
 	}
@@ -792,10 +806,12 @@ int nrc_check_bd(void)
 	g_bd_size = kernel_read(filp, pos, buf, (int)length);
 #endif
 	filp_close(filp, NULL);
+#if NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(5,19,0)
 #if KERNEL_VERSION(5,10,0) > NRC_TARGET_KERNEL_VERSION
 	set_fs(old_fs);
 #else
 	force_uaccess_end(old_fs);
+#endif
 #endif
 	kfree(stat);
 

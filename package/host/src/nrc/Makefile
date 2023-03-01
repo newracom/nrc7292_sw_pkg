@@ -2,7 +2,9 @@
 KDIR ?= /lib/modules/$(shell uname -r)/build
 CHECKPATCH ?= $(KDIR)/scripts/checkpatch.pl
 
+ifneq ("$(wildcard $(KDIR)/.config)","")
 include $(KDIR)/.config
+endif
 
 M_SRC = nrc
 

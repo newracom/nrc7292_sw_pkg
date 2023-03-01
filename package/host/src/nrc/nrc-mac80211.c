@@ -671,14 +671,25 @@ static void nrc_assoc_h_basic(struct ieee80211_hw *hw,
 
 	/* Enable later when rate adaptation is supported in the target */
 #ifdef CONFIG_SUPPORT_CHANNEL_INFO
+#if ((KERNEL_VERSION(5, 19, 2) <= NRC_TARGET_KERNEL_VERSION))
+	conf = rcu_dereference(vif->bss_conf.chanctx_conf);
+#else
 	conf = rcu_dereference(vif->chanctx_conf);
+#endif
 	band = conf->def.chan->band;
 #else
 	band = conf_chan->band;
 #endif
+	
+#if ((KERNEL_VERSION(5, 19, 2) <= NRC_TARGET_KERNEL_VERSION))
+	nrc_wim_skb_add_tlv(skb, WIM_TLV_SUPPORTED_RATES,
+			    sizeof(sta->deflink.supp_rates[band]),
+			    &sta->deflink.supp_rates[band]);
+#else
 	nrc_wim_skb_add_tlv(skb, WIM_TLV_SUPPORTED_RATES,
 			    sizeof(sta->supp_rates[band]),
 			    &sta->supp_rates[band]);
+#endif
 	nrc_wim_skb_add_tlv(skb, WIM_TLV_BASIC_RATE,
 			    sizeof(info->basic_rates), &info->basic_rates);
 }
@@ -689,7 +700,11 @@ void nrc_assoc_h_ht(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 		    struct ieee80211_bss_conf *bss_conf,
 		    struct ieee80211_sta *sta, struct sk_buff *skb)
 {
+#if ((KERNEL_VERSION(5, 19, 2) <= NRC_TARGET_KERNEL_VERSION))
+	struct ieee80211_sta_ht_cap *ht_cap = &sta->deflink.ht_cap;
+#else
 	struct ieee80211_sta_ht_cap *ht_cap = &sta->ht_cap;
+#endif
 
 	/* Assumption: ht_cap->ht_supported is false if HT Capabilities
 	 * element is not included in the Association Response frame
@@ -717,9 +732,17 @@ void nrc_assoc_h_phymode(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 	u8 phymode;
 
 	/* HT_MF, non-HT, 11b */
+#if ((KERNEL_VERSION(5, 19, 2) <= NRC_TARGET_KERNEL_VERSION))
+	if (sta->deflink.ht_cap.ht_supported)
+#else
 	if (sta->ht_cap.ht_supported)
+#endif
 		phymode = PHY_HT_MF;
+#if ((KERNEL_VERSION(5, 19, 2) <= NRC_TARGET_KERNEL_VERSION))
+	else if (sta->deflink.supp_rates[NL80211_BAND_2GHZ] >> 4)
+#else
 	else if (sta->supp_rates[NL80211_BAND_2GHZ] >> 4)
+#endif
 		phymode = PHY_HT_NONE;
 	else
 		phymode = PHY_11B;
@@ -1973,7 +1996,11 @@ static int nrc_mac_ampdu_action(struct ieee80211_hw *hw,
 	switch (action) {
 	case IEEE80211_AMPDU_TX_START:
 		nrc_dbg(NRC_DBG_MAC, "%s: IEEE80211_AMPDU_TX_START", __func__);
+#if ((KERNEL_VERSION(5, 19, 2) <= NRC_TARGET_KERNEL_VERSION))
+		if (!nw->ampdu_supported || !sta->deflink.ht_cap.ht_supported)
+#else
 		if (!nw->ampdu_supported || !sta->ht_cap.ht_supported)
+#endif
 			return -EOPNOTSUPP;
 
 		if (nrc_wim_ampdu_action(nw, vif, WIM_AMPDU_TX_START, sta, tid))
@@ -2454,13 +2481,21 @@ static void nrc_mac_channel_policy(void *data, u8 *mac,
 		(struct ieee80211_conf *)data;
 	struct wireless_dev *wdev = i_vif->dev->ieee80211_ptr;
 #endif
+#if ((KERNEL_VERSION(5, 19, 2) <= NRC_TARGET_KERNEL_VERSION))
+	const struct cfg80211_chan_def *chandef = wdev_chandef(wdev, 0);
+#endif
 
 	if (!wdev)
 		return;
 
 #ifdef CONFIG_SUPPORT_CHANNEL_INFO
+#if ((KERNEL_VERSION(5, 19, 2) <= NRC_TARGET_KERNEL_VERSION))
+	if (chandef->chan &&
+		chandef->chan->center_freq ==
+#else
 	if (wdev->chandef.chan &&
 		wdev->chandef.chan->center_freq ==
+#endif
 		chan_to_follow->chan->center_freq)
 #else
 	if (wdev->channel &&
