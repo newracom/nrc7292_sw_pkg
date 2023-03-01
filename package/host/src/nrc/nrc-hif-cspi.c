@@ -2215,7 +2215,7 @@ static int c_spi_remove(struct spi_device *spi)
 
 static struct spi_driver spi_driver = {
 	.probe = c_spi_probe,
-	.remove = c_spi_remove,
+	.remove = (void*) c_spi_remove,
 	.driver = {
 		.name = "nrc-cspi",
 	},
@@ -2226,6 +2226,52 @@ static struct spi_board_info bi = {
 //	.chip_select = 0,
 	.mode = SPI_MODE_0,
 };
+
+#if NRC_TARGET_KERNEL_VERSION >= KERNEL_VERSION(5,16,0)
+#include <linux/platform_device.h>
+static int __spi_controller_match(struct device *dev, const void *data)
+{
+	struct spi_controller *ctlr;
+	const u16 *bus_num = data;
+
+	ctlr = container_of(dev, struct spi_controller, dev);
+	
+	if(!ctlr) {
+		return 0;
+	}
+	
+	return ctlr->bus_num == *bus_num;
+}
+
+static struct spi_controller *spi_busnum_to_master(u16 bus_num)
+{
+	struct platform_device *pdev = NULL;
+	struct spi_master *master = NULL;
+	struct spi_controller *ctlr = NULL;
+	struct device *dev = NULL;
+	
+	pdev = platform_device_alloc("pdev", PLATFORM_DEVID_NONE);
+	pdev->num_resources = 0;
+	platform_device_add(pdev);
+	
+	master = spi_alloc_master(&pdev->dev, sizeof(void *));
+	if (!master) {
+		pr_err("Error: failed to allocate SPI master device\n");
+		platform_device_put(pdev);
+		return NULL;
+	}
+    
+	dev = class_find_device(master->dev.class, NULL, &bus_num, __spi_controller_match);
+	if (dev) {
+		ctlr = container_of(dev, struct spi_controller, dev);
+	}
+	
+	spi_master_put(master);
+	platform_device_put(pdev);
+	
+	return ctlr;
+}
+#endif
 
 struct nrc_hif_device *nrc_hif_cspi_init(void)
 {

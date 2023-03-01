@@ -27,8 +27,8 @@
 static void write_file(char *filename, char *data, int len)
 {
 	struct file *filp;
+#if NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(5,19,0)
 	mm_segment_t old_fs;
-
 #if KERNEL_VERSION(5,0,0) > NRC_TARGET_KERNEL_VERSION
 	old_fs = get_fs();
 	set_fs( get_ds() );
@@ -37,6 +37,7 @@ static void write_file(char *filename, char *data, int len)
 	set_fs( KERNEL_DS );
 #else
 	old_fs = force_uaccess_begin();
+#endif
 #endif
 	filp = filp_open(filename, O_CREAT|O_RDWR, 0606);
 	if (IS_ERR(filp)) {
@@ -50,10 +51,12 @@ static void write_file(char *filename, char *data, int len)
 #endif
 
 	filp_close(filp, NULL);
+#if NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(5,19,0)
 #if KERNEL_VERSION(5,10,0) > NRC_TARGET_KERNEL_VERSION
 	set_fs(old_fs);
 #else
 	force_uaccess_end(old_fs);
+#endif
 #endif
 }
 

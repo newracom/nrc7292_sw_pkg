@@ -321,7 +321,11 @@ static void sta_max_idle_period_expire(struct timer_list *t)
 	skb_set_queue_mapping(skb, IEEE80211_AC_VO);
 
 #ifdef CONFIG_SUPPORT_CHANNEL_INFO
+#if ((KERNEL_VERSION(5, 19, 2) <= NRC_TARGET_KERNEL_VERSION))
+	chanctx_conf = rcu_dereference(i_sta->vif->bss_conf.chanctx_conf);
+#else
 	chanctx_conf = rcu_dereference(i_sta->vif->chanctx_conf);
+#endif
 	if (!chanctx_conf)
 		goto drop;
 

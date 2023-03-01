@@ -455,7 +455,11 @@ static int halow_set_dut(struct sk_buff *skb, struct genl_info *info)
 #endif
 			skb_set_queue_mapping(b, IEEE80211_AC_VO);
 #ifdef CONFIG_SUPPORT_CHANNEL_INFO
+#if ((KERNEL_VERSION(5, 19, 2) <= NRC_TARGET_KERNEL_VERSION))
+			chanctx_conf = rcu_dereference(vif->bss_conf.chanctx_conf);
+#else
 			chanctx_conf = rcu_dereference(vif->chanctx_conf);
+#endif
 			band = chanctx_conf->def.chan->band;
 
 			if (!ieee80211_tx_prepare_skb(nrc_nw->hw,
@@ -1041,7 +1045,11 @@ static void generate_mmic_error(void *data, u8 *mac, struct ieee80211_vif *vif)
 	rx_status = IEEE80211_SKB_RXCB(skb);
 
 #ifdef CONFIG_SUPPORT_CHANNEL_INFO
+#if ((KERNEL_VERSION(5, 19, 2) <= NRC_TARGET_KERNEL_VERSION))
+	chan = rcu_dereference(vif->bss_conf.chanctx_conf);
+#else
 	chan = rcu_dereference(vif->chanctx_conf);
+#endif
 	if (!chan)
 		goto out;
 
