@@ -634,7 +634,7 @@ static struct sk_buff *spi_rx_skb(struct spi_device *spi,
 	if (c_spi_num_slots(priv, RX_SLOT) > 32) {
 		SYNC_UNLOCK(hdev);
 		if (cnt1++ < 10) {
-			pr_err("!!!!! garbage rx data");
+// 			pr_err("!!!!! garbage rx data");
 		}
 		goto fail;
 	}
