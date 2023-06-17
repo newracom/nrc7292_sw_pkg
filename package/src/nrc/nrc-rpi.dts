@@ -1,0 +1,31 @@
+/dts-v1/;
+/plugin/;
+/ {
+	compatible = "brcm,bcm2835", "brcm,bcm2708", "brcm,bcm2709", "brcm,bcm2837", "brcm,bcm2711"; /* RPI3, 4 */
+
+	fragment@0 {
+		target = <&spidev0>; /* or &spi0 */
+		__overlay__ {
+			status = "disabled";
+		};
+	};
+	fragment@1 {
+		target = <&spi0>;
+		__overlay__ {
+			status = "okay";
+			#address-cells = <1>;
+			#size-cells = <0>;
+			nrc:nrc-cspi@0 {				/* Bus Number */
+				compatible ="nrc80211";
+				reg = <0>;  				/* CS Number */
+				interrupt-parent = <&gpio>;
+				interrupts = <5 4>;  			/* GPIO Number */ /* IRQ_TYPE_LEVEL_HIGH */
+				spi-max-frequency = <20000000>;		/* Max Freq */
+			};
+		};
+	};
+
+	__overrides__ {
+		max_speed_hz = <&nrc>,"spi-max-frequency:0";
+	};
+};

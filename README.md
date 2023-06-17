@@ -2,6 +2,7 @@
 
 ## Notice
 ### Release roadmap
+- v1.4 (2023.06.16)
 - v1.3.4_rev14 (2022.12.01)
 - v1.3.4_rev13 (2022.11.30)
 - v1.3.4_rev12 (2022.10.28)
@@ -23,22 +24,24 @@
 - v1.3.0 (2020.05.30)
 
 ### Latest release
-- [NRC7292_SW_PKG_v1.3.4_rev14](https://github.com/newracom/nrc7292_sw_pkg/releases/tag/v1.3.4_rev14)
+- [NRC7292_SW_PKG_v1.4](https://github.com/newracom/nrc7292_sw_pkg/releases/tag/v1.4)
 
 ### Release package contents
-- host: NRC7292 software package for global regulatory domains
-- host_kr_mic: NRC7292 software package for South Korea MIC frequency regulation
-- host_kr_usn: NRC7292 software package for South Korea USN frequency regulation
-
+- package: NRC7292 software package for global regulatory domains
+```
+  package
+  ├── doc
+  ├── evk
+  │   ├── binary
+  │   └── sw_pkg
+  │       └── nrc_pkg
+  └── src
+      ├── cli_app
+      ├── ft232h-usb-spi
+      ├── nrc
+      └── nrc_hspi_simple
+```
 ## NRC7292 Software Package User Guide
-### (Optional) Install toolchain
-To build host driver, GNU ARM embedded toolchain is needed.
-Please follow commands to install toolchain by using toolchain in this repository.
-```
-tar -xf gcc-arm-none-eabi-7-2018-q2-update-linux.tar.bz2
-vi ~/.bashrc
-  export PATH="~/gcc-arm-none-eabi-7-2018-q2-update/bin:$PATH"
-```
 ### Get NRC7292 Software Package
 NRC7292 Software package is provided in this repository. Please refer to the following git command to get it.
 ```
@@ -50,7 +53,7 @@ git clone https://github.com/newracom/nrc7292_sw_pkg.git
 You can get Device Tree Source (DTS) for NRC7292 in dts directory. Please install DT overlay by following commands below.
 ```
 cd /boot/overlays
-sudo dtc -I dts -O dtb -o newracom.dtbo newracom-overlay.dts
+sudo dtc -I dts -O dtb -o newracom.dtbo newracom.dts
 sudo vi /boot/config.txt
   dtoverlay=newracom
 ```
@@ -65,7 +68,7 @@ And you can also install key binaries or build host driver as below.
 #### (Optional) Install firmware/driver/cli_app binaries
 Please follow below commands to install firmware, driver and cli_app.
 ```
-cd host/evk/binary
+cd evk/binary
 cp ./cli_app ~/nrc_pkg/script
 cp ./nrc.ko ~/nrc_pkg/sw/driver
 cp ./nrc7292_cspi.bin ~/nrc_pkg/sw/firmware
@@ -73,7 +76,7 @@ cp ./nrc7292_cspi.bin ~/nrc_pkg/sw/firmware
 #### (Optional) Build host driver
 You can get the pre-built host driver in nrc_pkg/sw/driver, but you can build it by youself by following below commands.
 ```
-cd host/nrc_driver/source/nrc_driver/nrc
+cd package/src/nrc
 make clean
 make
 cp nrc.ko ~/nrc_pkg/sw/driver
@@ -119,13 +122,14 @@ There are a couple of configurable parameters as below.
 max_cpuclock      = 1         # Set Max CPU Clock : 0(off) or 1(on)
 ##################################################################################
 # Firmware Conf.
-model             = 7292      # 7292
+model             = 7292      # 7292/7393/7394
 fw_download       = 1         # 0(FW Download off) or 1(FW Download on)
 fw_name           = 'uni_s1g.bin'
 ##################################################################################
 # DEBUG Conf.
 # NRC Driver log
 driver_debug      = 0         # NRC Driver debug option : 0(off) or 1(on)
+dbg_flow_control  = 0         # Print TRX slot and credit status in real-time
 #--------------------------------------------------------------------------------#
 # WPA Supplicant Log (STA Only)
 supplicant_debug  = 0         # WPA Supplicant debug option : 0(off) or 1(on)
@@ -155,10 +159,10 @@ ft232h_usb_spi = 0            # FTDI FT232H USB-SPI bridge
                               # 2 : NRC-CSPI Registers Polling
 #################################################################################
 # RF Conf.
-# Max TX PWR
-txpwr_max_default = 24       # Board Data Max TX Power
-#--------------------------------------------------------------------------------#
-
+max_txpwr         = 24       # Maximum TX Power (in dBm)
+epa               = 0        # (7394 only) External PA : 0(none) or 1(used)
+bd_name           = ''       # board data name (bd defines max TX Power per CH/MCS/CC)
+                             # specify your bd name here. If not, follow naming rules in strBDName()
 ##################################################################################
 # PHY Conf.
 guard_int         = 'long'   # Guard Interval ('long'(LGI) or 'short'(SGI))
@@ -169,19 +173,27 @@ guard_int         = 'long'   # Guard Interval ('long'(LGI) or 'short'(SGI))
 #  Recommend using S1G short beacon for network efficiency (Default: enabled)
 short_bcn_enable  = 1        # 0 (disable) or 1 (enable)
 #--------------------------------------------------------------------------------#
-# AMPDU (Aggregated MPDU)
-#  Enable AMPDU for full channel utilization and throughput enhancement
-ampdu_enable      = 1        # 0 (disable) or 1 (enable)
-#--------------------------------------------------------------------------------#
 # Legacy ACK enable (AP & STA)
 #  If disabled, AP/STA sends only NDP ack frame
 #  Recommend using NDP ack mode  (Default: disable)
 legacy_ack_enable  = 0        # 0 (NDP ack mode) or 1 (legacy ack mode)
 #--------------------------------------------------------------------------------#
-# 1M NDP (Block) ACK (AP Only)
-#  Enable 1M NDP ACK on 2/4MHz BW for robustness (default: 2M NDP ACK on 2/4MH BW)
-#  STA should follow, if enabled on AP
-#  Note: if enabled, max # of mpdu in ampdu is restricted to 8 (default: max 16)
+# Beacon Bypass enable (STA only)
+#  If enabled, STA receives beacon frame from other APs even connected
+#  Recommend that STA only receives beacon frame from AP connected while connecting  (Default: disable)
+beacon_bypass_enable  = 0        # 0 (Receive beacon frame from only AP connected while connecting)
+                                 # 1 (Receive beacon frame from all APs even while connecting)
+#--------------------------------------------------------------------------------#
+# AMPDU (Aggregated MPDU)
+#  Enable AMPDU for full channel utilization and throughput enhancement (Default: auto)
+#  disable(0): AMPDU is deactivated
+#   manual(1): AMPDU is activated and BA(Block ACK) session is made by manual
+#     auto(2): AMPDU is activated and BA(Block ACK) session is made automatically
+ampdu_enable      = 2        # 0 (disable) 1 (manual) 2 (auto)
+#--------------------------------------------------------------------------------#
+# 1M NDP (Block) ACK
+#  Enable 1M NDP ACK on 2/4MHz BW instead of 2M NDP ACK
+#  Note: if enabled, throughput can be decreased on high MCS
 ndp_ack_1m        = 0        # 0 (disable) or 1 (enable)
 #--------------------------------------------------------------------------------#
 # NDP Probe Request
@@ -195,31 +207,33 @@ cqm_enable        = 1        # 0 (disable) or 1 (enable)
 #--------------------------------------------------------------------------------#
 # RELAY (Do NOT use! it will be deprecated)
 relay_type        = 1        # 0 (wlan0: STA, wlan1: AP) 1 (wlan0: AP, wlan1: STA)
+relay_nat         = 1        # 0 (not use NAT) 1 (use NAT - no need to add routing table)
 #--------------------------------------------------------------------------------#
 # Power Save (STA Only)
-#  4-types PS: (0)Always on (1)Modem_Sleep (2)Deep_Sleep(TIM) (3)Deep_Sleep(nonTIM
-#  Modem Sleep : turn off only RF while PS (Fast wake-up but less power save)
-#   Deep Sleep : turn off almost all power (Slow wake-up but much more power save)
+#  3-types PS: (0)Always on (2)Deep_Sleep(TIM) (3)Deep_Sleep(nonTIM)
 #     TIM Mode : check beacons during PS to receive BU from AP
 #  nonTIM Mode : Not check beacons during PS (just wake up by TX or EXT INT)
 power_save        = 0        # STA (power save type 0~3)
 ps_timeout        = '3s'     # STA (timeout before going to sleep) (min:1000ms)
 sleep_duration    = '3s'     # STA (sleep duration only for nonTIM deepsleep) (min:1000ms)
 listen_interval   = 1000     # STA (listen interval in BI unit) (max:65535)
+                             # Listen Interval time should be less than bss_max_idle time to avoid association reject
 #--------------------------------------------------------------------------------#
 # BSS MAX IDLE PERIOD (aka. keep alive) (AP Only)
 #  STA should follow (i.e STA should send any frame before period),if enabled on AP
 #  Period is in unit of 1000TU(1024ms, 1TU=1024us)
 #  Note: if disabled, AP removes STAs' info only with explicit disconnection like deauth
 bss_max_idle_enable = 1      # 0 (disable) or 1 (enable)
-bss_max_idle        = 180    # time interval (e.g. 60: 61440ms) (1 ~ 65535)
+bss_max_idle        = 1800   # time interval (e.g. 1800: 1843.2 sec) (1 ~ 65535)
+#--------------------------------------------------------------------------------#
+#  SW encryption/decryption (default HW offload)
+sw_enc              = 0     # 0 (HW), 1 (SW), 2 (HYBRID: SW GTK HW PTK)
 #--------------------------------------------------------------------------------#
 # Mesh Options (Mesh Only)
-#  SW encryption by MAC80211 for Mesh Point
-sw_enc              = 0     # 0 (disable), 1 (enable)
 #  Manual Peering & Static IP
 peer                = 0     # 0 (disable) or Peer MAC Address
 static_ip           = 0     # 0 (disable) or Static IP Address
+batman              = 0     # 0 (disable) or 'bat0' (B.A.T.M.A.N routing protocol)
 #--------------------------------------------------------------------------------#
 # Self configuration (AP Only)
 #  AP scans the clearest CH and then starts with it
@@ -230,14 +244,18 @@ dwell_time        = 100      # max dwell is 1000 (ms), min: 10ms, default: 100ms
 # Credit num of AC_BE for flow control between host and target (Test only)
 credit_ac_be      = 40        # number of buffer (min: 40, max: 120)
 #--------------------------------------------------------------------------------#
-# Use bitmap encoding for block ack operation (NRC7292 only)
+# Filter tx deauth frame for Multi Connection Test (STA Only) (Test only)
+discard_deauth    = 1         # 1: discard TX deauth frame on STA
+#--------------------------------------------------------------------------------#
+# Use bitmap encoding for NDP (block) ack operation (NRC7292 only)
 bitmap_encoding   = 1         # 0 (disable) or 1 (enable)
 #--------------------------------------------------------------------------------#
 # User scrambler reversely (NRC7292 only)
 reverse_scrambler = 1         # 0 (disable) or 1 (enable)
 #--------------------------------------------------------------------------------#
-# Use bridge setup with br0, wlan0, eth(n) (AP & STA)
-use_bridge_setup = 0         # 0 (not use bridge setup) or n (use bridge setup with eth(n-1))
+# Use bridge setup in br0 interface
+use_bridge_setup = 0         # AP & STA : 0 (not use bridge setup) or n (use bridge setup with eth(n-1))
+                             # RELAY : 0 (not use bridge setup) or 1 (use bridge setup with wlan0,wlan1)
 ##################################################################################
 ```
 You can apply your parameters by updating start.py script file.
@@ -251,24 +269,28 @@ Usage:
         start.py [sta_type] [security_mode] [country] [channel] [sniffer_mode]
         start.py [sta_type] [security_mode] [country] [mesh_mode] [mesh_peering] [mesh_ip]
 Argument:
-        sta_type      [0:STA   |  1:AP  |  2:SNIFFER  | 3:RELAY |  4:MESH]
-        security_mode [0:Open  |  1:WPA2-PSK  |  2:WPA3-OWE  |  3:WPA3-SAE | 4:WPS-PBC]
-        country       [US:USA  |  JP:Japan  |  TW:Taiwan  | EU:EURO | CN:China |
-                       AU:Australia  |  NZ:New Zealand]
+        sta_type      [0:STA   |  1:AP  |  2:SNIFFER  | 3:RELAY |  4:MESH | 5:IBSS]
+        security_mode [0:Open  |  1:WPA2-PSK  |  2:WPA3-OWE  |  3:WPA3-SAE | 4:WPS-PBC]                
+        country       [US:USA  |  JP:Japan  |  TW:Taiwan  | EU:EURO | CN:China |                       
+                       AU:Australia  |  NZ:New Zealand  | K1:Korea-USN  | K2:Korea-MIC]                
         -----------------------------------------------------------
-        channel       [S1G Channel Number]   * Only for Sniffer
+        channel       [S1G Channel Number]   * Only for Sniffer & AP
         sniffer_mode  [0:Local | 1:Remote]   * Only for Sniffer
         mesh_mode     [0:MPP | 1:MP | 2:MAP] * Only for Mesh
         mesh_peering  [Peer MAC address]     * Only for Mesh
         mesh_ip       [Static IP address]    * Only for Mesh
+        ibss_ip       [0:DHCPC or static IP | 1:DHCPS]    * Only for IBSS
 Example:
         OPEN mode STA for US                : ./start.py 0 0 US
         Security mode AP for US                : ./start.py 1 1 US
         Local Sniffer mode on CH 40 for Japan  : ./start.py 2 0 JP 40 0
         SAE mode Mesh AP for US                : ./start.py 4 3 US 2
-        Mesh Point with static ip              : ./start.py 4 3 US 1 192.168.222.1
-        Mesh Point with manual peering         : ./start.py 4 3 US 1 8c:0f:fa:00:29:46
-        Mesh Point with manual peering & ip    : ./start.py 4 3 US 1 8c:0f:fa:00:29:46 192.168.222.1
+        Mesh Point with static ip              : ./start.py 4 3 US 1 192.168.222.1                     
+        Mesh Point with manual peering         : ./start.py 4 3 US 1 8c:0f:fa:00:29:46                 
+        Mesh Point with manual peering & ip    : ./start.py 4 3 US 1 8c:0f:fa:00:29:46 192.168.222.1   
+        OPEN mode IBSS for US with DHCP server      : ./start.py 5 0 US 1
+        Security mode IBSS for US with DHCPC client : ./start.py 5 1 US 0
+        Security mode IBSS for US with static IP    : ./start.py 5 1 US 0 192.168.200.17
 Note:
         sniffer_mode should be set as '1' when running sniffer on remote terminal
         MPP, MP mode support only Open, WPA3-SAE security mode

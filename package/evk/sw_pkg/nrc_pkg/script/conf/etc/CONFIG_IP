@@ -1,0 +1,53 @@
+##############################################################################################
+# File /home/pi/nrc_pkg/etc/dhcpcd/dhcpcd.conf
+# Lines for IP for wlan0, wlan1 and eth0 should be fixed for "sed" command.
+# Do NOT move them into another line
+#  - Line 59 ~ 62 for wlan0
+#  - Line 65 ~ 68 for wlan1
+#  - Line 71 ~ 72 for eth0
+#
+# File /home/pi/nrc_pkg/etc/dnsmaq/dnsmasq.conf
+# Lines for IP config for wlan0, wlan1 and eth0 should be fixed for "sed" command.
+# Do NOT move them into another line
+#  - Line 1 ~ 2 for eth0
+#  - Line 3 ~ 4 for wlan0 or wlan1
+##############################################################################################
+
+##############################################################################################
+# Config for Ethernet with DHCP server
+USE_ETH_DHCP_SERVER=N   # Use DHCP Sever : Y(use DHCP Server) or N(use DHCP Client)
+ETH_DHCPS_IP=192.168.100.1    # only valid when using DHCP Server
+ETH_DHCPS_CONFIG=192.168.100.10,192.168.100.15,255.255.255.0,24h # only valid when using DHCP Server
+
+# Config for static IP on Ethernet without DHCP server
+USE_ETH_STATIC_IP=N            # Use ETH STATIC IP : Y(use ETH_IP for static ip) or N(use DHCP Client)
+ETH_STATIC_IP=192.168.100.11   # only valid when using static IP without DHCP Server
+ETH_STATIC_NETMASK=24          # only valid when using static IP without DHCP Server
+
+# Config for HaLow STA's IP and Defautl GW
+USE_HALOW_STA_STATIC_IP=N     # Use STATIC IP :  Y(use Static IP) or N(use Dynamic IP(DHCP))
+HALOW_STA_IP=192.168.200.11   # only valid when using static IP
+HALOW_STA_NETMASK=24          # only valid when using static IP
+HALOW_STA_DEFAULT_GW=192.168.200.1 # only valid when using static IP
+
+# Config for HaLow AP's IP and DHCPS configuration
+HALOW_AP_IP=192.168.200.1
+HALOW_AP_NETMASK=24
+HALOW_AP_DHCPS_CONFIG=192.168.200.10,192.168.200.50,255.255.255.0,24h
+
+# Config for HaLow Relay AP's IP and DHCPS configuration (Only valid while running as RELAY)
+HALOW_RELAY_AP_IP=192.168.150.1
+HALOW_RELAY_AP_NETMASK=24
+HALOW_RELAY_AP_DHCPS_CONFIG=192.168.150.10,192.168.150.50,255.255.255.0,24h
+
+# Config for HaLow Mesh's IP and DHCPS configuration
+HALOW_MESH_IP=192.168.200.1
+HALOW_MESH_NETMASK=24
+HALOW_MESH_DHCPS_CONFIG=192.168.200.0,192.168.200.255,255.255.255.0,infinite
+
+# Local Confguration files for DHCPCD and DNSMASQ
+# Those files are copied into /etc/dhcpcd.conf and /etc/dnsmaq.conf
+DHCPCD_CONF_FILE=/home/pi/nrc_pkg/etc/dhcpcd/dhcpcd.conf
+DNSMASQ_CONF_FILE=/home/pi/nrc_pkg/etc/dnsmasq/dnsmasq.conf
+##############################################################################################
+

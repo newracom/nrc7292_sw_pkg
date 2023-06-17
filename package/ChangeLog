@@ -1,0 +1,68 @@
+*******************************************************************
+*
+* ChangeLog : SW_PKG-NRC7292
+*
+*******************************************************************
+
+[2023-06-16]
+Change summary for version 1.4:
+
+    New features
+        * HaLow certification features
+          o HaLow R1 mandatory features (v1.4)
+          o HaLow R1 optional features (v1.4)
+            - AP optional features: BSS color, fragmentation
+            - STA optional features: MCS 3-7, NDP probing, A-MPDU TX
+        * Kr00k vulnerability (v1.4)
+        * Dynamic fragmentation (v1.4)
+        * Network bridge (v1.4)
+        * RSSI-based roaming (v1.4)
+        * Duty cycle (v1.4)
+
+    Changes
+        * Support HaLow certification with the single firmware package
+        * Regulation related updates
+          (1) Updated JP LBT/duty cycle regulation support
+          (2) KR channel update: K0/K1/K2 channels
+          (3) EU channel update: remove 2MHz channel based on IEEE 802.11-2020
+        * Firmware/host driver refactoring
+        * Remove modem sleep feature
+        * Support faster wake-up time in deep sleep mode
+        * Support serial flash power down in the deep sleep mode
+        * Support active scanning on mesh
+        * Enhance duty cycle feature in terms of stability and monitoring
+        * Update the maximum supported STA count from 1000 to 700 due to the increased heap usage in the firmware
+        * Association control based on BSS max idle period and listen interval values
+        * cli_app update (refer to UG-7292-007-Commnad line application v2.0 document)
+
+    Bugfix
+        * HSPI problem detection and recovery issue
+        * hw_verion update error issue under frequent power on/off situation
+        * Initialized aggregation/guard interval setting issue after target recovery
+        * Default CCA level of 4MHz channel bandwidth
+        * Fast synchronization of rx_slot count of host driver to avoid HSPI operation failure on the low-performance host platform
+        * Unexpected operating channel change caused by self_config during JP 4MHz channel operation
+        * Buffer mismatch triggered disconnection in the bridged node
+        * Generating assert during the stop of relay node
+        * Irrecoverable FW by mishandling of IP/DHCP/ARP frames in mesh and relay node
+        * Long beacon_int compliance in TIM mode deep sleep
+        * Imbalanced uplink/downlink performance at the repeater mode * lay) node
+        * Host driver build error in the Linux kernel version 4.4 or lower
+        * Incorrect 1MHz primary channel location and primary channel number
+        * Inflexible S1G format for probe response frame
+        * Inflexible 1MHz control response support
+        * Fail to set output of relevant GPIO before entering the deep sleep
+        * Mesh control field correction to consider 4-address usage
+        * Multicast frame drop on JP channel
+
+    Known Issues
+        * Not Support 5 US channels due to hostapd channel capacity reason
+          (Not supported channel: 100(BW_1M, 925.5MHz), 104(BW_1M, 926.5MHz),
+          108(BW_1M, 927.5MHz), 112(BW_2M, 927MHz), 116(BW_4M, 926MHz))
+        * Due to the legacy Wi-Fi/HaLow channel mapping, "hostapd_cli chan_switch" command can’t be applied to following radar channels:
+          5500(#100/925.5MHz), 5520(#104/926.5MHz), 5540(#108/927.5MHz),
+          5560(#112/927MHz), 5580(#116/926MHz)
+        * DHCP failure or delay in multi-hop MBSS
+          (Recommend using static IP in more than 3-hop MBSS)
+        * Not supported on KR MIC package
+          (The concurrent mode can’t be applied due to the KR MIC regulation)

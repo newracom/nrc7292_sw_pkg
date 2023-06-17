@@ -1,0 +1,5 @@
+cp /home/pi/nrc_pkg/sw/firmware/nrc$1_cspi.bin /home/pi/nrc_pkg/sw/firmware/uni_s1g.bin
+sudo cp /home/pi/nrc_pkg/sw/firmware/uni_s1g.bin /lib/firmware
+sudo cp /home/pi/nrc_pkg/sw/firmware/$2 /lib/firmware
+ls -al /home/pi/nrc_pkg/sw/firmware
+ls -al /lib/firmware/uni_s1g*
