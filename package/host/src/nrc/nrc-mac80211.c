@@ -658,15 +658,27 @@ static void nrc_assoc_h_basic(struct ieee80211_hw *hw,
 	enum ieee80211_band band;
 #endif
 
+#if ((KERNEL_VERSION(6, 1, 0) >= NRC_TARGET_KERNEL_VERSION))
+	nrc_mac_dbg("%s: aid=%u, bssid=%pM", __func__,
+		vif->cfg.aid, info->bssid);
+
+	nw->aid = vif->cfg.aid;	
+#else
 	nrc_mac_dbg("%s: aid=%u, bssid=%pM", __func__,
 		info->aid, info->bssid);
 
 	nw->aid = info->aid;
+#endif
+	
 #ifdef CONFIG_TRX_BACKOFF
 	nw->ampdu_supported = 0;
 #endif
 
-	nrc_wim_skb_add_tlv(skb, WIM_TLV_AID, sizeof(info->aid), &info->aid);
+#if ((KERNEL_VERSION(6, 1, 0) >= NRC_TARGET_KERNEL_VERSION))
+	nrc_wim_skb_add_tlv(skb, WIM_TLV_AID, sizeof(vif->cfg.aid), &vif->cfg.aid);
+#else
+	nrc_wim_skb_add_tlv(skb, WIM_TLV_AID, sizeof(info->aid), &info->aid);	
+#endif
 	nrc_wim_skb_add_tlv(skb, WIM_TLV_BSSID, ETH_ALEN, (void *)info->bssid);
 
 	/* Enable later when rate adaptation is supported in the target */
@@ -789,8 +801,11 @@ static int nrc_vendor_update_beacon(struct ieee80211_hw *hw,
 	struct sk_buff *skb, *b;
 	u8 *pos;
 	u16 need_headroom, need_tailroom;
-
+#if ((KERNEL_VERSION(6, 1, 0) >= NRC_TARGET_KERNEL_VERSION))
+	b = ieee80211_beacon_get_template(hw, vif, NULL, 0);
+#else
 	b = ieee80211_beacon_get_template(hw, vif, NULL);
+#endif
 	if (!b)
 		return -EINVAL;
 
@@ -1459,7 +1474,11 @@ static void nrc_mac_update_p2p_ps(struct sk_buff *skb,
 void nrc_mac_bss_info_changed(struct ieee80211_hw *hw,
 				     struct ieee80211_vif *vif,
 				     struct ieee80211_bss_conf *info,
+#if ((KERNEL_VERSION(6, 1, 0) >= NRC_TARGET_KERNEL_VERSION))
+				     u64 changed)
+#else
 				     u32 changed)
+#endif
 {
 	struct nrc *nw = hw->priv;
 	struct sk_buff *skb;
@@ -1477,8 +1496,13 @@ void nrc_mac_bss_info_changed(struct ieee80211_hw *hw,
 	skb = nrc_wim_alloc_skb_vif(nw, vif, WIM_CMD_SET, WIM_MAX_SIZE);
 
 	if (changed & BSS_CHANGED_ASSOC) {
+#if ((KERNEL_VERSION(6, 1, 0) >= NRC_TARGET_KERNEL_VERSION))
 		nw->associated = info->assoc;
 		if (info->assoc) {
+#else
+		nw->associated = vif->cfg.assoc;
+		if (vif->cfg.assoc) {
+#endif			
 			nrc_bss_assoc(hw, vif, info, skb);
 			if (!disable_cqm) {
 				mod_timer(&nw->bcn_mon_timer,
@@ -1570,11 +1594,19 @@ void nrc_mac_bss_info_changed(struct ieee80211_hw *hw,
 		nrc_vendor_update_beacon(hw, vif);
 
 #ifdef CONFIG_SUPPORT_AFTER_KERNEL_3_0_36
+#if ((KERNEL_VERSION(6, 1, 0) >= NRC_TARGET_KERNEL_VERSION))
+	if (changed & BSS_CHANGED_SSID) {
+		nrc_mac_dbg("ssid=%s", vif->cfg.ssid);
+
+		nrc_wim_skb_add_tlv(skb, WIM_TLV_SSID, vif->cfg.ssid_len,
+				vif->cfg.ssid);
+#else
 	if (changed & BSS_CHANGED_SSID) {
 		nrc_mac_dbg("ssid=%s", info->ssid);
 
 		nrc_wim_skb_add_tlv(skb, WIM_TLV_SSID, info->ssid_len,
 				info->ssid);
+#endif
 	}
 #endif
 
@@ -1864,8 +1896,13 @@ static int nrc_mac_set_tim(struct ieee80211_hw *hw, struct ieee80211_sta *sta,
 	tim->set = set;
 
 	if (!nrc_mac_is_s1g(nw)) {
+#if ((KERNEL_VERSION(6, 1, 0) >= NRC_TARGET_KERNEL_VERSION))
+		struct sk_buff *b = ieee80211_beacon_get_template(hw,
+				i_sta->vif, NULL, 0);
+#else
 		struct sk_buff *b = ieee80211_beacon_get_template(hw,
 				i_sta->vif, NULL);
+#endif
 		if (b) {
 			nrc_wim_skb_add_tlv(skb, WIM_TLV_BEACON, b->len,
 					b->data);
@@ -1878,6 +1915,9 @@ static int nrc_mac_set_tim(struct ieee80211_hw *hw, struct ieee80211_sta *sta,
 
 #ifdef CONFIG_SUPPORT_CHANNEL_INFO
 int nrc_mac_conf_tx(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
+#if ((KERNEL_VERSION(6, 1, 0) >= NRC_TARGET_KERNEL_VERSION))
+		    unsigned int link_id,
+#endif
 		    u16 ac, const struct ieee80211_tx_queue_params *params)
 #else
 int nrc_mac_conf_tx(struct ieee80211_hw *hw,
@@ -2507,10 +2547,13 @@ static void nrc_mac_channel_policy(void *data, u8 *mac,
 	if (!(vif->type == NL80211_IFTYPE_STATION ||
 		vif->type == NL80211_IFTYPE_MESH_POINT))
 		return;
-
+#if ((KERNEL_VERSION(6, 1, 0) >= NRC_TARGET_KERNEL_VERSION))
+	if (vif->cfg.assoc)
+		return;
+#else
 	if (vif->bss_conf.assoc)
 		return;
-
+#endif
 	skb = nrc_wim_alloc_skb_vif(nw, vif, WIM_CMD_SET, WIM_MAX_SIZE);
 
 	if (!skb)
