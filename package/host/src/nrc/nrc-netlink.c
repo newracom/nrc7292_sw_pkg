@@ -31,8 +31,13 @@ static struct nrc *nrc_nw;
 
 
 #ifdef CONFIG_SUPPORT_NEW_NETLINK
+#if KERNEL_VERSION(6, 2, 0) <= NRC_TARGET_KERNEL_VERSION
+static int nrc_nl_pre_doit(const struct genl_split_ops *ops,
+			   struct sk_buff *skb, struct genl_info *info)
+#else
 static int nrc_nl_pre_doit(const struct genl_ops *ops,
 			   struct sk_buff *skb, struct genl_info *info)
+#endif
 #else
 static int nrc_nl_pre_doit(struct genl_ops *ops,
 			   struct sk_buff *skb, struct genl_info *info)
@@ -42,8 +47,13 @@ static int nrc_nl_pre_doit(struct genl_ops *ops,
 }
 
 #ifdef CONFIG_SUPPORT_NEW_NETLINK
+#if KERNEL_VERSION(6, 2, 0) <= NRC_TARGET_KERNEL_VERSION
+static void nrc_nl_post_doit(const struct genl_split_ops *ops,
+			     struct sk_buff *skb, struct genl_info *info)
+#else
 static void nrc_nl_post_doit(const struct genl_ops *ops,
 			     struct sk_buff *skb, struct genl_info *info)
+#endif
 #else
 static void nrc_nl_post_doit(struct genl_ops *ops,
 			     struct sk_buff *skb, struct genl_info *info)
@@ -1572,10 +1582,18 @@ static int nrc_auto_ba_toggle(struct sk_buff *skb, struct genl_info *info)
 	return 0;
 }
 
+#if KERNEL_VERSION(6, 2, 0) <= NRC_TARGET_KERNEL_VERSION
+#ifdef CONFIG_SUPPORT_GENLMSG_DEFAULT
+static const struct genl_split_ops nl_umac_nl_ops[] = {
+#else
+static struct genl_split_ops nl_umac_nl_ops[] = {
+#endif
+#else
 #ifdef CONFIG_SUPPORT_GENLMSG_DEFAULT
 static const struct genl_ops nl_umac_nl_ops[] = {
 #else
 static struct genl_ops nl_umac_nl_ops[] = {
+#endif
 #endif
 	{
 		.cmd	= NL_WFA_CAPI_STA_GET_INFO,
@@ -1722,7 +1740,11 @@ static struct notifier_block nl_umac_netlink_notifier = {
 int nrc_netlink_init(struct nrc *nw)
 {
 	int rc = 0;
-#if KERNEL_VERSION(4, 10, 0) <= NRC_TARGET_KERNEL_VERSION
+#if KERNEL_VERSION(6, 2, 0) <= NRC_TARGET_KERNEL_VERSION
+	nrc_nl_fam.split_ops = nl_umac_nl_ops;
+	nrc_nl_fam.n_split_ops = ARRAY_SIZE(nl_umac_nl_ops);
+	rc = genl_register_family(&nrc_nl_fam);
+#elif KERNEL_VERSION(4, 10, 0) <= NRC_TARGET_KERNEL_VERSION
 	nrc_nl_fam.ops = nl_umac_nl_ops;
 	nrc_nl_fam.n_ops = ARRAY_SIZE(nl_umac_nl_ops);
 	rc = genl_register_family(&nrc_nl_fam);

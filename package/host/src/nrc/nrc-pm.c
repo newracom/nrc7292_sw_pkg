@@ -91,7 +91,9 @@ static void nrc_mac_rx_fictitious_ps_poll_response(struct ieee80211_vif *vif)
 	struct ieee80211_hdr_3addr *nullfunc;
 	struct ieee80211_rx_status *status;
 
-#if KERNEL_VERSION(4, 14, 17) <= NRC_TARGET_KERNEL_VERSION
+#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
+	skb = ieee80211_nullfunc_get(nw->hw, vif, 0, false);
+#elif KERNEL_VERSION(4, 14, 17) <= NRC_TARGET_KERNEL_VERSION
 	skb = ieee80211_nullfunc_get(nw->hw, vif, false);
 #else
 	skb = ieee80211_nullfunc_get(nw->hw, vif);
@@ -309,7 +311,9 @@ static void sta_max_idle_period_expire(struct timer_list *t)
 
 	nrc_mac_dbg("%s: sending a keep-alive (QoS Null Frame)", __func__);
 	/* Send a Null frame as a keep alive frame */
-#if KERNEL_VERSION(4, 14, 17) <= NRC_TARGET_KERNEL_VERSION
+#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
+	skb = ieee80211_nullfunc_get(hw, i_sta->vif, 0, false);
+#elif KERNEL_VERSION(4, 14, 17) <= NRC_TARGET_KERNEL_VERSION
 	skb = ieee80211_nullfunc_get(hw, i_sta->vif, false);
 #else
 	skb = ieee80211_nullfunc_get(hw, i_sta->vif);
