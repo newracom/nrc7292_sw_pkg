@@ -447,6 +447,7 @@ static int halow_set_dut(struct sk_buff *skb, struct genl_info *info)
 			struct ieee80211_tx_control control = {
 				.sta = ieee80211_find_sta(vif,
 						vif->bss_conf.bssid)
+			};
 #if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 			b = ieee80211_nullfunc_get(nrc_nw->hw, vif, 0, false);
 #elif KERNEL_VERSION(4, 14, 17) <= NRC_TARGET_KERNEL_VERSION
