@@ -447,8 +447,9 @@ static int halow_set_dut(struct sk_buff *skb, struct genl_info *info)
 			struct ieee80211_tx_control control = {
 				.sta = ieee80211_find_sta(vif,
 						vif->bss_conf.bssid)
-			};
-#if KERNEL_VERSION(4, 14, 17) <= NRC_TARGET_KERNEL_VERSION
+#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
+			b = ieee80211_nullfunc_get(nrc_nw->hw, vif, 0, false);			};
+#elif KERNEL_VERSION(4, 14, 17) <= NRC_TARGET_KERNEL_VERSION
 			b = ieee80211_nullfunc_get(nrc_nw->hw, vif, false);
 #else
 			b = ieee80211_nullfunc_get(nrc_nw->hw, vif);
@@ -753,7 +754,11 @@ static void capi_send_addba(void *data, u8 *mac, struct ieee80211_vif *vif)
 
 	rcu_read_lock();
 	if (vif->type == NL80211_IFTYPE_STATION) {
+#if ((KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION))
+		if (!vif->cfg.assoc)
+#else
 		if (!vif->bss_conf.assoc)
+#endif
 			goto out;
 
 		if (c->addr && !ether_addr_equal(c->addr, vif->bss_conf.bssid))
@@ -828,7 +833,11 @@ static void capi_send_delba(void *data, u8 *mac, struct ieee80211_vif *vif)
 
 	rcu_read_lock();
 	if (vif->type == NL80211_IFTYPE_STATION) {
+#if ((KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION))
+		if (!vif->cfg.assoc)
+#else
 		if (!vif->bss_conf.assoc)
+#endif
 			goto out;
 
 		if (c->addr && !ether_addr_equal(c->addr, vif->bss_conf.bssid))
@@ -1015,8 +1024,11 @@ static void generate_mmic_error(void *data, u8 *mac, struct ieee80211_vif *vif)
 	struct ieee80211_conf *chan;
 #endif
 	u64 now = 0, diff = 0;
-
+#if ((KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION))
 	if (vif->type != NL80211_IFTYPE_STATION || !vif->bss_conf.assoc)
+#else
+	if (vif->type != NL80211_IFTYPE_STATION || !vif->cfg.assoc)
+#endif
 		return;
 
 	if (c->addr && !ether_addr_equal(c->addr, vif->bss_conf.bssid))

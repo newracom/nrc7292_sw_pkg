@@ -1146,7 +1146,11 @@ static int spi_update_status(struct spi_device *spi)
 				nrc_mac_bss_info_changed(nw->hw, &nw->d_deauth.v, &nw->d_deauth.b, 0x80309f);
 				for (i=0; i < NRC_QUEUE_MAX; i++) {
 #ifdef CONFIG_SUPPORT_CHANNEL_INFO
+#if ((KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION))
+					nrc_mac_conf_tx(nw->hw, &nw->d_deauth.v, 0, i, &nw->d_deauth.tqp[i]);
+#else
 					nrc_mac_conf_tx(nw->hw, &nw->d_deauth.v, i, &nw->d_deauth.tqp[i]);
+#endif
 #else
 					nrc_mac_conf_tx(nw->hw, i, &nw->d_deauth.tqp[i]);
 #endif
