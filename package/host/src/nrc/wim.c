@@ -367,7 +367,11 @@ int nrc_wim_install_key(struct nrc *nw, enum set_key_cmd cmd,
 		if (!((vif->type == NL80211_IFTYPE_AP)
 				|| (vif->type == NL80211_IFTYPE_MESH_POINT)
 				|| (vif->type == NL80211_IFTYPE_P2P_GO)))
+#if ((KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION))
+			aid = vif->cfg.aid;
+#else
 			aid = vif->bss_conf.aid;
+#endif
 		else if (sta)
 			aid = sta->aid;
 	} else
