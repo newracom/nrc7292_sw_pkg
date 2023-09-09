@@ -35,13 +35,13 @@
 
 /* show config */
 #define SHOW_CONFIG_DISP		"%s,%s,\
-%s,%s,%d,%d,%s,%d,%s,%s,\
+%s,%s,%d (%d),%d (%d),%s,%d,%s,%s,\
 %s,%s,%s,%d,%s,%s,%s,\
-0x%x,%s,%s,%s,%s,%d,%d,%s,%s"
+0x%x,%s,%s,%s,%s,%d,%d,%s"
 #define SHOW_CONFIG_KEY_LIST "[MAC Configuration]\nDevice Mode,MAC Address,\
 Country,Bandwidth,Frequency,MAC80211_freq,Rate Control, -MCS, -bw,Guard Interval,\
 Security,Type,RTS,RTS threshold,Format,Preamble type,Promiscuous Mode,\
-color,Auto CFO Cal,BSSID,AID,\n[PHY Configuration]\nTX_Gain,Base RX_Gain,Compensated RX_Gain,Tx Power Type,Tx Power"
+color,Auto CFO Cal,BSSID,AID,\n[PHY Configuration]\nTX_Gain,Base RX_Gain,Compensated RX_Gain,Tx Power Type"
 
 /* show edca */
 #define SHOW_EDCA_DISP		"%d,%d,%d,%d,\
@@ -67,7 +67,7 @@ color,Auto CFO Cal,BSSID,AID,\n[PHY Configuration]\nTX_Gain,Base RX_Gain,Compens
 
 /* show mac [tx|rx] */
 // show mac [tx|rx] stats st
-#define SHOW_MAC_TRX_STATS_ST_DISP	"%lu,%lu,%lu"
+#define SHOW_MAC_TRX_STATS_ST_DISP	"%lu,%lu,%lu,%lu"
 
 // show mac [tx|rx] stats ac
 #define SHOW_MAC_TRX_STATS_AC_DISP	"%s,%lu,%lu,%lu,%lu"
@@ -76,7 +76,7 @@ color,Auto CFO Cal,BSSID,AID,\n[PHY Configuration]\nTX_Gain,Base RX_Gain,Compens
 #define SHOW_MAC_TRX_STATS_TYPE_DISP	"%s,%lu,%lu,%lu,%lu"
 
 // show mac [tx|rx] stats mcs
-#define SHOW_MAC_TRX_STATS_MCS_DISP	"%d,%lu,%lu,%lu,%lu"
+#define SHOW_MAC_TRX_STATS_MCS_DISP	"%d,%lu,%lu,%lu,%lu,%lu"
 
 
 /* show uinfo {vif_id} */
@@ -114,9 +114,17 @@ ampdu_len_exp,min mpdu_start_spacing,rx_s1gmcs_map"
 #define SET_RC_KEY_DISP	"%s,%d,%s"
 #define SET_RC_KEY_LIST	"rc,vif_id,mode"
 
-/* set duty <on|off> {duty window} {tx duration in duty window}*/
-#define SET_DUTY_KEY_DISP	"%s,%lu,%lu"
-#define SET_DUTY_KEY_LIST	"Duty cycle,Duty window,Tx duration"
+/* set rc_pf [Profile#] */
+#define SET_RC_PF_KEY_DISP	"%d"
+#define SET_RC_PF_KEY_LIST	"Profile#"
+
+/* set rc_param <EWMA value> <Update interval value> */
+#define SET_RC_PARAM_KEY_DISP	"%d,%d"
+#define SET_RC_PARAM_KEY_LIST	"EWMA value,Update interval value"
+
+/* set duty <on|off> {duty window} {tx duration in duty window} {duty margin}*/
+#define SET_DUTY_KEY_DISP	"%s,%lu,%lu,%lu"
+#define SET_DUTY_KEY_LIST	"Duty cycle,Duty window,Tx duration,Duty margin"
 
 /* show duty */
 #define SHOW_DUTY_KEY_DISP	"%s,%lu,%lu,%lu,%lu"
@@ -127,6 +135,10 @@ ampdu_len_exp,min mpdu_start_spacing,rx_s1gmcs_map"
 #define SHOW_AUTOTXGAIN_KEY_LIST	"Auto txgain,Tx power index for MCS 0,Tx power index for MCS 1,\
 Tx power index for MCS 2,Tx power index for MCS 3,Tx power index for MCS 4,Tx power index for MCS 5,\
 Tx power index for MCS 6,Tx power index for MCS 7,Tx power index for MCS 10"
+
+/* show cal_use */
+#define SHOW_CAL_USE_KEY_DISP	"%s,%s"
+#define SHOW_CAL_USE_KEY_LIST	"Calibration_use,Country"
 
 // show sta {vif_id} all
 #define SHOW_STA_AID_DISP	"%02x:%02x:%02x:%02x:%02x:%02x,%d,%s"
@@ -178,5 +190,13 @@ Tx power index for MCS 6,Tx power index for MCS 7,Tx power index for MCS 10"
 /* show xtal status */
 #define SHOW_XTAL_STATUS_DISP "%d"
 #define SHOW_XTAL_STATUS_LIST "XTAL status"
+
+/* show rc_pf */
+#define SHOW_RC_PF_KEY_DISP	"%d"
+#define SHOW_RC_PF_KEY_LIST	"Profile#"
+
+/* show rc_param */
+#define SHOW_RC_PARAM_KEY_DISP	"%ld,%d"
+#define SHOW_RC_PARAM_KEY_LIST	"EWMA(%),Update interval(ms)"
 
 #endif /* _CLI_KEY_LIST_H_ */

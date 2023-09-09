@@ -132,6 +132,9 @@ static struct genl_family nrc_nl_fam = {
 	.mcgrps = nl_umac_mcast_grps,
 	.n_mcgrps = ARRAY_SIZE(nl_umac_mcast_grps),
 #endif
+#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
+	.resv_start_op	= NL_CLI_APP_DRIVER + 1,
+#endif
 };
 
 
@@ -450,13 +453,21 @@ static int halow_set_dut(struct sk_buff *skb, struct genl_info *info)
 						vif->bss_conf.bssid)
 			};
 #if KERNEL_VERSION(4, 14, 17) <= NRC_TARGET_KERNEL_VERSION
+#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
+			b = ieee80211_nullfunc_get(nrc_nw->hw, vif, vif->bss_conf.link_id, false);
+#else
 			b = ieee80211_nullfunc_get(nrc_nw->hw, vif, false);
+#endif
 #else
 			b = ieee80211_nullfunc_get(nrc_nw->hw, vif);
 #endif
 			skb_set_queue_mapping(b, IEEE80211_AC_VO);
 #ifdef CONFIG_SUPPORT_CHANNEL_INFO
+#ifdef CONFIG_USE_BSS_CHAN_CONF
+			chanctx_conf = rcu_dereference(vif->bss_conf.chanctx_conf);
+#else
 			chanctx_conf = rcu_dereference(vif->chanctx_conf);
+#endif /* ifdef CONFIG_USE_BSS_CHAN_CONF */
 			band = chanctx_conf->def.chan->band;
 
 			if (!ieee80211_tx_prepare_skb(nrc_nw->hw,
@@ -750,7 +761,11 @@ static void capi_send_addba(void *data, u8 *mac, struct ieee80211_vif *vif)
 
 	rcu_read_lock();
 	if (vif->type == NL80211_IFTYPE_STATION) {
+#ifdef CONFIG_USE_VIF_CFG
+		if (!vif->cfg.assoc)
+#else
 		if (!vif->bss_conf.assoc)
+#endif
 			goto out;
 
 		if (c->addr && !ether_addr_equal(c->addr, vif->bss_conf.bssid))
@@ -830,7 +845,11 @@ static void capi_send_delba(void *data, u8 *mac, struct ieee80211_vif *vif)
 
 	rcu_read_lock();
 	if (vif->type == NL80211_IFTYPE_STATION) {
+#ifdef CONFIG_USE_VIF_CFG
+		if (!vif->cfg.assoc)
+#else
 		if (!vif->bss_conf.assoc)
+#endif
 			goto out;
 
 		if (c->addr && !ether_addr_equal(c->addr, vif->bss_conf.bssid))
@@ -1033,7 +1052,11 @@ static void generate_mmic_error(void *data, u8 *mac, struct ieee80211_vif *vif)
 #endif
 	u64 now = 0, diff = 0;
 
+#ifdef CONFIG_USE_VIF_CFG
+	if (vif->type != NL80211_IFTYPE_STATION || !vif->cfg.assoc)
+#else
 	if (vif->type != NL80211_IFTYPE_STATION || !vif->bss_conf.assoc)
+#endif
 		return;
 
 	if (c->addr && !ether_addr_equal(c->addr, vif->bss_conf.bssid))
@@ -1062,7 +1085,11 @@ static void generate_mmic_error(void *data, u8 *mac, struct ieee80211_vif *vif)
 	rx_status = IEEE80211_SKB_RXCB(skb);
 
 #ifdef CONFIG_SUPPORT_CHANNEL_INFO
+#ifdef CONFIG_USE_BSS_CHAN_CONF
+	chan = rcu_dereference(vif->bss_conf.chanctx_conf);
+#else
 	chan = rcu_dereference(vif->chanctx_conf);
+#endif /* ifdef CONFIG_USE_BSS_CHAN_CONF */
 	if (!chan)
 		goto out;
 
@@ -1710,6 +1737,7 @@ static int nrc_auto_ba_toggle(struct sk_buff *skb, struct genl_info *info)
 	return 0;
 }
 
+
 #ifdef CONFIG_SUPPORT_GENLMSG_DEFAULT
 static const struct genl_ops nl_umac_nl_ops[] = {
 #else
@@ -1718,172 +1746,212 @@ static struct genl_ops nl_umac_nl_ops[] = {
 	{
 		.cmd	= NL_WFA_CAPI_STA_GET_INFO,
 		.doit	= capi_sta_get_info,
-#if KERNEL_VERSION(5, 2, 0) > NRC_TARGET_KERNEL_VERSION
+#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
+#elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(6, 1, 0)
+		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 #else
-		.validate = NL_VALIDATE_STRICT,
+		.policy = nl_umac_policy,
 #endif
 	},
 	{
 		.cmd	= NL_WFA_CAPI_STA_SET_11N,
 		.doit	= capi_sta_set_11n,
-#if KERNEL_VERSION(5, 2, 0) > NRC_TARGET_KERNEL_VERSION
+#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
+#elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(6, 1, 0)
+		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 #else
-		.validate = NL_VALIDATE_STRICT,
+		.policy = nl_umac_policy,
 #endif
 	},
 	{
 		.cmd	= NL_WFA_CAPI_SEND_ADDBA,
 		.doit	= capi_sta_send_addba,
-#if KERNEL_VERSION(5, 2, 0) > NRC_TARGET_KERNEL_VERSION
+#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
+		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
+#elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(6, 1, 0)
+		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 #else
-		.validate = NL_VALIDATE_STRICT,
+		.policy = nl_umac_policy,
 #endif
 	},
 	{
 		.cmd	= NL_WFA_CAPI_SEND_DELBA,
 		.doit	= capi_sta_send_delba,
-#if KERNEL_VERSION(5, 2, 0) > NRC_TARGET_KERNEL_VERSION
+#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
+		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
+#elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(6, 1, 0)
+		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 #else
-		.validate = NL_VALIDATE_STRICT,
+		.policy = nl_umac_policy,
 #endif
 	},
 	{
 		.cmd	= NL_WFA_CAPI_BSS_MAX_IDLE,
 		.doit	= capi_bss_max_idle,
-#if KERNEL_VERSION(5, 2, 0) > NRC_TARGET_KERNEL_VERSION
+#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
+#elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(6, 1, 0)
+		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 #else
-	.validate = NL_VALIDATE_STRICT,
+		.policy = nl_umac_policy,
 #endif
 	},
 	{
 		.cmd	= NL_WFA_CAPI_BSS_MAX_IDLE_OFFSET,
 		.doit	= capi_bss_max_idle_offset,
-#if KERNEL_VERSION(5, 2, 0) > NRC_TARGET_KERNEL_VERSION
+#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
+#elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(6, 1, 0)
+		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 #else
-		.validate = NL_VALIDATE_STRICT,
+		.policy = nl_umac_policy,
 #endif
 	},
 	{
 		.cmd	= NL_TEST_MMIC_FAILURE,
 		.doit	= test_mmic_failure,
-#if KERNEL_VERSION(5, 2, 0) > NRC_TARGET_KERNEL_VERSION
+#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
+#elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(6, 1, 0)
+		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 #else
-		.validate = NL_VALIDATE_STRICT,
+		.policy = nl_umac_policy,
 #endif
 	},
 	{
 		.cmd	= NL_SHELL_RUN,
 		.doit	= nrc_shell_run,
-#if KERNEL_VERSION(5, 2, 0) > NRC_TARGET_KERNEL_VERSION
+#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
+#elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(6, 1, 0)
+		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 #else
-		.validate = NL_VALIDATE_STRICT,
+		.policy = nl_umac_policy,
 #endif
 	},
 	{
 		.cmd	= NL_SHELL_RUN_SIMPLE,
 		.doit	= nrc_shell_run_simple,
-#if KERNEL_VERSION(5, 2, 0) > NRC_TARGET_KERNEL_VERSION
+#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
+#elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(6, 1, 0)
+		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 #else
-		.validate = NL_VALIDATE_STRICT,
+		.policy = nl_umac_policy,
 #endif
 	},
 	{
 		.cmd	= NL_MGMT_FRAME_INJECTION,
 		.doit	= nrc_inject_mgmt_frame,
-#if KERNEL_VERSION(5, 2, 0) > NRC_TARGET_KERNEL_VERSION
+#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
+#elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(6, 1, 0)
+		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 #else
-		.validate = NL_VALIDATE_STRICT,
+		.policy = nl_umac_policy,
 #endif
 	},
 	{
 		.cmd	= NL_HALOW_SET_DUT,
 		.doit	= halow_set_dut,
-#if KERNEL_VERSION(5, 2, 0) > NRC_TARGET_KERNEL_VERSION
+#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
+#elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(6, 1, 0)
+		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 #else
-		.validate = NL_VALIDATE_STRICT,
+		.policy = nl_umac_policy,
 #endif
 	},
 	{
 		.cmd	= NL_CLI_APP_GET_INFO,
 		.doit	= cli_app_get_info,
-#if KERNEL_VERSION(5, 2, 0) > NRC_TARGET_KERNEL_VERSION
+#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
+#elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(6, 1, 0)
+		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 #else
-		.validate = NL_VALIDATE_STRICT,
+		.policy = nl_umac_policy,
 #endif
 	},
 	{
 		.cmd	= NL_CLI_APP_DRIVER,
 		.doit	= cli_app_driver_cmd,
-#if KERNEL_VERSION(5, 2, 0) > NRC_TARGET_KERNEL_VERSION
+#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
+#elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(6, 1, 0)
+		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 #else
-		.validate = NL_VALIDATE_STRICT,
+		.policy = nl_umac_policy,
 #endif
 	},
 	{
 		.cmd	= NL_MIC_SCAN,
 		.doit	= nrc_mic_scan,
-#if KERNEL_VERSION(5, 2, 0) > NRC_TARGET_KERNEL_VERSION
+#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
+#elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(6, 1, 0)
+		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 #else
-		.validate = NL_VALIDATE_STRICT,
+		.policy = nl_umac_policy,
 #endif
 	},
 	{
 		.cmd	= NL_FRAME_INJECTION,
 		.doit	= nrc_inject_frame,
-#if KERNEL_VERSION(5, 2, 0) > NRC_TARGET_KERNEL_VERSION
+#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
+#elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(6, 1, 0)
+		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 #else
-		.validate = NL_VALIDATE_STRICT,
+		.policy = nl_umac_policy,
 #endif
 	},
 	{
 		.cmd	= NL_SET_IE,
 		.doit	= nrc_set_ie,
-#if KERNEL_VERSION(5, 2, 0) > NRC_TARGET_KERNEL_VERSION
+#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
+#elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(6, 1, 0)
+		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 #else
-		.validate = NL_VALIDATE_STRICT,
+		.policy = nl_umac_policy,
 #endif
 	},
 	{
 		.cmd	= NL_SET_SAE_DATA,
 		.doit	= nrc_set_sae,
-#if KERNEL_VERSION(5, 2, 0) > NRC_TARGET_KERNEL_VERSION
+#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
+#elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(6, 1, 0)
+		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 #else
-		.validate = NL_VALIDATE_STRICT,
+		.policy = nl_umac_policy,
 #endif
 	},
 	{
 		.cmd	= NL_SHELL_RUN_RAW,
 		.doit	= nrc_shell_run_raw,
-#if KERNEL_VERSION(5, 2, 0) > NRC_TARGET_KERNEL_VERSION
+#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
+#elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(6, 1, 0)
+		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 #else
-		.validate = NL_VALIDATE_STRICT,
+		.policy = nl_umac_policy,
 #endif
 	},
 	{
 		.cmd	= NL_AUTO_BA_TOGGLE,
 		.doit	= nrc_auto_ba_toggle,
-#if KERNEL_VERSION(5, 2, 0) > NRC_TARGET_KERNEL_VERSION
+#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = nl_umac_policy,
+#elif KERNEL_VERSION(5, 2, 0) <= NRC_TARGET_KERNEL_VERSION && NRC_TARGET_KERNEL_VERSION < KERNEL_VERSION(6, 1, 0)
+		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 #else
-		.validate = NL_VALIDATE_STRICT,
+		.policy = nl_umac_policy,
 #endif
 	},
 };

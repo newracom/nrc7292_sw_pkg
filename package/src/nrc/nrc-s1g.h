@@ -6,7 +6,9 @@
 #include "nrc.h"
 #include "nrc-wim-types.h"
 #include <linux/types.h>
+#if KERNEL_VERSION(5,18,0) > NRC_TARGET_KERNEL_VERSION
 #include <stddef.h>
+#endif
 #if defined(CONFIG_S1G_CHANNEL)
 #define FREQ_TO_100KHZ(mhz, khz) (mhz * 10 + khz / 100)
 

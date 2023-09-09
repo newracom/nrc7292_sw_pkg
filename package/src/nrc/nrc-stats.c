@@ -36,6 +36,9 @@ struct moving_average {
 	uint8_t arr[];
 };
 
+struct stats_channel_noise channel_noise_info[MAX_CHANNEL_NUM];
+static uint8_t state_channel_num = 0;
+
 static spinlock_t state_lock;
 static struct list_head state_head;
 
@@ -496,4 +499,67 @@ int nrc_stats_report_count(void)
 	}
 	spin_unlock(&state_lock);
 	return i;
+}
+
+int nrc_stats_channel_noise_update(uint32_t freq, int8_t noise)
+{
+	struct ieee80211_channel *chan;
+	int i;
+
+	for(i = 0; i < state_channel_num; i++){
+		if(channel_noise_info[i].chan->center_freq == freq){
+			channel_noise_info[i].noise = noise;
+			return 0;
+		}
+	}	
+	if(state_channel_num >= MAX_CHANNEL_NUM)
+		return -1;
+
+	chan = kmalloc(sizeof(*chan), GFP_KERNEL);
+	if (!chan)
+		return -1;
+	memset(chan, 0, sizeof(*chan));
+
+	channel_noise_info[state_channel_num].noise = noise;
+	channel_noise_info[state_channel_num].chan = chan;
+	channel_noise_info[state_channel_num].chan->center_freq = freq;
+	state_channel_num ++;
+
+	nrc_stats_dbg("[add channel noise] freq : %d, noise : %d, chan_num : %d\n", freq, noise, state_channel_num);
+
+	return 0;
+}
+
+int nrc_stats_channel_noise_reset(void)
+{
+	int i;
+
+	for(i = 0; i < state_channel_num; i++){
+		nrc_stats_dbg("[remove channel noise] freq : %d\n", channel_noise_info[i].chan->center_freq);
+		channel_noise_info[i].noise = 0;
+		kfree(channel_noise_info[i].chan);
+	}	
+	state_channel_num = 0;
+
+	return 0;
+}
+
+struct stats_channel_noise *nrc_stats_channel_noise_report(int report_num, uint32_t freq)
+{
+	
+	if(freq == 0){
+		if(report_num >= state_channel_num)
+			return NULL;
+		else
+			return &channel_noise_info[report_num];
+	}
+	else{
+		int i;
+		for(i = 0; i < state_channel_num; i++){
+			if(channel_noise_info[i].chan->center_freq == freq)
+				return &channel_noise_info[i];
+		}
+	}
+
+	return NULL;
 }

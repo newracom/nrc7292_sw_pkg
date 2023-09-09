@@ -2,13 +2,18 @@
 
 import os
 import time
-import commands
 import RPi.GPIO as GPIO
 import sys
 
 
 cmd = ""
 air_plane_status="off"
+
+def usage_print():
+    print("Usage: \n\tairplane_btn_sample.py [rpi_pin]")
+    print("Note: \n\tnrc7292EVK : rpi_pin = 26(GP10) \
+                  \n\tnrc7394EVK : rpi_pin = 16(GP20)")
+    exit()
 
 def BtnPressedEvent(c):
     global air_plane_status
@@ -24,15 +29,21 @@ def BtnPressedEvent(c):
     os.system(cmd)
 
 def init():
-    GPIO.setmode(GPIO.BCM)
-    GPIO.setup(26, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
-    GPIO.add_event_detect(26, GPIO.RISING, callback=BtnPressedEvent, bouncetime=300)
+    if int(sys.argv[1]) == 26 or int(sys.argv[1]) == 16:
+        GPIO.setmode(GPIO.BCM)
+        GPIO.setup(int(sys.argv[1]), GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
+        GPIO.add_event_detect(int(sys.argv[1]), GPIO.RISING, callback=BtnPressedEvent, bouncetime=300)
+    else:
+        usage_print()        
 
 if __name__ == '__main__':
 
-    # GPIO init
-    init()
-    # waiting
-    while(True):
-        time.sleep(1)
-        print("[{}]Running...")
+    if len(sys.argv) < 2:
+        usage_print()
+    else:
+        # GPIO init
+        init()
+        # waiting
+        while(True):
+            time.sleep(1)
+            print("[{}]Running...")

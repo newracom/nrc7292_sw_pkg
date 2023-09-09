@@ -27,17 +27,26 @@
 static void write_file(char *filename, char *data, int len)
 {
 	struct file *filp;
+	/*
+	 * function force_uaccess_begin(), force_uaccess_end() and type mm_segment_t
+	 * are removed in 5.18
+	 * (https://patchwork.ozlabs.org/project/linux-arc/patch/20220216131332.1489939-19-arnd@kernel.org/#2847918)
+	 * function get_fs(), and set_fs() are removed in 5.18
+	 * (https://patchwork.kernel.org/project/linux-arm-kernel/patch/20201001141233.119343-11-arnd@arndb.de/)
+	 */
+#if KERNEL_VERSION(5,18,0) > NRC_TARGET_KERNEL_VERSION
 	mm_segment_t old_fs;
-
 #if KERNEL_VERSION(5,0,0) > NRC_TARGET_KERNEL_VERSION
 	old_fs = get_fs();
 	set_fs( get_ds() );
 #elif KERNEL_VERSION(5,10,0) > NRC_TARGET_KERNEL_VERSION
 	old_fs = get_fs();
 	set_fs( KERNEL_DS );
+#elif KERNEL_VERSION(5,18,0) > NRC_TARGET_KERNEL_VERSION
 #else
 	old_fs = force_uaccess_begin();
 #endif
+#endif /* if KERNEL_VERSION(5,18,0) < NRC_TARGET_KERNEL_VERSION */
 	filp = filp_open(filename, O_CREAT|O_RDWR, 0606);
 	if (IS_ERR(filp)) {
 		pr_err("[%s] error:%d", __func__, IS_ERR(filp));
@@ -50,11 +59,13 @@ static void write_file(char *filename, char *data, int len)
 #endif
 
 	filp_close(filp, NULL);
+#if KERNEL_VERSION(5,18,0) > NRC_TARGET_KERNEL_VERSION
 #if KERNEL_VERSION(5,10,0) > NRC_TARGET_KERNEL_VERSION
 	set_fs(old_fs);
 #else
 	force_uaccess_end(old_fs);
 #endif
+#endif /* if KERNEL_VERSION(5,18,0) < NRC_TARGET_KERNEL_VERSION */
 }
 
 void nrc_dump_init(void)

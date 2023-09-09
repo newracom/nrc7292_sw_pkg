@@ -40,8 +40,7 @@ int g_bd_size=0;
 enum {
 	CC_US=1,
 	CC_JP,
-	CC_K0,	//KR USN1(non-standard) (LBT is necessary)
-	CC_K1,	//KR USN1 (LBT is necessary)
+	CC_K1,	//KR USN1(non-standard) (LBT is necessary)
 	CC_TW,
 	CC_EU,
 	CC_CN,
@@ -120,15 +119,9 @@ static const struct bd_ch_table g_bd_ch_table[CC_MAX][NRC_BD_MAX_CH_LIST] = {
 		{9255,  5240,   38,  48}
 	},
 	{
-		// Korea (K0) USN1(non-standard) band (921MH~923MH)
-		{9215,  5195,   8,	39},
-		{9225,  5200,   10,	40}
-	},
-	{
-		// Korea (K1) USN1 band (921MH~923MH)
-		{9220,  5180,   9,	36},
-		{9230,  5185,   11,	37},
-		{9225,  5190,   10,	38}
+		// Korea (K1) USN1(non-standard) band (921MH~923MH)
+		{9215,  5180,   1,	36},
+		{9225,  5185,   3,	37}
 	},
 	{
 		/*  Taiwan */
@@ -248,14 +241,14 @@ static const struct bd_ch_table g_bd_ch_table[CC_MAX][NRC_BD_MAX_CH_LIST] = {
 	},
 	{
 		// Korea (K2) USN5 Band (925MH~931MHz)
-		{9255,	5180,	16,		36},
-		{9265,	5185,	18,		37},
-		{9275,	5190,	20,		38},
-		{9285,	5195,	22,		39},
-		{9295,	5200,	24,		40},
-		{9305,	5205,	26, 	41},
-		{9280,	5210,	19,		42},
-		{9300,	5215,	23,		43}
+		{9255,	5180,	1,	36},
+		{9265,	5185,	3,	37},
+		{9275,	5190,	5,	38},
+		{9285,	5195,	7,	39},
+		{9295,	5200,	9,	40},
+		{9305,	5205,	11,	41},
+		{9280,	5210,	4,	42},
+		{9300,	5215,	8,	43}
 	},
 };
 
@@ -288,14 +281,20 @@ static void * nrc_dump_load(struct nrc *nw, int len)
 {
 	struct file *filp;
 	loff_t pos=0;
-	mm_segment_t old_fs;
+	/*
+	 * function force_uaccess_begin(), force_uaccess_end() and type mm_segment_t
+	 * are removed in 5.18
+	 * (https://patchwork.ozlabs.org/project/linux-arc/patch/20220216131332.1489939-19-arnd@kernel.org/#2847918)
+	 * function get_fs(), and set_fs() are removed in 5.18
+	 * (https://patchwork.kernel.org/project/linux-arm-kernel/patch/20201001141233.119343-11-arnd@arndb.de/)
+	 */
 	char filepath[64];
 	char *buf = NULL;
 #if BD_DEBUG
 	int i;
 #endif
-
-	sprintf(filepath, "/lib/firmware/%s", bd_name);
+#if KERNEL_VERSION(5,18,0) > NRC_TARGET_KERNEL_VERSION
+	mm_segment_t old_fs;
 #if KERNEL_VERSION(5,0,0) > NRC_TARGET_KERNEL_VERSION
 	old_fs = get_fs();
 	set_fs( get_ds() );
@@ -305,15 +304,18 @@ static void * nrc_dump_load(struct nrc *nw, int len)
 #else
 	old_fs = force_uaccess_begin();
 #endif
-
+#endif /* if KERNEL_VERSION(5,18,0) < NRC_TARGET_KERNEL_VERSION */
+	sprintf(filepath, "/lib/firmware/%s", bd_name);
 	filp = filp_open(filepath, O_RDONLY, 0);
 	if (IS_ERR(filp)) {
 		dev_err(nw->dev, "Failed to load board data, error:%d",IS_ERR(filp));
+#if KERNEL_VERSION(5,18,0) > NRC_TARGET_KERNEL_VERSION
 #if KERNEL_VERSION(5,10,0) > NRC_TARGET_KERNEL_VERSION
 	set_fs(old_fs);
 #else
 	force_uaccess_end(old_fs);
 #endif
+#endif /* if KERNEL_VERSION(5,18,0) < NRC_TARGET_KERNEL_VERSION */
 		return NULL;
 	}
 
@@ -330,12 +332,13 @@ static void * nrc_dump_load(struct nrc *nw, int len)
 #endif
 
 	filp_close(filp, NULL);
+#if KERNEL_VERSION(5,18,0) > NRC_TARGET_KERNEL_VERSION
 #if KERNEL_VERSION(5,10,0) > NRC_TARGET_KERNEL_VERSION
 	set_fs(old_fs);
 #else
 	force_uaccess_end(old_fs);
 #endif
-
+#endif /* if KERNEL_VERSION(5,18,0) < NRC_TARGET_KERNEL_VERSION */
 #if BD_DEBUG
 	for(i=0; i < len;) {
 		nrc_dbg(NRC_DBG_STATE,"%02X %02X %02X %02X %02X %02X %02X %02X",
@@ -439,10 +442,7 @@ struct wim_bd_param * nrc_read_bd_tx_pwr(struct nrc *nw, uint8_t *country_code)
 	else if (country_code[0] == 'J' && country_code[1] == 'P')
 		cc_index = CC_JP;
 	else if (country_code[0] == 'K' && country_code[1] == 'R') {
-		if (kr_band == 0) {
-			cc_index = CC_K0;
-			country_code[1] = '0';
-		} else if (kr_band == 1) {
+		if (kr_band == 1) {
 			cc_index = CC_K1;
 			country_code[1] = '1';
 		} else {
@@ -563,10 +563,16 @@ int nrc_check_bd(struct nrc *nw)
 #endif
 
 	int ret;
-	mm_segment_t old_fs;
 	char filepath[64];
-
-	sprintf(filepath, "/lib/firmware/%s", bd_name);
+	/*
+	 * function force_uaccess_begin(), force_uaccess_end() and type mm_segment_t
+	 * are removed in 5.18
+	 * (https://patchwork.ozlabs.org/project/linux-arc/patch/20220216131332.1489939-19-arnd@kernel.org/#2847918)
+	 * function get_fs(), and set_fs() are removed in 5.18
+	 * (https://patchwork.kernel.org/project/linux-arm-kernel/patch/20201001141233.119343-11-arnd@arndb.de/)
+	 */
+#if KERNEL_VERSION(5,18,0) > NRC_TARGET_KERNEL_VERSION
+	mm_segment_t old_fs;
 #if KERNEL_VERSION(5,0,0) > NRC_TARGET_KERNEL_VERSION
 	old_fs = get_fs();
 	set_fs(get_ds());
@@ -576,15 +582,18 @@ int nrc_check_bd(struct nrc *nw)
 #else
 	old_fs = force_uaccess_begin();
 #endif
-
+#endif /* if KERNEL_VERSION(5,18,0) < NRC_TARGET_KERNEL_VERSION */
+	sprintf(filepath, "/lib/firmware/%s", bd_name);
 	filp = filp_open(filepath, O_RDONLY, 0);
 	if (IS_ERR(filp)) {
 		dev_err(nw->dev, "Failed to load board data (%s) :error: %d", filepath, IS_ERR(filp));
+#if KERNEL_VERSION(5,18,0) > NRC_TARGET_KERNEL_VERSION
 #if KERNEL_VERSION(5,10,0) > NRC_TARGET_KERNEL_VERSION
 		set_fs(old_fs);
 #else
 		force_uaccess_end(old_fs);
 #endif
+#endif /* if KERNEL_VERSION(5,18,0) < NRC_TARGET_KERNEL_VERSION */
 		return -EIO;
 	}
 
@@ -617,13 +626,13 @@ int nrc_check_bd(struct nrc *nw)
 #endif
 
 	filp_close(filp, NULL);
-
+#if KERNEL_VERSION(5,18,0) > NRC_TARGET_KERNEL_VERSION
 #if KERNEL_VERSION(5,10,0) > NRC_TARGET_KERNEL_VERSION
 	set_fs(old_fs);
 #else
 	force_uaccess_end(old_fs);
 #endif
-
+#endif /* if KERNEL_VERSION(5,18,0) < NRC_TARGET_KERNEL_VERSION */
 	kfree(stat);
 
 	if(g_bd_size < NRC_BD_HEADER_LENGTH) {

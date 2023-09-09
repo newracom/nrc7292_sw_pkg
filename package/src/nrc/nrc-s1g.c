@@ -310,8 +310,6 @@ int nrc_get_current_ccid_by_country(char * country_code)
 
 	if (strcmp(country_code, "JP") == 0)
 		cc_index = JP;
-	else if (strcmp(country_code, "K0") == 0)
-		cc_index = K0;
 	else if (strcmp(country_code, "K1") == 0)
 		cc_index = K1;
 	else if (strcmp(country_code, "TW") == 0)

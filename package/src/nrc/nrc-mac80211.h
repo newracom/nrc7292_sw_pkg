@@ -70,8 +70,14 @@ void nrc_mac_tx(struct ieee80211_hw *hw,
 		struct sk_buff *skb);
 #endif
 #ifdef CONFIG_SUPPORT_CHANNEL_INFO
+#ifdef CONFIG_USE_LINK_ID
+int nrc_mac_conf_tx(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
+					unsigned int link_id, u16 ac,
+					const struct ieee80211_tx_queue_params *params);
+#else
 int nrc_mac_conf_tx(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 		    u16 ac, const struct ieee80211_tx_queue_params *params);
+#endif /* ifdef CONFIG_USE_LINK_ID */
 #else
 int nrc_mac_conf_tx(struct ieee80211_hw *hw,
 		    u16 ac, const struct ieee80211_tx_queue_params *params);
@@ -79,7 +85,11 @@ int nrc_mac_conf_tx(struct ieee80211_hw *hw,
 void nrc_mac_bss_info_changed(struct ieee80211_hw *hw,
 				     struct ieee80211_vif *vif,
 				     struct ieee80211_bss_conf *info,
-				     u32 changed);
+#if KERNEL_VERSION(6, 0, 0) <= NRC_TARGET_KERNEL_VERSION
+					 u64 changed);
+#else
+					 u32 changed);
+#endif
 #ifdef CONFIG_SUPPORT_CHANNEL_INFO
 void nrc_mac_add_tlv_channel(struct sk_buff *skb,
 					struct cfg80211_chan_def *chandef);

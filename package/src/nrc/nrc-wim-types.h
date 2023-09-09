@@ -218,6 +218,10 @@ enum WIM_TLV_ID {
 	WIM_TLV_SET_TXPOWER,
 	WIM_TLV_LEGACY_ACK,
 	WIM_TLV_BEACON_BYPASS,
+	WIM_TLV_HIDDEN_SSID,	//75
+	WIM_TLV_PROBE_REQ_VENDOR_IE,
+	WIM_TLV_PROBE_RSP_VENDOR_IE,
+	WIM_TLV_ASSOC_REQ_VENDOR_IE,
 	WIM_TLV_MAX,
 };
 
@@ -601,7 +605,7 @@ struct wim_cap_param {
 	uint16_t listen_interval;
 	uint16_t bss_max_idle;
 	uint16_t max_vif;
-	struct wim_vif_cap_param vif_caps[];
+	struct wim_vif_cap_param vif_caps[NR_NRC_VIF];
 } __packed;
 
 struct wim_ready_param {
@@ -614,7 +618,7 @@ struct wim_ready_param {
 	bool has_macaddr[NR_NRC_VIF];
 	uint16_t hw_version;
 	struct wim_cap_param cap;
-	bool xtal_status;
+	uint8_t xtal_status;
 } __packed;
 WIM_DECLARE(wim_ready);
 

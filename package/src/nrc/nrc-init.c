@@ -245,7 +245,7 @@ MODULE_PARM_DESC(signal_monitor, "Enable SIGNAL(RSSI/SNR) Monitor");
  */
 int kr_band = -1;
 module_param(kr_band, int, 0600);
-MODULE_PARM_DESC(kr_band, "Specify KR band (K0(0), K1(1) or K2(2))");
+MODULE_PARM_DESC(kr_band, "Specify KR band (KR USN1(1) or KR USN5(2))");
 
 /**
  * Debug Level All
@@ -753,7 +753,10 @@ struct nrc *nrc_nw_alloc(struct device *dev, struct nrc_hif_device *hdev)
 	nw->lb_count = lb_count;
 	nw->drv_state = NRC_DRV_INIT;
 
-	nw->vendor_skb = NULL;
+	nw->vendor_skb_beacon = NULL;
+	nw->vendor_skb_probe_req = NULL;
+	nw->vendor_skb_probe_rsp = NULL;
+	nw->vendor_skb_assoc_req = NULL;
 
 	nrc_stats_init();
 	nw->fw_priv = nrc_fw_init(nw);
@@ -826,8 +829,20 @@ void nrc_nw_free(struct nrc *nw)
 		destroy_workqueue(nw->ps_wq);
 	}
 
-	if (nw->vendor_skb) {
-		dev_kfree_skb_any(nw->vendor_skb);
+	if (nw->vendor_skb_beacon) {
+		dev_kfree_skb_any(nw->vendor_skb_beacon);
+	}
+
+	if (nw->vendor_skb_probe_req) {
+		dev_kfree_skb_any(nw->vendor_skb_probe_req);
+	}
+
+	if (nw->vendor_skb_probe_rsp) {
+		dev_kfree_skb_any(nw->vendor_skb_probe_rsp);
+	}
+
+	if (nw->vendor_skb_assoc_req) {
+		dev_kfree_skb_any(nw->vendor_skb_assoc_req);
 	}
 
 	nrc_stats_deinit();

@@ -83,6 +83,21 @@ enum nrc_vendor_event {
 	NRC_SUBCMD_BCAST_FOTA_2,
 	NRC_SUBCMD_BCAST_FOTA_3,
 	NRC_SUBCMD_BCAST_FOTA_4,
+	NRC_SUBCMD_ANNOUNCE6,	// vendor ie in probe request (1).  // 12
+	NRC_SUBCMD_ANNOUNCE7,	// vendor ie in probe request (2).
+	NRC_SUBCMD_ANNOUNCE8,	// vendor ie in probe request (3).
+	NRC_SUBCMD_ANNOUNCE9,	// vendor ie in probe request (4).
+	NRC_SUBCMD_ANNOUNCE10,	// vendor ie in probe request (5).  // 16
+	NRC_SUBCMD_ANNOUNCE11,	// vendor ie in probe response (1). // 17
+	NRC_SUBCMD_ANNOUNCE12,	// vendor ie in probe response (2).
+	NRC_SUBCMD_ANNOUNCE13,	// vendor ie in probe response (3).
+	NRC_SUBCMD_ANNOUNCE14,	// vendor ie in probe response (4).
+	NRC_SUBCMD_ANNOUNCE15,	// vendor ie in probe response (5). // 21
+	NRC_SUBCMD_ANNOUNCE16,	// vendor ie in assoc request (1).  // 22
+	NRC_SUBCMD_ANNOUNCE17,	// vendor ie in assoc request (2).
+	NRC_SUBCMD_ANNOUNCE18,	// vendor ie in assoc request (3).
+	NRC_SUBCMD_ANNOUNCE19,	// vendor ie in assoc request (4).
+	NRC_SUBCMD_ANNOUNCE20,	// vendor ie in assoc request (5).  // 26
 	NUM_VENDOR_EVENT,
 	MAX_VENDOR_EVENT = NUM_VENDOR_EVENT - 1
 };

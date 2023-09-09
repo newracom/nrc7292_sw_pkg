@@ -401,7 +401,11 @@ int nrc_wim_install_key(struct nrc *nw, enum set_key_cmd cmd,
 				|| (vif->type == NL80211_IFTYPE_ADHOC)
 #endif
 				|| (vif->type == NL80211_IFTYPE_P2P_GO)))
+#ifdef CONFIG_USE_VIF_CFG
+			aid = vif->cfg.aid;
+#else
 			aid = vif->bss_conf.aid;
+#endif
 		else if (sta)
 			aid = sta->aid;
 	} else {
@@ -409,7 +413,11 @@ int nrc_wim_install_key(struct nrc *nw, enum set_key_cmd cmd,
 			if (sta) {
 				aid = sta->aid;
 			} else {
+#ifdef CONFIG_USE_VIF_CFG
+				aid = vif->cfg.aid;
+#else
 				aid = vif->bss_conf.aid;
+#endif
 			}
 		} else {
 			aid = 0;

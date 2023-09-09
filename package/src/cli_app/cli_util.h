@@ -79,4 +79,7 @@ void print_mac_address(char mac_addr[6]);
 char cli_getch(void);
 char cli_getche(void);
 void cli_input_prompt(const char* prompt_name, char* input);
+void cli_sysconfig_print(xfer_sys_config_t *sysconfig, bool hex, int model);
+void cli_user_factory_print(xfer_sys_config_t *sysconfig, bool hex, int model);
+void cmd_show_sysconfig_parse(xfer_sys_config_t *sysconfig, int display_mode, int model);
 #endif /* _CLI_UTIL_H_ */

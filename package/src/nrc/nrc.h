@@ -289,8 +289,13 @@ struct nrc {
 
 	/* beacon interval (AP) */
 	u16 beacon_int;
-	/* vendor specific element (AP) */
-	struct sk_buff *vendor_skb;
+
+	/* vendor specific element*/
+	struct sk_buff *vendor_skb_beacon;
+	struct sk_buff *vendor_skb_probe_req;
+	struct sk_buff *vendor_skb_probe_rsp;
+	struct sk_buff *vendor_skb_assoc_req;
+
 	/* work for removing vendor specific ie for wowlan pattern (AP) */
 	struct delayed_work rm_vendor_ie_wowlan_pattern;
 	/* this must be assigned via nrc_mac_set_wakeup() */

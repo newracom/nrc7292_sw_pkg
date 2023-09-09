@@ -85,7 +85,7 @@ def checkPeer(interface, mac, routing):
                     conn = 0
                     print(mac + " DISCONNECTED!")
                     os.system("sudo wpa_cli -i " + interface + " mesh_peer_remove " + mac + " > /dev/null 2>&1")
-                addPeer(interface, mac)
+                addPeer(interface, mac, '')
             else:
                 if conn == 0:
                     conn = 1

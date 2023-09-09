@@ -190,10 +190,10 @@ int cli_app_run_onetime(int argc, char* argv[]){
 	*(buffer + strlen(buffer)-1) = '\0';
 
 	ret = cli_app_run_command(buffer);
-	if (ret == CMD_RET_FAILURE) {
-		printf("FAIL\n");
-	}else {
+	if (ret == CMD_RET_SUCCESS) {
 		printf("OK\n");
+	}else {
+		printf("FAIL\n");
 	}
 	return 0;
 }
@@ -868,6 +868,91 @@ void cli_input_prompt(const char* prompt_name, char* input)
 	printf("\r");
 	printf("%*s\r", NRC_MAX_CMDLINE_SIZE, " ");
 	printf("\r%s> %s",prompt_name, input);
+}
+
+void cli_sysconfig_print(xfer_sys_config_t *sysconfig, bool hex, int sysconfig_format)
+{
+	if (hex) {
+		print_hex(sysconfig, sizeof(xfer_sys_config_t) - sizeof(sysconfig->user_factory));
+	} else {
+		printf(" version\t: %d\n", sysconfig->version);
+		printf(" mac_addr0\t: "); print_mac_address(sysconfig->mac_addr0);
+		printf(" mac_addr1\t: "); print_mac_address(sysconfig->mac_addr1);
+		printf(" cal_use\t: %d\n", sysconfig->cal_use);
+		printf(" hw_version\t: %d\n", sysconfig->hw_version);
+		if(sysconfig_format == SYSCONFIG_FORMAT_1){
+			xfer_sys_config_pllldo_t* rf_pllldo12_tr = (xfer_sys_config_pllldo_t*)sysconfig->reserved1;
+			printf(" rf_pllldo12_tr\t: 0x%08X (%s)\n", rf_pllldo12_tr->value,
+						(rf_pllldo12_tr->control==1)?"Use":"Disabled");
+		} else {
+			printf(" trx_pass_fail\t:\n");
+			printf("   cfo_cal\t: %d\n",	sysconfig->trx_pass_fail.cfo_cal);
+			printf("   da_cal\t: %d\n",   sysconfig->trx_pass_fail.da_cal);
+			printf("   txpwr_cal\t: %d\n", sysconfig->trx_pass_fail.txpwr_cal);
+			printf("   rssi_cal\t: %d\n",	 sysconfig->trx_pass_fail.rssi_cal);
+			printf("   tx_test\t: %d\n",	  sysconfig->trx_pass_fail.tx_test);
+			printf("   rx_test\t: %d\n",	 sysconfig->trx_pass_fail.rx_test);
+			printf(" chip_type\t: %d\n", sysconfig->chip_type.type);
+			printf(" module_type\t: %d\n", sysconfig->module_type.type);
+			printf(" module_feature\t:\n");
+			printf("   txpwr_boosting_valid\t: %d\n", sysconfig->module_feature.txpwr_boosting_valid);
+			printf("   fem_polarity_valid\t	: %d\n", sysconfig->module_feature.fem_polarity_valid);
+			printf("   external_pa_valid\t: %d\n", sysconfig->module_feature.external_pa_exists);
+			printf("   max_txgain_valid\t: %d\n", sysconfig->module_feature.max_txgain_valid);
+			printf("   max_txpwr_valid\t   : %d\n", sysconfig->module_feature.max_txpwr_valid);
+			printf(" txpwr_boosting\t: %d\n", sysconfig->txpwr_boosting.tmx_gmrc);
+			printf(" max_txgain\t: %d\n", sysconfig->max_txgain);
+			printf(" max_txpwr\t: %d\n", sysconfig->max_txpwr);
+			printf(" fem_polarity\t: \"0x%02x\"\n", sysconfig->fem_polarity);
+			printf(" gpio_index_map\t:\n");
+			printf("   pa_en_valid\t  : %d\n", sysconfig->gpio_index_map.pa_en_valid);
+			printf("   pa_en_pin\t  : %d\n", sysconfig->gpio_index_map.pa_en_pin);
+			printf("   ant_sel_valid\t: %d\n", sysconfig->gpio_index_map.ant_sel_valid);
+			printf("   ant_sel_pin\t  : %d\n", sysconfig->gpio_index_map.ant_sel_pin);
+			printf("   power_down_valid\t: %d\n", sysconfig->gpio_index_map.power_down_valid);
+			printf("   power_down_data\t: %d\n", sysconfig->gpio_index_map.power_down_data);
+			printf("   power_down_pin\t: %d\n\n",  sysconfig->gpio_index_map.power_down_pin);
+			printf(" serial_number\t: ");
+			for(int i=0;i<sizeof(sysconfig->serial_number);i++) {
+				char c = sysconfig->serial_number[i];
+				if (!c)
+					break;
+				printf("%c", c);
+			}
+			printf("\n");
+			printf(" user_factory\t: ");
+			for(int i=0;i<sizeof(sysconfig->user_factory);i++) {
+				char c = sysconfig->user_factory[i];
+				if (!c)
+					break;
+				printf("%c", c);
+			}
+		}
+	}
+}
+
+void cli_user_factory_print(xfer_sys_config_t *sysconfig, bool hex, int sysconfig_format)
+{
+	if (hex) {
+		print_hex(sysconfig->user_factory,  sizeof(sysconfig->user_factory));
+	} else {
+		for(int i = 0; i < sizeof(sysconfig->user_factory); i++) {
+			char c = sysconfig->user_factory[i];
+			if(IS_WHITESPACE(c) || IS_PRINTABLE_ASCII(c))
+				printf("%c", c);
+		}
+		printf("\n");
+	}
+}
+
+void cmd_show_sysconfig_parse(xfer_sys_config_t *sysconfig, int display_mode, int sysconfig_format)
+{
+	printf("[sysconfig]\n");
+	cli_sysconfig_print(sysconfig, display_mode, sysconfig_format);
+	printf("\n\n");
+	printf("[user_factory]\n");
+	cli_user_factory_print(sysconfig, display_mode, sysconfig_format);
+	printf("\n");
 }
 
 

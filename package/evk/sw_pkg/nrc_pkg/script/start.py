@@ -216,7 +216,7 @@ def strSTA():
         usage_print()
 
 def checkCountry():
-    country_list = ["US", "CN", "JP", "EU", "TW", "AU", "NZ", "K0", "K1", "K2"]
+    country_list = ["US", "CN", "JP", "EU", "TW", "AU", "NZ", "K1", "K2"]
     if str(sys.argv[3]) in country_list:
         return
     else:
@@ -259,6 +259,11 @@ def checkIBSSUsage():
     if len(sys.argv) == 6:
         if isIP(sys.argv[5]):
             static_ip = sys.argv[5]
+
+def checkParamValidity():
+    if strSTA() == 'STA' and int(power_save) > 0 and int(listen_interval) > 65535:
+        print("Max listen_interval is 65535!")
+        exit()
 
 def strSecurity():
     if int(sys.argv[2]) == 0:
@@ -321,7 +326,7 @@ def strMeshMode():
 def strOriCountry():
     if str(sys.argv[3]) == 'EU':
         return 'DE'
-    elif str(sys.argv[3]) == 'K0' or str(sys.argv[3]) == 'K1' or str(sys.argv[3]) == 'K2':
+    elif str(sys.argv[3]) == 'K1' or str(sys.argv[3]) == 'K2':
         return 'KR'
     else:
         return str(sys.argv[3])
@@ -350,6 +355,21 @@ def strBDName():
         return str(bd_name)
     else:
         return 'nrc' + str(model) + '_bd.dat'
+
+def get_linux_kernel_release_version():
+    try:
+        with open('/proc/version', 'r') as version_file:
+            version_string = version_file.read()
+            match = re.search(r'Linux version (\d+)\.(\d+)\.(\d+)', version_string)
+            if match:
+                major = int(match.group(1))
+                minor = int(match.group(2))
+                patch = int(match.group(3))
+                return major, minor, patch
+            else:
+                return None
+    except FileNotFoundError:
+        return None
 
 def argv_print():
     print("------------------------------")
@@ -620,10 +640,8 @@ def setModuleParam():
         listen_int_arg = " listen_interval=" + str(listen_interval)
 
     # module param for KR Band (KR only)
-    # default: not defined(-1) (0:K0, 1:K1, 2:K2)
-    if str(sys.argv[3]) == 'K0':
-        kr_band_arg = " kr_band=0"
-    elif str(sys.argv[3]) == 'K1':
+    # default: not defined(-1) (1:K1(KR USN1), 2:K2(KR USN5))
+    if str(sys.argv[3]) == 'K1':
         kr_band_arg = " kr_band=1"
     elif str(sys.argv[3]) == 'K2':
         kr_band_arg = " kr_band=2"
@@ -664,7 +682,15 @@ def setModuleParam():
 
     # module parameter setting while loading NRC driver
     # Default value is used if arg is not defined
-    module_param = spi_arg + fw_arg + \
+    module_param = ""
+
+    # From linux kernel version 5.16 or later, spi_arg is not used as a module param.
+    major, minor, patch = get_linux_kernel_release_version()
+
+    if major*1000+minor < 5016:
+        module_param = spi_arg
+
+    module_param += fw_arg + \
                  power_save_arg + sleep_duration_arg + bss_max_idle_arg + \
                  ndp_preq_arg + ndp_ack_1m_arg + auto_ba_arg + sw_enc_arg + \
                  cqm_arg + listen_int_arg + drv_dbg_arg + credit_acbe_arg + \
@@ -688,6 +714,7 @@ def run_common():
     os.system("sudo rmmod nrc 2>/dev/null")
     os.system("sudo rm "+script_path+"conf/temp_self_config.conf 2>/dev/null")
     os.system("sudo rm "+script_path+"conf/temp_hostapd_config.conf 2>/dev/null")
+    os.system("sudo sh -c '[ -e /proc/sys/kernel/sysrq ] && echo 0 > /proc/sys/kernel/sysrq'")
     stopNAT()
     stopDHCPCD()
     stopDNSMASQ()
@@ -928,6 +955,7 @@ if __name__ == '__main__':
     else:
         argv_print()
 
+    checkParamValidity()
     checkCountry()
 
     print("NRC " + strSTA() + " setting for HaLow...")

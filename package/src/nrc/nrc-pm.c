@@ -92,7 +92,11 @@ static void nrc_mac_rx_fictitious_ps_poll_response(struct ieee80211_vif *vif)
 	struct ieee80211_rx_status *status;
 
 #if KERNEL_VERSION(4, 14, 17) <= NRC_TARGET_KERNEL_VERSION
+#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
+	skb= ieee80211_nullfunc_get(nw->hw, vif, vif->bss_conf.link_id, false);
+#else
 	skb = ieee80211_nullfunc_get(nw->hw, vif, false);
+#endif
 #else
 	skb = ieee80211_nullfunc_get(nw->hw, vif);
 #endif
@@ -326,7 +330,11 @@ static void sta_max_idle_period_expire(struct timer_list *t)
 	nrc_mac_dbg("%s: sending a keep-alive (QoS Null Frame)", __func__);
 	/* Send a Null frame as a keep alive frame */
 #if KERNEL_VERSION(4, 14, 17) <= NRC_TARGET_KERNEL_VERSION
+#if KERNEL_VERSION(6, 1, 0) <= NRC_TARGET_KERNEL_VERSION
+	skb= ieee80211_nullfunc_get(hw, i_sta->vif, i_sta->vif->bss_conf.link_id, false);
+#else
 	skb = ieee80211_nullfunc_get(hw, i_sta->vif, false);
+#endif
 #else
 	skb = ieee80211_nullfunc_get(hw, i_sta->vif);
 #endif
@@ -337,13 +345,17 @@ static void sta_max_idle_period_expire(struct timer_list *t)
 	skb_set_queue_mapping(skb, IEEE80211_AC_VO);
 
 #ifdef CONFIG_SUPPORT_CHANNEL_INFO
+#ifdef CONFIG_USE_BSS_CHAN_CONF
+	chanctx_conf = rcu_dereference(i_sta->vif->bss_conf.chanctx_conf);
+#else
 	chanctx_conf = rcu_dereference(i_sta->vif->chanctx_conf);
+#endif /* ifdef CONFIG_USE_BSS_CHAN_CONF */
 	if (!chanctx_conf)
 		goto drop;
 
 	band = chanctx_conf->def.chan->band;
 	if (!ieee80211_tx_prepare_skb(hw, i_sta->vif, skb, band, NULL))
-		goto drop;
+		goto done;
 #else
 	chanctx_conf = &hw->conf;
 	if (!chanctx_conf)
@@ -358,6 +370,7 @@ static void sta_max_idle_period_expire(struct timer_list *t)
 	nrc_mac_tx(hw, skb);
 #endif
 
+done:
 	/* Re-arm the timer */
 	mod_timer(&i_sta->max_idle.timer, jiffies + i_sta->max_idle.idle_period);
 

@@ -25,8 +25,19 @@ def addBridgeMeshAP(wlan, mesh):
     os.system("sudo brctl addbr br0")
     os.system("sudo brctl addif br0 " + wlan)
     os.system("sudo brctl addif br0 " + mesh)
-    os.system("sudo ifconfig br0 " + getIpAddr(mesh))
-    os.system("sudo ifconfig " + mesh + " 0.0.0.0")
+    print("[11] Connect and DHCP for Mesh Network")
+    os.system("sudo dhcpcd -n br0")
+    ret = check("br0")
+    rebind = 1
+    while ret == '':
+        if rebind % 15 == 0:
+            rebind = 1
+            os.system("sudo dhcpcd -n br0")
+        else:
+            rebind = rebind + 1
+        print("Waiting for IP")
+        time.sleep(1)
+        ret = check("br0")
     os.system("sudo ip route add default via " + getNetAddr("br0") + ".1 dev br0")
 
 def removeBridgeMeshAP(wlan, mesh):
@@ -264,21 +275,7 @@ def run_map(wlan, mesh, country, security, debug, peermac, ip, batman):
         else:
             addPeer(mesh, peermac, '')
 
-    print("[8] Connect and DHCP for Mesh Network")
-    os.system("sudo dhcpcd -n " + intf)
-    ret = check(intf)
-    rebind = 1
-    while ret == '':
-        if rebind % 15 == 0:
-            rebind = 1
-            os.system("sudo dhcpcd -n " + intf)
-        else:
-            rebind = rebind + 1
-        print("Waiting for IP")
-        time.sleep(1)
-        ret = check(intf)
-
-    print("[9] Start hostapd on " + wlan)
+    print("[8] Start hostapd on " + wlan)
     if security == 'OPEN':
         os.system("sed -i " + '"4s/.*/interface=' + wlan + '/g"  /home/pi/nrc_pkg/script/conf/' + country + '/map_halow_open.conf ')
         os.system("sudo hostapd /home/pi/nrc_pkg/script/conf/" + country + "/map_halow_open.conf " + debug +" &")
@@ -298,10 +295,10 @@ def run_map(wlan, mesh, country, security, debug, peermac, ip, batman):
         os.system("sudo hostapd_cli wps_pbc")
     time.sleep(1)
 
-    print("[10] Start NAT")
+    print("[9] Start NAT")
     startMeshNAT(wlan, intf)
 
-    print("[11] Add Bridge")
+    print("[10] Add Bridge")
     addBridgeMeshAP(wlan, intf)
 
     print("[12] ifconfig")

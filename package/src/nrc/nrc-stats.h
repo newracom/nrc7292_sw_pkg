@@ -18,6 +18,9 @@
 
 #define MAX_SHOWN_RSSI		(-10)
 
+#define MAX_CHANNEL_NUM		40
+#define TIMEOUT_CHANNEL_NOISE	60	//second
+
 struct stats_sta {
 	uint8_t macaddr[6];
 	struct moving_average *snr;
@@ -25,6 +28,11 @@ struct stats_sta {
 	struct moving_average *metric;
 
 	struct list_head list;
+};
+
+struct stats_channel_noise {
+	int8_t noise;
+	struct ieee80211_channel *chan;
 };
 
 int nrc_stats_snr_init(int count);
@@ -47,4 +55,8 @@ int nrc_stats_del(uint8_t *macaddr);
 void nrc_stats_print(void);
 int nrc_stats_report(struct nrc* nw, uint8_t *output, int index, int number);
 int nrc_stats_report_count(void);
+
+int nrc_stats_channel_noise_update(uint32_t freq, int8_t noise);
+int nrc_stats_channel_noise_reset(void);
+struct stats_channel_noise *nrc_stats_channel_noise_report(int report_num, uint32_t freq);
 #endif

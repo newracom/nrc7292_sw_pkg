@@ -54,7 +54,6 @@
 #include "nrc-bd.h"
 #else
 #define US_BASE_FREQ	2412
-#define K0_BASE_FREQ	5195
 #define K1_BASE_FREQ	5180
 #define K2_BASE_FREQ	5180
 #define JP_BASE_FREQ	5180
@@ -611,6 +610,9 @@ static void nrc_assoc_h_basic(struct ieee80211_hw *hw,
 							struct sk_buff *skb)
 {
 	struct nrc *nw = hw->priv;
+#ifdef CONFIG_USE_VIF_CFG
+	struct ieee80211_vif_cfg *vif_cfg = &vif->cfg;
+#endif
 #ifdef CONFIG_SUPPORT_CHANNEL_INFO
 	struct ieee80211_chanctx_conf *conf;
 #else
@@ -624,27 +626,47 @@ static void nrc_assoc_h_basic(struct ieee80211_hw *hw,
 	enum ieee80211_band band;
 #endif
 
+#ifdef CONFIG_USE_VIF_CFG
+	nrc_mac_dbg("%s: aid=%u, bssid=%pM", __func__,
+		vif_cfg->aid, info->bssid);
+	nw->aid = vif_cfg->aid;
+#else
 	nrc_mac_dbg("%s: aid=%u, bssid=%pM", __func__,
 		info->aid, info->bssid);
-
 	nw->aid = info->aid;
+#endif
+
 #ifdef CONFIG_TRX_BACKOFF
 	nw->ampdu_supported = 0;
 #endif
-
+#ifdef CONFIG_USE_VIF_CFG
+	nrc_wim_skb_add_tlv(skb, WIM_TLV_AID, sizeof(vif_cfg->aid), &vif_cfg->aid);
+#else
 	nrc_wim_skb_add_tlv(skb, WIM_TLV_AID, sizeof(info->aid), &info->aid);
+#endif
 	nrc_wim_skb_add_tlv(skb, WIM_TLV_BSSID, ETH_ALEN, (void *)info->bssid);
 
 	/* Enable later when rate adaptation is supported in the target */
 #ifdef CONFIG_SUPPORT_CHANNEL_INFO
+#ifdef CONFIG_USE_BSS_CHAN_CONF
+	conf = rcu_dereference(vif->bss_conf.chanctx_conf);
+#else
 	conf = rcu_dereference(vif->chanctx_conf);
+#endif /* ifdef CONFIG_USE_BSS_CHAN_CONF */
 	band = conf->def.chan->band;
 #else
 	band = conf_chan->band;
 #endif
+
+#ifdef CONFIG_SUPPORT_LINK_STA
+	nrc_wim_skb_add_tlv(skb, WIM_TLV_SUPPORTED_RATES,
+						sizeof(sta->deflink.supp_rates[band]),
+						&sta->deflink.supp_rates[band]);
+#else
 	nrc_wim_skb_add_tlv(skb, WIM_TLV_SUPPORTED_RATES,
 						sizeof(sta->supp_rates[band]),
 						&sta->supp_rates[band]);
+#endif /* ifdef CONFIG_SUPPORT_LINK_STA */
 	nrc_wim_skb_add_tlv(skb, WIM_TLV_BASIC_RATE,
 						sizeof(info->basic_rates), &info->basic_rates);
 }
@@ -655,7 +677,11 @@ void nrc_assoc_h_ht(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 					struct ieee80211_bss_conf *bss_conf,
 					struct ieee80211_sta *sta, struct sk_buff *skb)
 {
+#ifdef CONFIG_SUPPORT_LINK_STA
+	struct ieee80211_sta_ht_cap *ht_cap = &sta->deflink.ht_cap;
+#else
 	struct ieee80211_sta_ht_cap *ht_cap = &sta->ht_cap;
+#endif /* ifdef CONFIG_SUPPORT_LINK_STA */
 
 	/* Assumption: ht_cap->ht_supported is false if HT Capabilities
 	 * element is not included in the Association Response frame
@@ -682,6 +708,15 @@ void nrc_assoc_h_phymode(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 	static char * const phymodestr[] = {"HT-none", "11b", "", "HT"};
 	u8 phymode;
 
+#ifdef CONFIG_SUPPORT_LINK_STA
+	/* HT_MF, non-HT, 11b */
+	if (sta->deflink.ht_cap.ht_supported)
+		phymode = PHY_HT_MF;
+	else if (sta->deflink.supp_rates[NL80211_BAND_2GHZ] >> 4)
+		phymode = PHY_HT_NONE;
+	else
+		phymode = PHY_11B;
+#else
 	/* HT_MF, non-HT, 11b */
 	if (sta->ht_cap.ht_supported)
 		phymode = PHY_HT_MF;
@@ -689,6 +724,7 @@ void nrc_assoc_h_phymode(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 		phymode = PHY_HT_NONE;
 	else
 		phymode = PHY_11B;
+#endif /* ifdef CONFIG_SUPPORT_LINK_STA */
 
 	nrc_mac_dbg("%s: phy mode=%s", __func__, phymodestr[phymode]);
 
@@ -732,14 +768,17 @@ static int nrc_vendor_update_beacon(struct ieee80211_hw *hw,
 	struct sk_buff *skb, *b;
 	u8 *pos;
 	u16 need_headroom, need_tailroom;
-
+#ifdef CONFIG_USE_LINK_ID
+	b = ieee80211_beacon_get_template(hw, vif, NULL, vif->bss_conf.link_id);
+#else
 	b = ieee80211_beacon_get_template(hw, vif, NULL);
+#endif /* ifdef CONFIG_USE_LINK_ID */
 	if (!b)
 		return -EINVAL;
 
-	if (nw->vendor_skb) {
+	if (nw->vendor_skb_beacon) {
 		need_headroom = skb_headroom(b);
-		need_tailroom = nw->vendor_skb->len;
+		need_tailroom = nw->vendor_skb_beacon->len;
 
 		if (skb_tailroom(b) < need_tailroom) {
 			if (pskb_expand_head(b, need_headroom, need_tailroom,
@@ -747,19 +786,88 @@ static int nrc_vendor_update_beacon(struct ieee80211_hw *hw,
 				nrc_mac_dbg("Fail to expand Beacon for vendor elem (need: %d)",
 					need_tailroom);
 				dev_kfree_skb_any(b);
-				dev_kfree_skb_any(nw->vendor_skb);
-				nw->vendor_skb = NULL;
+				dev_kfree_skb_any(nw->vendor_skb_beacon);
+				nw->vendor_skb_beacon = NULL;
 				return 0;
 			}
 		}
-		pos = skb_put(b, nw->vendor_skb->len);
-		memcpy(pos, nw->vendor_skb->data, nw->vendor_skb->len);
+		pos = skb_put(b, nw->vendor_skb_beacon->len);
+		memcpy(pos, nw->vendor_skb_beacon->data, nw->vendor_skb_beacon->len);
+	}
+
+	if (b->len > WIM_MAX_SIZE) {
+		nrc_mac_dbg("Fail to alloc skb for wim(b->len:%d, max: %d)",
+			b->len, WIM_MAX_SIZE);
+		dev_kfree_skb_any(b);
+		dev_kfree_skb_any(nw->vendor_skb_beacon);
+		nw->vendor_skb_beacon = NULL;
+		return 0;
 	}
 
 	skb = nrc_wim_alloc_skb_vif(nw, vif, WIM_CMD_SET, WIM_MAX_SIZE);
 	pos = nrc_wim_skb_add_tlv(skb, WIM_TLV_BEACON, b->len, b->data);
 
 	dev_kfree_skb_any(b);
+	return nrc_xmit_wim_request(nw, skb);
+}
+
+static int nrc_vendor_update_probe_req(struct ieee80211_hw *hw,
+			struct ieee80211_vif *vif)
+{
+	struct nrc *nw = hw->priv;
+	struct sk_buff *skb;
+
+	if (nw->vendor_skb_probe_req->len > WIM_MAX_SIZE) {
+		nrc_mac_dbg("Fail to alloc skb for wim(vendor_skb_probe_req->len:%d, max: %d)",
+			nw->vendor_skb_probe_req->len, WIM_MAX_SIZE);
+		return 0;
+	}
+
+	skb = nrc_wim_alloc_skb_vif(nw, vif, WIM_CMD_SET, WIM_MAX_SIZE);
+	nrc_wim_skb_add_tlv(skb, WIM_TLV_PROBE_REQ_VENDOR_IE,
+				        nw->vendor_skb_probe_req->len,
+						nw->vendor_skb_probe_req->data);
+
+	return nrc_xmit_wim_request(nw, skb);
+}
+
+static int nrc_vendor_update_probe_rsp(struct ieee80211_hw *hw,
+			struct ieee80211_vif *vif)
+{
+	struct nrc *nw = hw->priv;
+	struct sk_buff *skb;
+
+	if (nw->vendor_skb_probe_rsp->len > WIM_MAX_SIZE) {
+		nrc_mac_dbg("Fail to alloc skb for wim(vendor_skb_probe_rsp->len:%d, max: %d)",
+			nw->vendor_skb_probe_rsp->len, WIM_MAX_SIZE);
+		return 0;
+	}
+
+	skb = nrc_wim_alloc_skb_vif(nw, vif, WIM_CMD_SET, WIM_MAX_SIZE);
+	nrc_wim_skb_add_tlv(skb, WIM_TLV_PROBE_RSP_VENDOR_IE,
+				        nw->vendor_skb_probe_rsp->len,
+						nw->vendor_skb_probe_rsp->data);
+
+	return nrc_xmit_wim_request(nw, skb);
+}
+
+static int nrc_vendor_update_assoc_req(struct ieee80211_hw *hw,
+			struct ieee80211_vif *vif)
+{
+	struct nrc *nw = hw->priv;
+	struct sk_buff *skb;
+
+	if (nw->vendor_skb_assoc_req->len > WIM_MAX_SIZE) {
+		nrc_mac_dbg("Fail to alloc skb for wim(vendor_skb_assoc_req->len:%d, max: %d)",
+			nw->vendor_skb_assoc_req->len, WIM_MAX_SIZE);
+		return 0;
+	}
+
+	skb = nrc_wim_alloc_skb_vif(nw, vif, WIM_CMD_SET, WIM_MAX_SIZE);
+	nrc_wim_skb_add_tlv(skb, WIM_TLV_ASSOC_REQ_VENDOR_IE,
+				        nw->vendor_skb_assoc_req->len,
+						nw->vendor_skb_assoc_req->data);
+
 	return nrc_xmit_wim_request(nw, skb);
 }
 
@@ -1176,7 +1284,7 @@ uint16_t get_base_freq(void)
 	} else if (nrc_cc[0] == 'C' && nrc_cc[1] == 'N') {
 		ret_freq = CN_BASE_FREQ;
 	} else if (nrc_cc[0] == 'K' && nrc_cc[1] == 'R') {
-		ret_freq = (kr_band == 0) ? K0_BASE_FREQ : (kr_band == 1) ? K1_BASE_FREQ : K2_BASE_FREQ;
+		ret_freq = (kr_band == 1) ? K1_BASE_FREQ : K2_BASE_FREQ;
 	} else if (country_match(eu_countries_cc, nrc_cc)) {
 		ret_freq = EU_BASE_FREQ;
 	}
@@ -1428,9 +1536,14 @@ static int nrc_mac_config(struct ieee80211_hw *hw, u32 changed)
 			} else {
 				return ret;
 			}
+		} else if (ieee80211_hw_check(hw, SUPPORTS_PS)) {
+			if (!nw->ps_enabled) {
+				if (power_save >= NRC_PS_DEEPSLEEP_TIM)
+					return ret;
+			}
 		}
 
-		if (power_save > NRC_PS_NONE) {
+		if (nw->ps_enabled && power_save > NRC_PS_NONE) {
 			skb = nrc_wim_alloc_skb(nw, WIM_CMD_SET,
 				tlv_len(sizeof(struct wim_pm_param)));
 			p = nrc_wim_skb_add_tlv(skb, WIM_TLV_PS_ENABLE,
@@ -1541,7 +1654,11 @@ static void nrc_mac_update_p2p_ps(struct sk_buff *skb,
 void nrc_mac_bss_info_changed(struct ieee80211_hw *hw,
 							struct ieee80211_vif *vif,
 							struct ieee80211_bss_conf *info,
+#if KERNEL_VERSION(6,0,0) <= NRC_TARGET_KERNEL_VERSION
+							u64 changed)
+#else
 							u32 changed)
+#endif
 {
 	struct nrc_vif *i_vif = to_i_vif(vif);
 	struct nrc *nw = hw->priv;
@@ -1550,9 +1667,23 @@ void nrc_mac_bss_info_changed(struct ieee80211_hw *hw,
 
 	//nrc_mac_dbg("%s: changed=0x%x", __func__, changed);
 
+	/*
+	 * When sending deauth frame while the target is on deep sleep mode,
+	 * mac80211 operates as follows.
+	 * After transferring deauth frame through ieee80211_send_deauth_disassoc,
+	 * change assoc to false, and notify disassoc through bss_info_changed.
+	 *
+	 * In this case, since the assoc information is set to true
+	 * in the delayed deauth frame, the information of the delayed deauth frame
+	 * is also should be updated through the processing below.
+	 */
 	if (nw->drv_state == NRC_DRV_PS) {
-		if (changed == 0x80309f && atomic_read(&nw->d_deauth.delayed_deauth))
+		if (changed == 0x80309f && atomic_read(&nw->d_deauth.delayed_deauth)) {
+#ifdef CONFIG_USE_VIF_CFG
+			memcpy(&nw->d_deauth.v, vif, sizeof(struct ieee80211_vif));
+#endif
 			memcpy(&nw->d_deauth.b, info, sizeof(struct ieee80211_bss_conf));
+		}
 
 		return;
 	}
@@ -1560,7 +1691,11 @@ void nrc_mac_bss_info_changed(struct ieee80211_hw *hw,
 	skb = nrc_wim_alloc_skb_vif(nw, vif, WIM_CMD_SET, WIM_MAX_SIZE);
 
 	if (changed & BSS_CHANGED_ASSOC) {
+#ifdef CONFIG_USE_VIF_CFG
+		if (vif->cfg.assoc) {
+#else
 		if (info->assoc) {
+#endif
 			nrc_bss_assoc(hw, vif, info, skb);
 			if (!disable_cqm) {
 				mod_timer(&nw->bcn_mon_timer,
@@ -1672,10 +1807,17 @@ void nrc_mac_bss_info_changed(struct ieee80211_hw *hw,
 
 #ifdef CONFIG_SUPPORT_AFTER_KERNEL_3_0_36
 	if (changed & BSS_CHANGED_SSID) {
+#ifdef CONFIG_USE_VIF_CFG
+		nrc_mac_dbg("ssid=%s", vif->cfg.ssid);
+
+		nrc_wim_skb_add_tlv(skb, WIM_TLV_SSID, vif->cfg.ssid_len,
+				vif->cfg.ssid);
+#else
 		nrc_mac_dbg("ssid=%s", info->ssid);
 
 		nrc_wim_skb_add_tlv(skb, WIM_TLV_SSID, info->ssid_len,
 				info->ssid);
+#endif
 	}
 #endif
 
@@ -1791,6 +1933,11 @@ int nrc_mac_sta_add(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 	 */
 	for (i = 0; i < ARRAY_SIZE(sta->txq); i++)
 		nrc_init_txq(sta->txq[i], vif);
+
+	/* Set higher timeout of mac80211 TX Queue */
+	if (nrc_mac_is_s1g(nw)) {
+		rate_control_set_rates(hw, sta, NULL);
+	}
 #endif
 	return 0;
 }
@@ -1978,8 +2125,13 @@ static int nrc_mac_set_tim(struct ieee80211_hw *hw, struct ieee80211_sta *sta,
 	tim->set = set;
 
 	if (!nrc_mac_is_s1g(nw)) {
+#ifdef CONFIG_USE_LINK_ID
+		struct sk_buff *b = ieee80211_beacon_get_template(hw,
+				i_sta->vif, NULL, i_sta->vif->bss_conf.link_id);
+#else
 		struct sk_buff *b = ieee80211_beacon_get_template(hw,
 				i_sta->vif, NULL);
+#endif
 		if (b) {
 			nrc_wim_skb_add_tlv(skb, WIM_TLV_BEACON, b->len,
 					b->data);
@@ -1996,6 +2148,9 @@ static u16 mac80211_to_nrc_aci_map[4] = {
 #ifdef CONFIG_SUPPORT_CHANNEL_INFO
 int nrc_mac_conf_tx(struct ieee80211_hw *hw,
 					struct ieee80211_vif *vif,
+#ifdef CONFIG_USE_LINK_ID
+					unsigned int link_id,
+#endif
 					u16 ac,
 					const struct ieee80211_tx_queue_params *params)
 #else
@@ -2051,19 +2206,15 @@ int nrc_mac_conf_tx(struct ieee80211_hw *hw,
 static int nrc_mac_get_survey(struct ieee80211_hw *hw, int idx,
 							struct survey_info *survey)
 {
-	struct ieee80211_conf *conf = &hw->conf;
+	struct stats_channel_noise *channel_noise;
 
 	nrc_mac_dbg("%s (idx=%d)", __func__, idx);
 
-	if (idx != 0)
+	channel_noise = nrc_stats_channel_noise_report(idx, 0);
+	if(!channel_noise)
 		return -ENOENT;
 
-	/* Current channel */
-#ifdef CONFIG_SUPPORT_CHANNEL_INFO
-	survey->channel = conf->chandef.chan;
-#else
-	survey->channel = conf->channel;
-#endif
+	survey->channel = channel_noise->chan;
 
 	/*
 	 * Magically conjured noise level
@@ -2073,7 +2224,7 @@ static int nrc_mac_get_survey(struct ieee80211_hw *hw, int idx,
 	 * report any noise, especially not a magically conjured one :-)
 	 */
 	survey->filled = SURVEY_INFO_NOISE_DBM;
-	survey->noise = -92;
+	survey->noise = channel_noise->noise;
 
 	return 0;
 }
@@ -2132,7 +2283,11 @@ static int nrc_mac_ampdu_action(struct ieee80211_hw *hw,
 	switch (action) {
 	case IEEE80211_AMPDU_TX_START:
 		nrc_dbg(NRC_DBG_MAC, "%s: IEEE80211_AMPDU_TX_START", __func__);
+#ifdef CONFIG_SUPPORT_LINK_STA
+		if (!nw->ampdu_supported || !sta->deflink.ht_cap.ht_supported)
+#else
 		if (!nw->ampdu_supported || !sta->ht_cap.ht_supported)
+#endif
 			return -EOPNOTSUPP;
 
 		if (nrc_wim_ampdu_action(nw, vif, WIM_AMPDU_TX_START, sta, tid))
@@ -2262,6 +2417,9 @@ __nrc_mac_hw_scan(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 
 	if (nw->scan_mode != NRC_SCAN_MODE_IDLE)
 		nrc_mac_cancel_hw_scan(hw, vif);
+
+	if(nrc_stats_channel_noise_reset() < 0)
+		nrc_mac_dbg("%s Channel noise reset fail", __func__);
 
 	scan_to += 120 * req->n_channels;
 
@@ -2685,6 +2843,9 @@ static void nrc_mac_channel_policy(void *data, u8 *mac,
 	struct cfg80211_chan_def *chan_to_follow =
 		(struct cfg80211_chan_def *)data;
 	struct wireless_dev *wdev = ieee80211_vif_to_wdev(vif);
+#ifdef CONFIG_USE_LINK_ID
+	struct cfg80211_chan_def *chandef;
+#endif
 #else
 	struct ieee80211_conf *chan_to_follow =
 		(struct ieee80211_conf *)data;
@@ -2695,21 +2856,31 @@ static void nrc_mac_channel_policy(void *data, u8 *mac,
 		return;
 
 #ifdef CONFIG_SUPPORT_CHANNEL_INFO
+#ifdef CONFIG_USE_LINK_ID
+	chandef = wdev_chandef(wdev, vif->bss_conf.link_id);
+	if (chandef->chan &&
+		chandef->chan->center_freq ==
+		chan_to_follow->chan->center_freq)
+#else
 	if (wdev->chandef.chan &&
 		wdev->chandef.chan->center_freq ==
 		chan_to_follow->chan->center_freq)
+#endif /* ifdef CONFIG_USE_LINK_ID */
 #else
 	if (wdev->channel &&
 		wdev->channel->center_freq ==
 		chan_to_follow->channel->center_freq)
-#endif
+#endif /* ifdef CONFIG_SUPPORT_CHANNEL_INFO */
 		return;
 
 	if (!(vif->type == NL80211_IFTYPE_STATION ||
 		vif->type == NL80211_IFTYPE_MESH_POINT))
 		return;
-
+#ifdef CONFIG_USE_VIF_CFG
+	if (vif->cfg.assoc)
+#else
 	if (vif->bss_conf.assoc)
+#endif
 		return;
 
 	skb = nrc_wim_alloc_skb_vif(nw, vif, WIM_CMD_SET, WIM_MAX_SIZE);
@@ -2950,7 +3121,11 @@ static void nrc_mac_channel_switch_beacon(struct ieee80211_hw *hw,struct ieee802
 {
 	struct sk_buff *b;
 
+#ifdef CONFIG_USE_LINK_ID
+	b = ieee80211_beacon_get_template(hw, vif, NULL, vif->bss_conf.link_id);
+#else
 	b = ieee80211_beacon_get_template(hw, vif, NULL);
+#endif
 
 	print_hex_dump(KERN_DEBUG, "new vendor elem: ", DUMP_PREFIX_NONE,
 		   16, 1, b->data, b->len, false);
@@ -3075,7 +3250,8 @@ int nrc_mac_suspend(struct ieee80211_hw *hw, struct cfg80211_wowlan *wowlan)
 
 
 	/* SPI suspend for deepsleep  */
-	if (!ieee80211_hw_check(hw, SUPPORTS_DYNAMIC_PS)) {
+	if (!ieee80211_hw_check(hw, SUPPORTS_DYNAMIC_PS) ||
+	    !ieee80211_hw_check(hw, SUPPORTS_PS)) {
 		nrc_hif_suspend(nw->hif);
 	}
 	nrc_hif_sleep_target_end(nw->hif, NRC_PS_DEEPSLEEP_NONTIM);
@@ -3251,7 +3427,7 @@ int nrc_reg_notifier(struct wiphy *wiphy,
 #if defined(CONFIG_SUPPORT_BD)
 	/**
 	 * Read board data and save buffer.
-	 * nrc_cc can be changed to EU, K0, K1 or K2 in nrc_read_bd_tx_pwr().
+	 * nrc_cc can be changed to EU, K1 or K2 in nrc_read_bd_tx_pwr().
 	 */
 	bd_param = nrc_read_bd_tx_pwr(nw, nrc_cc);
 	if(bd_param) {
@@ -3318,18 +3494,33 @@ int nrc_reg_notifier(struct wiphy *wiphy,
 static u8* nrc_vendor_remove(struct nrc *nw, u8 subcmd)
 {
 	u8 *pos = NULL;
+	struct sk_buff **vendor_skb_ptr = NULL;
 
-	if (!nw->vendor_skb)
+	if ((subcmd >= NRC_SUBCMD_ANNOUNCE1) &&
+	    (subcmd <= NRC_SUBCMD_BCAST_FOTA_4)) {
+		vendor_skb_ptr = &nw->vendor_skb_beacon;
+	} else if ((subcmd >= NRC_SUBCMD_ANNOUNCE6) &&
+		       (subcmd <= NRC_SUBCMD_ANNOUNCE10)) {
+		vendor_skb_ptr = &nw->vendor_skb_probe_req;
+	} else if ((subcmd >= NRC_SUBCMD_ANNOUNCE11) &&
+		       (subcmd <= NRC_SUBCMD_ANNOUNCE15)) {
+		vendor_skb_ptr = &nw->vendor_skb_probe_rsp;
+	} else if ((subcmd >= NRC_SUBCMD_ANNOUNCE16) &&
+		       (subcmd <= NRC_SUBCMD_ANNOUNCE20)) {
+		vendor_skb_ptr = &nw->vendor_skb_assoc_req;
+	}
+
+	if (!(*vendor_skb_ptr))
 		return NULL;
 
-	pos = (u8*)cfg80211_find_vendor_ie(OUI_IEEE_REGISTRATION_AUTHORITY, subcmd,
-			nw->vendor_skb->data, nw->vendor_skb->len);
+	pos = (u8*)cfg80211_find_vendor_ie(VENDOR_OUI, subcmd,
+			(*vendor_skb_ptr)->data, (*vendor_skb_ptr)->len);
 
 	if (pos) {
 		u8 len = *(pos + 1);
-		memmove(pos, pos + len + 2, nw->vendor_skb->len -
-			(pos - nw->vendor_skb->data) - (len + 2));
-		skb_trim(nw->vendor_skb, nw->vendor_skb->len - (len + 2));
+		memmove(pos, pos + len + 2, (*vendor_skb_ptr)->len -
+			(pos - (*vendor_skb_ptr)->data) - (len + 2));
+		skb_trim(*vendor_skb_ptr, (*vendor_skb_ptr)->len - (len + 2));
 	}
 
 	nrc_mac_dbg("%s: removed vendor IE", __func__);
@@ -3343,18 +3534,30 @@ static int nrc_vendor_update(struct nrc *nw, u8 subcmd,
 	const int MAX_DATALEN = 255;
 	int new_elem_len = data_len + 2 /* EID + LEN */ + OUI_LEN + 1;
 	u8 *pos;
+	struct sk_buff **vendor_skb_ptr = NULL;
 
 	if (!data || data_len < 1 || (data_len + OUI_LEN + 1) > MAX_DATALEN)
 		return -EINVAL;
 
-	if (!nw->vendor_skb)
-		nw->vendor_skb = dev_alloc_skb(IEEE80211_MAX_FRAME_LEN);
+	if (subcmd >= NRC_SUBCMD_ANNOUNCE1 && subcmd <= NRC_SUBCMD_BCAST_FOTA_4)
+		vendor_skb_ptr = &nw->vendor_skb_beacon;
+	else if (subcmd >= NRC_SUBCMD_ANNOUNCE6 && subcmd <= NRC_SUBCMD_ANNOUNCE10)
+		vendor_skb_ptr = &nw->vendor_skb_probe_req;
+	else if (subcmd >= NRC_SUBCMD_ANNOUNCE11 && subcmd <= NRC_SUBCMD_ANNOUNCE15)
+		vendor_skb_ptr = &nw->vendor_skb_probe_rsp;
+	else if (subcmd >= NRC_SUBCMD_ANNOUNCE16 && subcmd <= NRC_SUBCMD_ANNOUNCE20)
+		vendor_skb_ptr = &nw->vendor_skb_assoc_req;
+	else
+		WARN_ON(true);
+
+	if (!(*vendor_skb_ptr))
+		*vendor_skb_ptr = dev_alloc_skb(IEEE80211_MAX_FRAME_LEN);
 
 	// Remove old data first
 	pos = nrc_vendor_remove(nw, subcmd);
 
 	/* Append new data */
-	pos = skb_put(nw->vendor_skb, new_elem_len);
+	pos = skb_put(*vendor_skb_ptr, new_elem_len);
 	*pos++ = WLAN_EID_VENDOR_SPECIFIC;
 	*pos++ = data_len + OUI_LEN + 1;
 	*pos++ = (VENDOR_OUI & 0xFF0000) >> 16;
@@ -3365,7 +3568,7 @@ static int nrc_vendor_update(struct nrc *nw, u8 subcmd,
 
 	if (debug_level_all) {
 		print_hex_dump(KERN_DEBUG, "new vendor elem: ", DUMP_PREFIX_NONE,
-				16, 1, nw->vendor_skb->data, nw->vendor_skb->len, false);
+				16, 1, (*vendor_skb_ptr)->data, (*vendor_skb_ptr)->len, false);
 	}
 
 	return 0;
@@ -3381,8 +3584,20 @@ static int nrc_vendor_cmd_remove(struct wiphy *wiphy,
 	/* Remove the vendor ie */
 	if (nrc_vendor_remove(nw, subcmd) == NULL)
 		return -EINVAL;
+
 	/* Update beacon */
-	return nrc_vendor_update_beacon(hw, vif);
+	if (subcmd >= NRC_SUBCMD_ANNOUNCE1 && subcmd <= NRC_SUBCMD_BCAST_FOTA_4)
+		return nrc_vendor_update_beacon(hw, vif);
+	else if (subcmd >= NRC_SUBCMD_ANNOUNCE6 && subcmd <= NRC_SUBCMD_ANNOUNCE10)
+		return nrc_vendor_update_probe_req(hw, vif);
+	else if (subcmd >= NRC_SUBCMD_ANNOUNCE11 && subcmd <= NRC_SUBCMD_ANNOUNCE15)
+		return nrc_vendor_update_probe_rsp(hw, vif);
+	else if (subcmd >= NRC_SUBCMD_ANNOUNCE16 && subcmd <= NRC_SUBCMD_ANNOUNCE20)
+		return nrc_vendor_update_assoc_req(hw, vif);
+	else
+		WARN_ON(true);
+
+	return -EINVAL;
 }
 
 struct timer_list remotecmd_timer;
@@ -3406,7 +3621,7 @@ void remotecmd_callback(struct timer_list *t)
 }
 
 void remotecmd_schedule_off(struct wiphy *wiphy, struct wireless_dev *wdev,
-				u8 subcmd, const u8 cntdwn)
+				u8 subcmd, const u8 cntdwn, u16 beacon_int)
 {
 	remotecmd_params.wiphy = wiphy;
 	remotecmd_params.wdev = wdev;
@@ -3417,12 +3632,12 @@ void remotecmd_schedule_off(struct wiphy *wiphy, struct wireless_dev *wdev,
 	remotecmd_timer.function = remotecmd_callback;
 	remotecmd_timer.data = (unsigned long)&remotecmd_params;
 	remotecmd_timer.expires = jiffies +
-		usecs_to_jiffies(wdev->beacon_interval * cntdwn * 1024);
+	usecs_to_jiffies(beacon_int * cntdwn * 1024);
 	add_timer(&remotecmd_timer);
 #else
 	timer_setup(&remotecmd_timer, remotecmd_callback, 0);
 	mod_timer(&remotecmd_timer, jiffies +
-		usecs_to_jiffies(wdev->beacon_interval * cntdwn * 1024));
+		usecs_to_jiffies(beacon_int * cntdwn * 1024));
 #endif
 }
 
@@ -3438,12 +3653,25 @@ static int nrc_vendor_cmd_append(struct wiphy *wiphy, struct wireless_dev *wdev,
 		return -EINVAL;
 	// Schedule async vendor IE removal if REMOTECMD
 	if (subcmd == NRC_SUBCMD_REMOTECMD) {
-		remotecmd_schedule_off(wiphy, wdev, subcmd, *(const u8 *)data);
+#ifdef CONFIG_USE_VIF_CFG
+		remotecmd_schedule_off(wiphy, wdev, subcmd, *(const u8 *)data, vif->bss_conf.beacon_int);
+#else
+		remotecmd_schedule_off(wiphy, wdev, subcmd, *(const u8 *)data, wdev->beacon_interval);
+#endif
 	}
-	/* Update beacon */
-	if ((subcmd >= NRC_SUBCMD_BCAST_FOTA_1) && (subcmd <= NRC_SUBCMD_BCAST_FOTA_4))
+
+	if (subcmd < NRC_SUBCMD_BCAST_FOTA_1)
+		return nrc_vendor_update_beacon(hw, vif);
+	else if ((subcmd >= NRC_SUBCMD_BCAST_FOTA_1) && (subcmd < NRC_SUBCMD_ANNOUNCE6))
 		return 0;
-	return nrc_vendor_update_beacon(hw, vif);
+	else if ((subcmd >= NRC_SUBCMD_ANNOUNCE6) && (subcmd < NRC_SUBCMD_ANNOUNCE11))
+		return nrc_vendor_update_probe_req(hw, vif);
+	else if ((subcmd >= NRC_SUBCMD_ANNOUNCE11) && (subcmd < NRC_SUBCMD_ANNOUNCE16))
+		return nrc_vendor_update_probe_rsp(hw, vif);
+	else if ((subcmd >= NRC_SUBCMD_ANNOUNCE16) && (subcmd < NRC_SUBCMD_ANNOUNCE20))
+		return nrc_vendor_update_assoc_req(hw, vif);
+	else
+		return -EINVAL;
 }
 
 static int nrc_vendor_cmd_wowlan_pattern(struct wiphy *wiphy,
@@ -3513,7 +3741,7 @@ static int nrc_vendor_cmd_announce5(struct wiphy *wiphy,
 				 data, data_len);
 }
 
-static int nrc_vendor_cmd_announce6(struct wiphy *wiphy,
+static int nrc_vendor_cmd_remotecmd(struct wiphy *wiphy,
 				struct wireless_dev *wdev,
 				const void *data, int data_len)
 {
@@ -3569,6 +3797,125 @@ static int nrc_vendor_cmd_bcast_fota_4(struct wiphy *wiphy,
 				 data, data_len);
 }
 
+static int nrc_vendor_cmd_announce6(struct wiphy *wiphy,
+				struct wireless_dev *wdev,
+				const void *data, int data_len)
+{
+	return nrc_vendor_cmd_append(wiphy, wdev, NRC_SUBCMD_ANNOUNCE6,
+				 data, data_len);
+}
+
+static int nrc_vendor_cmd_announce7(struct wiphy *wiphy,
+				struct wireless_dev *wdev,
+				const void *data, int data_len)
+{
+	return nrc_vendor_cmd_append(wiphy, wdev, NRC_SUBCMD_ANNOUNCE7,
+				 data, data_len);
+}
+
+static int nrc_vendor_cmd_announce8(struct wiphy *wiphy,
+				struct wireless_dev *wdev,
+				const void *data, int data_len)
+{
+	return nrc_vendor_cmd_append(wiphy, wdev, NRC_SUBCMD_ANNOUNCE8,
+				 data, data_len);
+}
+
+static int nrc_vendor_cmd_announce9(struct wiphy *wiphy,
+				struct wireless_dev*wdev,
+				const void *data, int data_len)
+{
+	return nrc_vendor_cmd_append(wiphy, wdev, NRC_SUBCMD_ANNOUNCE9,
+				 data, data_len);
+}
+
+static int nrc_vendor_cmd_announce10(struct wiphy *wiphy,
+				struct wireless_dev *wdev,
+				const void *data, int data_len)
+{
+	return nrc_vendor_cmd_append(wiphy, wdev, NRC_SUBCMD_ANNOUNCE10,
+				 data, data_len);
+}
+
+static int nrc_vendor_cmd_announce11(struct wiphy *wiphy,
+				struct wireless_dev *wdev,
+				const void *data, int data_len)
+{
+	return nrc_vendor_cmd_append(wiphy, wdev, NRC_SUBCMD_ANNOUNCE11,
+				 data, data_len);
+}
+
+static int nrc_vendor_cmd_announce12(struct wiphy *wiphy,
+				struct wireless_dev *wdev,
+				const void *data, int data_len)
+{
+	return nrc_vendor_cmd_append(wiphy, wdev, NRC_SUBCMD_ANNOUNCE12,
+				 data, data_len);
+}
+
+static int nrc_vendor_cmd_announce13(struct wiphy *wiphy,
+				struct wireless_dev *wdev,
+				const void *data, int data_len)
+{
+	return nrc_vendor_cmd_append(wiphy, wdev, NRC_SUBCMD_ANNOUNCE13,
+				 data, data_len);
+}
+
+static int nrc_vendor_cmd_announce14(struct wiphy *wiphy,
+				struct wireless_dev *wdev,
+				const void *data, int data_len)
+{
+	return nrc_vendor_cmd_append(wiphy, wdev, NRC_SUBCMD_ANNOUNCE14,
+				 data, data_len);
+}
+
+static int nrc_vendor_cmd_announce15(struct wiphy *wiphy,
+				struct wireless_dev *wdev,
+				const void *data, int data_len)
+{
+	return nrc_vendor_cmd_append(wiphy, wdev, NRC_SUBCMD_ANNOUNCE15,
+				 data, data_len);
+}
+
+static int nrc_vendor_cmd_announce16(struct wiphy *wiphy,
+				struct wireless_dev *wdev,
+				const void *data, int data_len)
+{
+	return nrc_vendor_cmd_append(wiphy, wdev, NRC_SUBCMD_ANNOUNCE16,
+				 data, data_len);
+}
+
+static int nrc_vendor_cmd_announce17(struct wiphy *wiphy,
+				struct wireless_dev *wdev,
+				const void *data, int data_len)
+{
+	return nrc_vendor_cmd_append(wiphy, wdev, NRC_SUBCMD_ANNOUNCE17,
+				 data, data_len);
+}
+
+static int nrc_vendor_cmd_announce18(struct wiphy *wiphy,
+				struct wireless_dev *wdev,
+				const void *data, int data_len)
+{
+	return nrc_vendor_cmd_append(wiphy, wdev, NRC_SUBCMD_ANNOUNCE18,
+				 data, data_len);
+}
+
+static int nrc_vendor_cmd_announce19(struct wiphy *wiphy,
+				struct wireless_dev *wdev,
+				const void *data, int data_len)
+{
+	return nrc_vendor_cmd_append(wiphy, wdev, NRC_SUBCMD_ANNOUNCE19,
+				 data, data_len);
+}
+
+static int nrc_vendor_cmd_announce20(struct wiphy *wiphy,
+				struct wireless_dev *wdev,
+				const void *data, int data_len)
+{
+	return nrc_vendor_cmd_append(wiphy, wdev, NRC_SUBCMD_ANNOUNCE20,
+				 data, data_len);
+}
 static struct wiphy_vendor_command nrc_vendor_cmds[] = {
 	{
 		.info = {
@@ -3648,7 +3995,7 @@ static struct wiphy_vendor_command nrc_vendor_cmds[] = {
 			.subcmd = NRC_SUBCMD_REMOTECMD
 		},
 		.flags = WIPHY_VENDOR_CMD_NEED_NETDEV,
-		.doit = nrc_vendor_cmd_announce6,
+		.doit = nrc_vendor_cmd_remotecmd,
 #if KERNEL_VERSION(5, 3, 0) <= NRC_TARGET_KERNEL_VERSION
 		.policy = VENDOR_CMD_RAW_DATA,
 		.maxattr = MAX_VENDOR_ATTR,
@@ -3724,6 +4071,186 @@ static struct wiphy_vendor_command nrc_vendor_cmds[] = {
 		.maxattr = MAX_VENDOR_ATTR,
 #endif
 	},
+	{
+		.info = {
+			.vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
+			.subcmd = NRC_SUBCMD_ANNOUNCE6
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = nrc_vendor_cmd_announce6,
+#if KERNEL_VERSION(5, 3, 0) <= NRC_TARGET_KERNEL_VERSION
+		.policy = VENDOR_CMD_RAW_DATA,
+		.maxattr = MAX_VENDOR_ATTR,
+#endif
+	},
+	{
+		.info = {
+			.vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
+			.subcmd = NRC_SUBCMD_ANNOUNCE7
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = nrc_vendor_cmd_announce7,
+#if KERNEL_VERSION(5, 3, 0) <= NRC_TARGET_KERNEL_VERSION
+		.policy = VENDOR_CMD_RAW_DATA,
+		.maxattr = MAX_VENDOR_ATTR,
+#endif
+	},
+	{
+		.info = {
+			.vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
+			.subcmd = NRC_SUBCMD_ANNOUNCE8
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = nrc_vendor_cmd_announce8,
+#if KERNEL_VERSION(5, 3, 0) <= NRC_TARGET_KERNEL_VERSION
+		.policy = VENDOR_CMD_RAW_DATA,
+		.maxattr = MAX_VENDOR_ATTR,
+#endif
+	},
+	{
+		.info = {
+			.vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
+			.subcmd = NRC_SUBCMD_ANNOUNCE9
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = nrc_vendor_cmd_announce9,
+#if KERNEL_VERSION(5, 3, 0) <= NRC_TARGET_KERNEL_VERSION
+		.policy = VENDOR_CMD_RAW_DATA,
+		.maxattr = MAX_VENDOR_ATTR,
+#endif
+	},
+	{
+		.info = {
+			.vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
+			.subcmd = NRC_SUBCMD_ANNOUNCE10
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = nrc_vendor_cmd_announce10,
+#if KERNEL_VERSION(5, 3, 0) <= NRC_TARGET_KERNEL_VERSION
+		.policy = VENDOR_CMD_RAW_DATA,
+		.maxattr = MAX_VENDOR_ATTR,
+#endif
+	},
+	{
+		.info = {
+			.vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
+			.subcmd = NRC_SUBCMD_ANNOUNCE11
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = nrc_vendor_cmd_announce11,
+#if KERNEL_VERSION(5, 3, 0) <= NRC_TARGET_KERNEL_VERSION
+		.policy = VENDOR_CMD_RAW_DATA,
+		.maxattr = MAX_VENDOR_ATTR,
+#endif
+	},
+	{
+		.info = {
+			.vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
+			.subcmd = NRC_SUBCMD_ANNOUNCE12
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = nrc_vendor_cmd_announce12,
+#if KERNEL_VERSION(5, 3, 0) <= NRC_TARGET_KERNEL_VERSION
+		.policy = VENDOR_CMD_RAW_DATA,
+		.maxattr = MAX_VENDOR_ATTR,
+#endif
+	},
+	{
+		.info = {
+			.vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
+			.subcmd = NRC_SUBCMD_ANNOUNCE13
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = nrc_vendor_cmd_announce13,
+#if KERNEL_VERSION(5, 3, 0) <= NRC_TARGET_KERNEL_VERSION
+		.policy = VENDOR_CMD_RAW_DATA,
+		.maxattr = MAX_VENDOR_ATTR,
+#endif
+	},
+	{
+		.info = {
+			.vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
+			.subcmd = NRC_SUBCMD_ANNOUNCE14
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = nrc_vendor_cmd_announce14,
+#if KERNEL_VERSION(5, 3, 0) <= NRC_TARGET_KERNEL_VERSION
+		.policy = VENDOR_CMD_RAW_DATA,
+		.maxattr = MAX_VENDOR_ATTR,
+#endif
+	},
+	{
+		.info = {
+			.vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
+			.subcmd = NRC_SUBCMD_ANNOUNCE15
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = nrc_vendor_cmd_announce15,
+#if KERNEL_VERSION(5, 3, 0) <= NRC_TARGET_KERNEL_VERSION
+		.policy = VENDOR_CMD_RAW_DATA,
+		.maxattr = MAX_VENDOR_ATTR,
+#endif
+	},
+	{
+		.info = {
+			.vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
+			.subcmd = NRC_SUBCMD_ANNOUNCE16
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = nrc_vendor_cmd_announce16,
+#if KERNEL_VERSION(5, 3, 0) <= NRC_TARGET_KERNEL_VERSION
+		.policy = VENDOR_CMD_RAW_DATA,
+		.maxattr = MAX_VENDOR_ATTR,
+#endif
+	},
+	{
+		.info = {
+			.vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
+			.subcmd = NRC_SUBCMD_ANNOUNCE17
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = nrc_vendor_cmd_announce17,
+#if KERNEL_VERSION(5, 3, 0) <= NRC_TARGET_KERNEL_VERSION
+		.policy = VENDOR_CMD_RAW_DATA,
+		.maxattr = MAX_VENDOR_ATTR,
+#endif
+	},
+	{
+		.info = {
+			.vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
+			.subcmd = NRC_SUBCMD_ANNOUNCE18
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = nrc_vendor_cmd_announce18,
+#if KERNEL_VERSION(5, 3, 0) <= NRC_TARGET_KERNEL_VERSION
+		.policy = VENDOR_CMD_RAW_DATA,
+		.maxattr = MAX_VENDOR_ATTR,
+#endif
+	},
+	{
+		.info = {
+			.vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
+			.subcmd = NRC_SUBCMD_ANNOUNCE19
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = nrc_vendor_cmd_announce19,
+#if KERNEL_VERSION(5, 3, 0) <= NRC_TARGET_KERNEL_VERSION
+		.policy = VENDOR_CMD_RAW_DATA,
+		.maxattr = MAX_VENDOR_ATTR,
+#endif
+	},
+	{
+		.info = {
+			.vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
+			.subcmd = NRC_SUBCMD_ANNOUNCE20
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = nrc_vendor_cmd_announce20,
+#if KERNEL_VERSION(5, 3, 0) <= NRC_TARGET_KERNEL_VERSION
+		.policy = VENDOR_CMD_RAW_DATA,
+		.maxattr = MAX_VENDOR_ATTR,
+#endif
+	},
 };
 
 static const struct nl80211_vendor_cmd_info nrc_vendor_events[] = {
@@ -3774,6 +4301,66 @@ static const struct nl80211_vendor_cmd_info nrc_vendor_events[] = {
 	{
 		.vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
 		.subcmd = NRC_SUBCMD_BCAST_FOTA_4
+	},
+	{
+		.vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
+		.subcmd = NRC_SUBCMD_ANNOUNCE6
+	},
+	{
+		.vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
+		.subcmd = NRC_SUBCMD_ANNOUNCE7
+	},
+	{
+		.vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
+		.subcmd = NRC_SUBCMD_ANNOUNCE8
+	},
+	{
+		.vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
+		.subcmd = NRC_SUBCMD_ANNOUNCE9
+	},
+	{
+		.vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
+		.subcmd = NRC_SUBCMD_ANNOUNCE10
+	},
+	{
+		.vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
+		.subcmd = NRC_SUBCMD_ANNOUNCE11
+	},
+	{
+		.vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
+		.subcmd = NRC_SUBCMD_ANNOUNCE12
+	},
+	{
+		.vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
+		.subcmd = NRC_SUBCMD_ANNOUNCE13
+	},
+	{
+		.vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
+		.subcmd = NRC_SUBCMD_ANNOUNCE14
+	},
+	{
+		.vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
+		.subcmd = NRC_SUBCMD_ANNOUNCE15
+	},
+	{
+		.vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
+		.subcmd = NRC_SUBCMD_ANNOUNCE16
+	},
+	{
+		.vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
+		.subcmd = NRC_SUBCMD_ANNOUNCE17
+	},
+	{
+		.vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
+		.subcmd = NRC_SUBCMD_ANNOUNCE18
+	},
+	{
+		.vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
+		.subcmd = NRC_SUBCMD_ANNOUNCE19
+	},
+	{
+		.vendor_id = OUI_IEEE_REGISTRATION_AUTHORITY,
+		.subcmd = NRC_SUBCMD_ANNOUNCE20
 	},
 };
 

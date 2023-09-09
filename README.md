@@ -2,6 +2,7 @@
 
 ## Notice
 ### Release roadmap
+- v1.4.1 (2023.09.08)
 - v1.4 (2023.06.16)
 - v1.3.4_rev14 (2022.12.01)
 - v1.3.4_rev13 (2022.11.30)
@@ -24,7 +25,7 @@
 - v1.3.0 (2020.05.30)
 
 ### Latest release
-- [NRC7292_SW_PKG_v1.4](https://github.com/newracom/nrc7292_sw_pkg/releases/tag/v1.4)
+- [NRC7292_SW_PKG_v1.4.1](https://github.com/newracom/nrc7292_sw_pkg/releases/tag/v1.4.1)
 
 ### Release package contents
 - package: NRC7292 software package for global regulatory domains

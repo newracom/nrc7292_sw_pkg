@@ -73,6 +73,7 @@ static int cmd_show_signal(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_show_maxagg(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_show_duty(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_show_autotxgain(cmd_tbl_t *t, int argc, char *argv[]);
+static int cmd_show_cal_use(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_show_recovery(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_show_detection(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_show_temperature(cmd_tbl_t *t, int argc, char *argv[]);
@@ -85,6 +86,11 @@ static int cmd_show_cca_thresh(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_show_app_version(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_show_xtal_status(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_optimal_channel(cmd_tbl_t *t, int argc, char *argv[]);
+static int cmd_show_sysconfig(cmd_tbl_t *t, int argc, char *argv[]);
+static int cmd_show_bcn_mcs(cmd_tbl_t *t, int argc, char *argv[]);
+
+static int cmd_show_rc_pf(cmd_tbl_t *t, int argc, char *argv[]);
+static int cmd_show_rc_param(cmd_tbl_t *t, int argc, char *argv[]);
 
 /* 2nd sub commands on show */
 static int cmd_show_stats_simple_rx(cmd_tbl_t *t, int argc, char *argv[]);
@@ -121,21 +127,27 @@ static int cmd_set_temp_sensor(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_set_s1g_freq(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_set_cca_thresh(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_set_color(cmd_tbl_t *t, int argc, char *argv[]);
-static int cmd_set_probe_resp_vendor_ie(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_set_deepsleep_gpio(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_set_report(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_set_support_ch_width(cmd_tbl_t *t, int argc, char *argv[]);
+static int cmd_set_ampdu_mode(cmd_tbl_t *t, int argc, char *argv[]);
+static int cmd_set_bcn_mcs(cmd_tbl_t *t, int argc, char *argv[]);
+
 
 /*******************************************************************************
 * sub commands on set and show
 *******************************************************************************/
 static int cmd_self_configuration(cmd_tbl_t *t, int argc, char *argv[]);
+static int cmd_set_rc_pf(cmd_tbl_t *t, int argc, char *argv[]);
+static int cmd_set_rc_param(cmd_tbl_t *t, int argc, char *argv[]);
 
 /*******************************************************************************
 * sub commands on test
 *******************************************************************************/
 /* 1st sub commands on test */
 static int cmd_test_mcs(cmd_tbl_t *t, int argc, char *argv[]);
+static int cmd_test_country(cmd_tbl_t *t, int argc, char *argv[]);
+static int cmd_test_cont_tx(cmd_tbl_t *t, int argc, char *argv[]);
 
 /*******************************************************************************
 * sub commands on gpio
@@ -156,7 +168,6 @@ void *showRxThreadRun();
 *******************************************************************************/
 #define STATS_TYPES_MAX 4
 #define STATS_STATUS_MAX 2
-#define STATS_MAX_AC 6
 #define STATS_MCS_MAX 9
 
 enum {
@@ -213,6 +224,7 @@ cmd_tbl_t show_sub_list[] = {
 	{ "maxagg", cmd_show_maxagg, "show max aggregation", "show maxagg",  "", 0},
 	{ "duty", cmd_show_duty, "show duty cycle", "show duty",  SHOW_DUTY_KEY_LIST, 0},
 	{ "autotxgain", cmd_show_autotxgain, "show autotxgain", "show autotxgain",  SHOW_AUTOTXGAIN_KEY_LIST, 0},
+	{ "cal_use", cmd_show_cal_use, "show cal_use", "show cal_use",  SHOW_CAL_USE_KEY_LIST, 0},
 	{ "recovery", cmd_show_recovery, "show recovery", "show recovery stats",  "", 0},
 	{ "detection", cmd_show_detection, "show detection", "show detection stats",  "", 0},
 	{ "temp", cmd_show_temperature, "show temp","show temp",  SHOW_TEMPERATURE_KEY_LIST, 0},
@@ -222,15 +234,19 @@ cmd_tbl_t show_sub_list[] = {
 	{ "ap", cmd_show_ap, "show ap information", "show ap [vif_id]",  "", 0},
 	{ "tx_time", cmd_show_tx_time, "show tx_time about {CS time} {Blank time}", "show tx_time", SHOW_TX_TIME_KEY_LIST, 0},
 	{ "cca_thresh", cmd_show_cca_thresh, "show cca_thresh(unit: dBm)", "show cca_thresh", "", 0},
+
 	{ "self_config", cmd_self_configuration, "show self_config", "show self_config {Country(KR,US...)} {BW} {dwell time}", "", 0},
 	{ "optimal_channel", cmd_optimal_channel, "show optimal_channel", "show optimal_channel {Country(US,NZ...)} {BW} {dwell time}", "", 0},
 	{ "app_version", cmd_show_app_version, "show app version", "show app_version",  "", 0},
-	{ "xtal_status", cmd_show_xtal_status, "show xtal_status", "show xtal_status",  SHOW_XTAL_STATUS_LIST, 0},
+	{ "sysconfig", cmd_show_sysconfig, "show sysconfig", "show sysconfig",  "", 0},
+	{ "rc_pf", cmd_show_rc_pf, "show rate control profile number", "show rc_pf", SHOW_RC_PF_KEY_LIST, 0},
+	{ "rc_param", cmd_show_rc_param, "show configured rate control parameter", "show rc_param", SHOW_RC_PARAM_KEY_LIST, 0},
+	{ "bcn_mcs", cmd_show_bcn_mcs, "show beacon mcs", "show bcn_mcs [vif_id]",  "", 1},
 };
 
 /* sub command list on set */
 cmd_tbl_t set_sub_list[] = {
-	{ "gi", cmd_set_guard_interval, "set guard interval", "set gi {short|long|auto|capa} [0|1]", "", 0},
+	{ "gi", cmd_set_guard_interval, "set guard interval", "set gi {short|long} {vif_id(0|1)}", "", 0},
 	{ "maxagg", cmd_set_max_aggregation, "set aggregation", "set maxagg {AC(0-3)} {Max(0-8(1Mhz),0-16(2,4Mhz),0:off)} {size:default=0}", SET_MAXAGG_KEY_LIST, 0},
 	{ "ack_mode", cmd_set_ackmode, "set ack mode", "set ack_mode {no|ndp|normal|show}", SET_ACK_MODE_LIST, 0},
 	{ "rc", cmd_set_rate_control, "set rate control", "set rc {on|off} [vif_id] [mode]", SET_RC_KEY_LIST, 0},
@@ -248,15 +264,20 @@ cmd_tbl_t set_sub_list[] = {
 	{ "tsensor", cmd_set_temp_sensor, "set temperature sensor scl, sda", "set tsensor [GPIO for SCL] [GPIO for SDA]", "", 0},
 	{ "cca_thresh", cmd_set_cca_thresh, "set cca threshold", "set cca_thresh {CCA threshold(unit:dBm, -100~-35)}", "", 0},
 	{ "color", cmd_set_color, "set color", "set color {value}", "", 0},
-	{ "probe_resp_vendor_ie", cmd_set_probe_resp_vendor_ie, "set probe_resp_vendor_ie", "set probe_resp_vendor_ie {on|off}", "", 0},
 	{ "deepsleep_gpio", cmd_set_deepsleep_gpio, "set GPIO direction/out data/pull during deepsleep operation", "set deepsleep_gpio {dir} {out} {pullup}", "", 0},
 	{ "report", cmd_set_report, "set lmac periodic report", "set report {on/off}", "", 0},
 	{ "support_ch_width", cmd_set_support_ch_width, "set supported ch width in s1g capa ie (0:1/2M, 1:1/2/4M)", "set support_ch_width [0|1]", "", 0},
+	{ "ampdu_mode", cmd_set_ampdu_mode, "set ampdu_mode ", "set ampdu_mode [disable|manual|auto]", "", 0},
+	{ "bcn_mcs", cmd_set_bcn_mcs, "set bcn_mcs ", "set bcn_mcs [vif_id] [10|0|1|2|3|4|5|6|7]\n", "", 0},
+	{ "rc_pf", cmd_set_rc_pf, "set rate control profile number", "set rc_pf [1|2]", SET_RC_PF_KEY_LIST, 0},
+	{ "rc_param", cmd_set_rc_param, "set rate control parameter", "set rc_param {1|2|3|4|5} {1|2|3|4|5|6|7}", SET_RC_PARAM_KEY_LIST, 0},
 };
 
 /* sub command list on test */
 cmd_tbl_t test_sub_list[] = {
 	{ "mcs", cmd_test_mcs, "test mcs", "test mcs [mcs index]", "", 0},
+	{ "country", cmd_test_country, "test country", "test country [country code]", "", 0},
+	{ "cont_tx", cmd_test_cont_tx, "test continuous tx", "test cont_tx {stop} | {freq(in MHz)} {bw(1m|2m|4m)} {mcs} {txpwr}", "", 0},
 };
 
 /* sub command list on gpio */
@@ -1008,6 +1029,19 @@ static int cmd_show_autotxgain(cmd_tbl_t *t, int argc, char *argv[])
 	return ret;
 }
 
+static int cmd_show_cal_use(cmd_tbl_t *t, int argc, char *argv[])
+{
+	int ret = CMD_RET_SUCCESS;
+	char response[NL_MSG_MAX_RESPONSE_SIZE];
+	const int display_per_line= 2;
+
+	ret = run_shell_cmd(t, argc, argv, "show cal_use", response, sizeof(response));
+	if(ret == CMD_RET_SUCCESS){
+		cmd_result_parse((char*)t->key_list, response, display_per_line);
+	}
+	return ret;
+}
+
 static int cmd_show_recovery(cmd_tbl_t *t, int argc, char *argv[])
 {
 	int ret = CMD_RET_SUCCESS;
@@ -1352,6 +1386,56 @@ static int cmd_show_cca_thresh(cmd_tbl_t *t, int argc, char *argv[])
 	return ret;
 }
 
+static int cmd_show_rc_pf(cmd_tbl_t *t, int argc, char *argv[])
+{
+	int ret = CMD_RET_SUCCESS;
+	char param[NRC_MAX_CMDLINE_SIZE];
+	char response[NL_MSG_MAX_RESPONSE_SIZE];
+	int netlink_ret = 0;
+	int display_per_line= 1;
+
+	memset(response, 0x0, NL_MSG_MAX_RESPONSE_SIZE);
+	memset(param, 0x0, sizeof(param));
+	strcpy(param, "show rc_pf -sr");
+	netlink_ret = netlink_send_data(NL_SHELL_RUN, param, response);
+	if(!netlink_ret){
+		if(strcmp(response, response_timeout_str)== 0){
+			ret =  CMD_RET_RESPONSE_TIMEOUT;
+		}else{
+			cmd_result_parse((char*)t->key_list, response, display_per_line);
+			ret = CMD_RET_SUCCESS;
+		}
+	}else{
+		ret = CMD_RET_FAILURE;
+	}
+	return ret;
+}
+
+static int cmd_show_rc_param(cmd_tbl_t *t, int argc, char *argv[])
+{
+	int ret = CMD_RET_SUCCESS;
+	char param[NRC_MAX_CMDLINE_SIZE];
+	char response[NL_MSG_MAX_RESPONSE_SIZE];
+	int netlink_ret = 0;
+	int display_per_line= 2;
+
+	memset(response, 0x0, NL_MSG_MAX_RESPONSE_SIZE);
+	memset(param, 0x0, sizeof(param));
+	strcpy(param, "show rc_param -sr");
+	netlink_ret = netlink_send_data(NL_SHELL_RUN, param, response);
+	if(!netlink_ret){
+		if(strcmp(response, response_timeout_str)== 0){
+			ret =  CMD_RET_RESPONSE_TIMEOUT;
+		}else{
+			cmd_result_parse((char*)t->key_list, response, display_per_line);
+			ret = CMD_RET_SUCCESS;
+		}
+	}else{
+		ret = CMD_RET_FAILURE;
+	}
+	return ret;
+}
+
 static int cmd_show_stats_simple_rx(cmd_tbl_t *t, int argc, char *argv[])
 {
 	int ret = CMD_RET_FAILURE;
@@ -1505,12 +1589,13 @@ static void cmd_show_mac_result_display(char *response, int dir, int type)
 	char *key_list_temp = NULL;
 	char *next_ptr = NULL;
 	char * t1;
-	int print_line_len =72;
+	int print_line_len =90;
 	int i = 0, j=0;
 
-	char temp[5][16] = {0,};
-	int mac_stats_start_get_element  = 3;
-	int mac_stats_get_element  = 5;
+	char temp[6][16] = {0,};
+	const int mac_stats_start_get_element  = 4;
+	const int mac_stats_get_element  = 5;
+	const int mac_stats_mcs_get_element  = 6;
 
 	key_list_temp = malloc(DISP_CMD_RESULT_BUF);
 	memcpy(key_list_temp, response, DISP_CMD_RESULT_BUF);
@@ -1529,19 +1614,36 @@ static void cmd_show_mac_result_display(char *response, int dir, int type)
 					}
 					memcpy(temp[i], t1, sizeof(temp[i]));
 				}
-				printf("(OK count:%d, %s count:%d, last MCS:%d)\n",\
+				printf("(OK count:%d, %s count:%d, last MCS:%d",\
 					atoi(temp[0]),(dir == DIR_TX)? "RTX":"NOK", atoi(temp[1]), atoi(temp[2]));
+				if(dir == DIR_TX){
+					printf(")\n");
+				} else {
+					printf(", FCS error:%d)\n",  atoi(temp[3]));
+				}
 				print_line('-', print_line_len,"", 0,0);
 
 				/* mac stats ac */
-				for(j=0; j <STATS_MAX_AC;j++){
+				int exit_loop = 0;
+				while(1) {
 					memset(temp, 0x0, sizeof(temp));
-					for(i=0; i<mac_stats_get_element; i++){
-						t1 =  strtok_r(NULL, ",", &next_ptr);
+					for (i = 0; i < mac_stats_get_element; i++) {
+						t1 = strtok_r(NULL, ",", &next_ptr);
+						if (t1 == NULL) {
+							exit_loop = 1;
+							break;
+						}
 						memcpy(temp[i], t1, sizeof(temp[i]));
 					}
-					printf("- AC[%s]\t: OK(%10d/%10d)  %s(%10d/%10d)\n",
-						temp[0],atoi(temp[1]),atoi(temp[2]),(dir == DIR_TX)? "RTX":"NOK",atoi(temp[3]),atoi(temp[4]));
+					if (exit_loop == 1) {
+						break;
+					}
+
+					if (temp[0] != NULL) {
+						printf("- AC[%s]\t: OK(%10d/%10d)  %s(%10d/%10d)\n",
+							temp[0], atoi(temp[1]), atoi(temp[2]),
+							(dir == DIR_TX) ? "RTX" : "NOK", atoi(temp[3]), atoi(temp[4]));
+					}
 				}
 				print_line('-', print_line_len,"", 0,0);
 				break;
@@ -1568,7 +1670,7 @@ static void cmd_show_mac_result_display(char *response, int dir, int type)
 				/* mac stats mcs */
 				for(j=0; j <STATS_MCS_MAX;j++){
 					memset(temp, 0x0, sizeof(temp));
-					for(i=0; i<mac_stats_get_element; i++){
+					for(i=0; i<mac_stats_mcs_get_element; i++){
 						if(i==0 && j ==0){
 							t1 =  strtok_r(key_list_temp, ",", &next_ptr);
 						}else{
@@ -1576,8 +1678,8 @@ static void cmd_show_mac_result_display(char *response, int dir, int type)
 						}
 						memcpy(temp[i], t1, sizeof(temp[i]));
 					}
-					printf("- MCS[%2d]\t: OK(%10d/%10d)  %s(%10d/%10d)\n",
-						atoi(temp[0]),atoi(temp[1]),atoi(temp[2]),(dir == DIR_TX)? "RTX":"NOK",atoi(temp[3]),atoi(temp[4]));
+					printf("- MCS[%2d]\t: OK(%10d/%10d)  %s(%10d/%10d) FM(%10d)\n",
+						atoi(temp[0]),atoi(temp[1]),atoi(temp[2]),(dir == DIR_TX)? "RTX":"NOK",atoi(temp[3]),atoi(temp[4]),atoi(temp[5]));
 				}
 				print_line('-', print_line_len,"", 0,0);
 				break;
@@ -1692,12 +1794,11 @@ static int cmd_optimal_channel(cmd_tbl_t *t, int argc, char *argv[])
 	memset(param, 0x0, sizeof(param));
 
 	if (argc == 5) {
-		if (!strcmp(argv[2], "K0") ||
-			!strcmp(argv[2], "K1") ||
+		if (!strcmp(argv[2], "K1") ||
 			!strcmp(argv[2], "K2") ||
 			!strcmp(argv[2], "JP") ||
 			!strcmp(argv[2], "EU")) {
-			printf("K0/K1/K2/JP/EU is not supported.\n");
+			printf("K1/K2/JP/EU is not supported.\n");
 			return CMD_RET_FAILURE;
 		} else if (atoi(argv[3]) != 1 &&
 			atoi(argv[3]) != 2 &&
@@ -1764,6 +1865,98 @@ static int cmd_show_xtal_status(cmd_tbl_t *t, int argc, char *argv[])
 	return ret;
 }
 
+static int sysconfig_data_store(char* des, int offset, char * src, int* receive_len, int* sysconfig_format)
+{
+	xfer_header_t xfer_header;
+
+	if(des == 0 || src == 0 || receive_len == 0 || sysconfig_format == 0)
+		return 0;
+
+	memcpy(&xfer_header, src, sizeof(xfer_header));
+	//printf("size:%d more:%d sysconfig_format:%d\n", xfer_header.dataSize, xfer_header.more, xfer_header.sysconfig_format);
+	* receive_len = xfer_header.dataSize;
+	* sysconfig_format = xfer_header.sysconfig_format;
+	memcpy(des+offset, src+sizeof(xfer_header), xfer_header.dataSize);
+	return xfer_header.more;
+}
+
+static int cmd_show_sysconfig(cmd_tbl_t *t, int argc, char *argv[])
+{
+	char param[NRC_MAX_CMDLINE_SIZE];
+	char response[NL_MSG_MAX_RESPONSE_SIZE];
+	char data[XFER_SYSCONFIG_SECTOR_SIZE];
+	int ret = 0;
+	int data_len = 0;
+	int response_len = 0;
+	int sta_remaining = 1;
+	int sysconfig_format = 0;
+	bool  display_mode = false;
+	xfer_sys_config_t *sysconfig = (xfer_sys_config_t *)data;
+
+	while(sta_remaining)
+	{
+		memset(param, 0x0, sizeof(param));
+		memset(response, 0x0, sizeof(response));
+
+		sprintf(param, "sf sysconfig read %d -sr", data_len);
+		ret = netlink_send_data_with_retry(NL_SHELL_RUN_RAW, param, response, 50);
+		if(ret){
+			printf("netlink_send_data_with_retry failed");
+			return CMD_RET_FAILURE;
+		}
+		sta_remaining = sysconfig_data_store(data, data_len, response, &response_len, &sysconfig_format);
+		data_len += response_len;
+	}
+	display_mode = (argc == 3 && strcmp("read", argv[2]) == 0) ? true : false;
+
+	cmd_show_sysconfig_parse(sysconfig, display_mode, sysconfig_format);
+
+	return CMD_RET_SUCCESS;
+}
+
+
+static int cmd_show_bcn_mcs(cmd_tbl_t *t, int argc, char *argv[])
+{
+	char param[NRC_MAX_CMDLINE_SIZE];
+	char response[NL_MSG_MAX_RESPONSE_SIZE];
+	int ret = CMD_RET_FAILURE;
+	int netlink_ret = 0;
+	int display_per_line = 3;
+	int print_line_len = 72;
+
+	if((argc > 3) || (argc < 3)){
+		printf("Usage : %s\n", (char*)t->usage);
+		return CMD_RET_FAILURE;
+	}
+
+	if(strcmp(argv[2],"0")!=0 && strcmp(argv[2],"1")!=0) {
+		printf("Usage : %s\n", (char*)t->usage);
+		return CMD_RET_FAILURE;
+	}
+
+	memset(response, 0x0, NL_MSG_MAX_RESPONSE_SIZE);
+	memset(param, 0x0, sizeof(param));
+	sprintf(param, "show bcn_mcs %s -sr", argv[2]);
+
+	netlink_ret = netlink_send_data(NL_SHELL_RUN, param, response);
+	if(!netlink_ret){
+		if(strcmp(response, "fail") != 0){
+			if(strcmp(response, response_timeout_str)== 0){
+				ret =  CMD_RET_RESPONSE_TIMEOUT;
+			}else {
+				print_line('-', print_line_len," current beacon rate ", 0,0);
+				cmd_result_parse((char*)t->key_list, response, display_per_line);
+				print_line('-', print_line_len,"", 0,0);
+				ret = CMD_RET_SUCCESS;
+			}
+		}else{
+			ret = CMD_RET_FAILURE;
+		}
+	}else{
+		ret = CMD_RET_FAILURE;
+	}
+	return ret;
+}
 
 /*******************************************************************************
 * sub commands on set
@@ -1771,9 +1964,7 @@ static int cmd_show_xtal_status(cmd_tbl_t *t, int argc, char *argv[])
 static int cmd_set_guard_interval(cmd_tbl_t *t, int argc, char *argv[])
 {
 	if(!argv[2]||((strcmp("short", argv[2]) != 0)&&
-		(strcmp("long", argv[2]) != 0)&&
-		(strcmp("auto", argv[2]) != 0)&&
-		(strcmp("capa", argv[2]) != 0))){
+		(strcmp("long", argv[2]) != 0))){
 		printf("usage : %s\n", (char*)t->usage);
 		return CMD_RET_FAILURE;
 	}
@@ -1884,6 +2075,43 @@ static int cmd_set_rate_control(cmd_tbl_t *t, int argc, char *argv[])
 		}
 	}else{
 		ret = CMD_RET_FAILURE;
+	}
+	return ret;
+}
+
+
+static int cmd_set_bcn_mcs(cmd_tbl_t *t, int argc, char *argv[])
+{
+	int ret = CMD_RET_FAILURE;
+	char param[NRC_MAX_CMDLINE_SIZE];
+	char response[NL_MSG_MAX_RESPONSE_SIZE];
+	int netlink_ret = 0;
+	int vif_id = 0;
+	uint8_t mcs = 0;
+	int mode = 0;
+	int display_per_line = 3;
+	int print_line_len = 72;
+
+	if((argc > 4) || (argc < 4)){
+		printf("Usage : %s\n", (char*)t->usage);
+		return CMD_RET_FAILURE;
+	}
+	
+	vif_id = atoi(argv[2]);
+	if(vif_id != 0 && vif_id != 1) {
+		printf("Usage : %s\n", (char*)t->usage);
+		return CMD_RET_FAILURE;
+	}
+
+	mcs = atoi(argv[3]);
+	if( mcs > 10 || mcs == 8 || mcs == 9){
+		printf("Usage : %s\n", (char*)t->usage);
+		return CMD_RET_FAILURE;
+	}
+
+	ret = run_shell_cmd(t, argc, argv, "set bcn_mcs", response, sizeof(response));
+	if(ret == CMD_RET_SUCCESS){
+		printf("set bcn_mcs: %s\n", argv[3]);
 	}
 	return ret;
 }
@@ -2042,19 +2270,12 @@ static int cmd_set_tx_time(cmd_tbl_t *t, int argc, char *argv[])
 static int cmd_set_drop_frame(cmd_tbl_t *t, int argc, char *argv[])
 {
 	int ret = CMD_RET_FAILURE;
-	char response[NL_MSG_MAX_RESPONSE_SIZE];
-	const int display_per_line = 3;
 
 	if (argc != 5) {
 		printf("usage : %s\n", (char*)t->usage);
 		return CMD_RET_FAILURE;
 	}
-
-	ret = run_shell_cmd(t, argc, argv, "set drop", response, sizeof(response));
-	if(ret == CMD_RET_SUCCESS){
-		cmd_result_parse((char*)t->key_list, response, display_per_line);
-	}
-	return ret;
+	return run_shell_direct_cmd("set drop %s %s %s", argv[2], argv[3], argv[4]);
 }
 
 static int cmd_set_temp_sensor(cmd_tbl_t *t, int argc, char *argv[])
@@ -2100,19 +2321,63 @@ static int cmd_set_color(cmd_tbl_t *t, int argc, char *argv[])
 	return run_shell_cmd(t, argc, argv, "set color", NULL, 0);
 }
 
-static int cmd_set_probe_resp_vendor_ie(cmd_tbl_t *t, int argc, char *argv[])
+static int cmd_set_rc_pf(cmd_tbl_t *t, int argc, char *argv[])
 {
 	int ret = CMD_RET_SUCCESS;
+	char param[NRC_MAX_CMDLINE_SIZE];
 	char response[NL_MSG_MAX_RESPONSE_SIZE];
+	int netlink_ret = 0;
+	int display_per_line= 1;
 
-	if (strcmp(argv[2], "on") != 0 && strcmp(argv[2], "off") != 0) {
-		printf("usage : %s\n", (char*)t->usage);
+	memset(response, 0x0, NL_MSG_MAX_RESPONSE_SIZE);
+	memset(param, 0x0, sizeof(param));
+
+	if (argc < 3) {
 		return CMD_RET_FAILURE;
 	}
 
-	ret = run_shell_cmd(t, argc, argv, "set probe_resp_vendor_ie", response, sizeof(response));
-	if(ret == CMD_RET_SUCCESS){
-		printf("Vendor IE in probe_response :%s\n", response);
+	sprintf(param, "set rc_pf %s -sr", argv[2]);
+
+	netlink_ret = netlink_send_data(NL_SHELL_RUN, param, response);
+	if(!netlink_ret){
+		if(strcmp(response, response_timeout_str)== 0){
+			ret =  CMD_RET_RESPONSE_TIMEOUT;
+		}else{
+			cmd_result_parse((char*)t->key_list, response, display_per_line);
+			ret = CMD_RET_SUCCESS;
+		}
+	}else{
+		ret = CMD_RET_FAILURE;
+	}
+	return ret;
+}
+
+static int cmd_set_rc_param(cmd_tbl_t *t, int argc, char *argv[])
+{
+	int ret = CMD_RET_FAILURE;
+	char param[NRC_MAX_CMDLINE_SIZE];
+	char response[NL_MSG_MAX_RESPONSE_SIZE];
+	int netlink_ret = 0;
+	int display_per_line= 1;
+
+	memset(response, 0x0, NL_MSG_MAX_RESPONSE_SIZE);
+	memset(param, 0x0, sizeof(param));
+
+	if(argc == 4){
+		sprintf(param, "set rc_param %s %s -sr", argv[2], argv[3]);
+	}else{
+		return CMD_RET_FAILURE;
+	}
+
+	netlink_ret = netlink_send_data(NL_SHELL_RUN, param, response);
+	if(!netlink_ret){
+		if(strcmp(response, response_timeout_str)== 0){
+			ret =  CMD_RET_RESPONSE_TIMEOUT;
+		}else {
+			ret = CMD_RET_SUCCESS;
+		}
+	}else{
+		ret = CMD_RET_FAILURE;
 	}
 	return ret;
 }
@@ -2158,6 +2423,16 @@ static int cmd_set_support_ch_width(cmd_tbl_t *t, int argc, char *argv[])
 	return ret;
 }
 
+static int cmd_set_ampdu_mode(cmd_tbl_t *t, int argc, char *argv[])
+{
+	if (strcmp(argv[2], "disable") != 0 && strcmp(argv[2], "manual") != 0 && strcmp(argv[2], "auto") != 0) {
+		printf("usage : %s\n", (char*)t->usage);
+		return CMD_RET_FAILURE;
+	}
+
+	return run_driver_cmd(t, argc, argv, "set ampdu_mode", NULL, 0);
+}
+
 
 /*******************************************************************************
 * sub commands on test
@@ -2167,6 +2442,30 @@ static int cmd_test_mcs(cmd_tbl_t *t, int argc, char *argv[])
 	return run_shell_direct_cmd("test mcs %s", argv[2]);
 }
 
+static int cmd_test_country(cmd_tbl_t *t, int argc, char *argv[])
+{
+	return run_shell_direct_cmd("test country %s", argv[2]);
+}
+
+static int cmd_test_cont_tx(cmd_tbl_t *t, int argc, char *argv[])
+{
+	if (strcmp(argv[2], "stop") == 0) {
+		return run_shell_direct_cmd("test cont_tx stop");
+	}
+
+	if(argc != 6) {
+		printf("usage : %s\n", (char*)t->usage);
+		return CMD_RET_FAILURE;
+	}
+
+	if (strcmp(argv[3], "1m") != 0 && strcmp(argv[3], "2m") != 0  && strcmp(argv[3], "4m") != 0) {
+		printf("usage : %s\n", (char*)t->usage);
+		return CMD_RET_FAILURE;
+	}
+
+	return run_shell_direct_cmd("test cont_tx %s %s %s %s", argv[2], argv[3], argv[4], argv[5]);
+
+}
 
 /*******************************************************************************
 * sub commands on gpio
