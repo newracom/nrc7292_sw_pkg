@@ -1,0 +1,37 @@
+/*
+ * Device Tree overlay for Newracom
+ *
+ */
+/dts-v1/;
+/plugin/;
+/ {
+	compatible = "brcm,bcm2835", "brcm,bcm2708", "brcm,bcm2709", "brcm,bcm2711";
+	fragment@0 {
+		target = <&spi>;
+		__overlay__ {
+			pinctrl-names="default";
+			pinctrl-0=<&nrc_pins>;
+			status = "okay";
+
+			spidev@0{
+				status = "disabled";
+			};
+			spidev@1{
+				status = "disabled";
+			};
+
+		};
+	};
+
+	fragment@1 {
+		target = <&gpio>;
+		__overlay__ {
+			nrc_pins: nrc_pins {
+				brcm,pins = <5 7 8 9 10 11>;
+				brcm,function = <0 1 1 4 4 4>;
+				brcm,pull = <1 2 2 2 2 1>;
+			};
+		};
+	};
+};
+
