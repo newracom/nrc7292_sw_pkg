@@ -16,10 +16,6 @@
 			spidev@0{
 				status = "disabled";
 			};
-			spidev@1{
-				status = "disabled";
-			};
-
 		};
 	};
 
@@ -34,4 +30,3 @@
 		};
 	};
 };
-

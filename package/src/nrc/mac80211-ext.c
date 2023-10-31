@@ -145,22 +145,28 @@ struct sk_buff *ieee80211_deauth_get(struct ieee80211_hw *hw,
 				txi->control.hw_key = i_sta->ptk;
 				//nrc_mac_dbg("%s: set txi\n", __func__);
 			}
-		} else {
-			status = IEEE80211_SKB_RXCB(skb);
-			status->flag |= RX_FLAG_DECRYPTED;
-			status->flag |= RX_FLAG_MMIC_STRIPPED;
-#if KERNEL_VERSION(4, 3, 0) <= NRC_TARGET_KERNEL_VERSION
-			status->flag |= RX_FLAG_PN_VALIDATED;
-#endif
+			goto complete;
 		}
 	} else {
 		deauth->u.deauth.reason_code = reason;
-#ifdef CONFIG_S1G_CHANNEL
-		status = IEEE80211_SKB_RXCB(skb);
-		status->band = nw->band;
-#endif /* #ifdef CONFIG_S1G_CHANNEL */
 	}
 
+	/**
+	 * The flags should be set not only in case of sending deauth frame to
+	 * the mac80211 of AP but also SW encryption is used.
+	 */
+	status = IEEE80211_SKB_RXCB(skb);
+	status->flag |= RX_FLAG_DECRYPTED;
+	status->flag |= RX_FLAG_MMIC_STRIPPED;
+#if KERNEL_VERSION(4, 3, 0) <= NRC_TARGET_KERNEL_VERSION
+	status->flag |= RX_FLAG_PN_VALIDATED;
+#endif
+
+complete:
+#ifdef CONFIG_S1G_CHANNEL
+	status = IEEE80211_SKB_RXCB(skb);
+	status->band = nw->band;
+#endif /* #ifdef CONFIG_S1G_CHANNEL */
 #if 0
 	status = IEEE80211_SKB_RXCB(skb);
 	nrc_mac_dbg("%s: status->flag:%d", __func__, status->flag);

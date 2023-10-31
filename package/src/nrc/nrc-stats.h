@@ -25,7 +25,6 @@ struct stats_sta {
 	uint8_t macaddr[6];
 	struct moving_average *snr;
 	struct moving_average *rssi;
-	struct moving_average *metric;
 
 	struct list_head list;
 };
@@ -45,7 +44,10 @@ void nrc_stats_rssi_deinit(void);
 void nrc_stats_rssi_update(int8_t rssi);
 int nrc_stats_rssi(void);
 
-int nrc_stats_metric(uint8_t *macaddr);
+uint32_t nrc_stats_calc_metric(int rssi);
+uint32_t nrc_stats_metric(uint8_t *macaddr);
+int nrc_stats_set_mesh_rssi_threshold(int rssi);
+int nrc_stats_get_mesh_rssi_threshold(void);
 
 int nrc_stats_init(void);
 void nrc_stats_deinit(void);

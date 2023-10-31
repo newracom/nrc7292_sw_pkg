@@ -4,36 +4,37 @@
 *                                                                               *
 *********************************************************************************
 
-                                                             (Updated 07-21-2023)
-+----------------+------------+------------------------------------+-----------+---------+---------+
-| NAME           | JEDEC ID   | Manufacturer                       | Size      | NRC7292 | NRC7394 |
-+----------------+------------+------------------------------------+-----------+---------+---------+
-| W25XX          | 0x621614   | WINBOND inc                        | 256-512KB |         |         |
-| W25Q16FW       | 0xEF6015   | WINBOND inc                        | 2 MB      |    O    |         |
-| W25Q80EW       | 0xEF6014   | WINBOND inc                        | 1 MB      |    O    |         |
-| XT25Q08B       | 0x0B6014   | XTX Technology                     | 1 MB      |    O    |         |
-| IS25WP080D     | 0x9D7014   | Integrated Silicon Solution Inc    | 1 MB      |    O    |         |
-| IS25LP080D     | 0x9D6014   | Integrated Silicon Solution Inc    | 1 MB      |         |         |
-| IS25LP128D     | 0x9D6018   | Integrated Silicon Solution Inc    | 16 MB     |         |         |
-| EN25S16B       | 0x1C3815   | EON Silicon Devices                | 2 MB      |    O    |         |
-| GD25LQ16C      | 0xC86015   | GigaDevice                         | 2 MB      |    O    |         |
-| GD25LQ40C      | 0xC86013   | GigaDevice                         | 512 KB    |    O    |         |
-| MX25V1635F     | 0xC22315   | Macronix                           | 2 MB      |         |         |
-| XT25Q16D       | 0x0B6015   | XTX Technology Limited             | 2 MB      |    O    |         |
-| EN25QH16B      | 0x1C7015   | ESMT                               | 2 MB      |         |         |
-| GD25WQ16E      | 0xC86515   | GigaDevice                         | 2 MB      |         |    O    |
-| GD25WQ32E      | 0xC86516   | GigaDevice                         | 4 MB      |         |    O    |
-| GD25Q16CE2GR   | 0xC84015   | GigaDevice                         | 2 MB      |         |         |
-| GD25Q16EEIGR   | 0xC84015   | GigaDevice                         | 2 MB      |         |         |
-| MX25U1633F     | 0xC22535   | Macronix                           | 2 MB      |    O    |         |
-| MX25R3235F     | 0xC22816   | Macronix                           | 2 MB      |         |         |
-| MX25R1635F     | 0xC22815   | Macronix                           | 2 MB      |         |    O    |
-| EN25S32A       | 0x1C3816   | EON Silicon Devices                | 4 MB      |    O    |         |
-| EN25SE32A      | 0x1C4816   | EON Silicon Devices                | 4 MB      |    O    |         |
-| XT25Q32F       | 0x0B6016   | XTX Technology Limited             | 4 MB      |    O    |         |
-| P25Q16U        | 0x856015   | Puya Semiconductor                 | 2 MB      |         |    O    |
-| P25Q32U        | 0x856016   | Puya Semiconductor                 | 4 MB      |         |    O    |
-| GT25Q16A       | 0xC46015   | Giantec Semiconductor Corp         | 2 MB      |         |    O    |
-| GT25Q32A       | 0xC46016   | Giantec Semiconductor Corp         | 4 MB      |         |    O    |
-| FM25W16A       | 0xA12815   | Shanghai Fudan Microelectronics    | 2 MB      |         |    O    |
-+----------------+------------+------------------------------------+-----------+---------+---------+
+                                                             (Updated 10-17-2023)
++----------------+------------+----------------------------------+-----------+----------+
+| NAME           | JEDEC ID   | Manufacturer                     | Size      | IO range |
++----------------+------------+----------------------------------+-----------+----------+
+| W25XX          | 0x621614   | WINBOND inc                      | 256-512KB |          |
+| W25Q80EW       | 0xEF6014   | WINBOND inc                      | 1 MB      |1.65~1.95V|
+| W25Q16FW       | 0xEF6015   | WINBOND inc                      | 2 MB      |1.65~1.95V|
+| IS25WP080D     | 0x9D7014   | Integrated Silicon Solution Inc  | 1 MB      |1.65~1.95V|
+| IS25LP080D     | 0x9D6014   | Integrated Silicon Solution Inc  | 1 MB      | 2.3~3.6V |
+| IS25LP128D     | 0x9D6018   | Integrated Silicon Solution Inc  | 16 MB     | 2.3~3.6V |
+| GD25LQ40C      | 0xC86013   | GigaDevice                       | 512 KB    |1.65~1.95V|
+| GD25LQ16C      | 0xC86015   | GigaDevice                       | 2 MB      |1.65~1.95V|
+| GD25Q16CE2GR   | 0xC84015   | GigaDevice                       | 2 MB      | 2.7~3.6V |
+| GD25Q16EEIGR   | 0xC84015   | GigaDevice                       | 2 MB      | 2.7~3.6V |
+| GD25WQ16E      | 0xC86515   | GigaDevice                       | 2 MB      |1.65~3.60V|
+| GD25WQ32E      | 0xC86516   | GigaDevice                       | 4 MB      |1.65~3.60V|
+| MX25U1633F     | 0xC22535   | Macronix                         | 2 MB      |1.65~1.95V|
+| MX25V1635F     | 0xC22315   | Macronix                         | 2 MB      | 2.3~3.6V |
+| MX25R1635F     | 0xC22815   | Macronix                         | 2 MB      |1.65~3.60V|
+| MX25R3235F     | 0xC22816   | Macronix                         | 2 MB      |1.65~3.60V|
+| EN25QH16B      | 0x1C7015   | EON Silicon Devices              | 2 MB      | 2.7~3.6V |
+| EN25S16B       | 0x1C3815   | EON Silicon Devices              | 2 MB      |1.65~1.95V|
+| EN25S32A       | 0x1C3816   | EON Silicon Devices              | 4 MB      |1.65~1.95V|
+| EN25SE32A      | 0x1C4816   | EON Silicon Devices              | 4 MB      |1.65~1.95V|
+| XT25Q08B       | 0x0B6014   | XTX Technology                   | 1 MB      |1.65~1.95V|
+| XT25Q16D       | 0x0B6015   | XTX Technology Limited           | 2 MB      |1.65~1.95V|
+| XT25Q32F       | 0x0B6016   | XTX Technology Limited           | 4 MB      |1.65~1.95V|
+| P25Q16U        | 0x856015   | Puya Semiconductor               | 2 MB      |1.65~3.60V|
+| P25Q32U        | 0x856016   | Puya Semiconductor               | 4 MB      |1.65~3.60V|
+| GT25Q16A       | 0xC46015   | Giantec Semiconductor Corp       | 2 MB      |1.65~3.60V|
+| GT25Q32A       | 0xC46016   | Giantec Semiconductor Corp       | 4 MB      |1.65~3.60V|
+| FM25W16A       | 0xA12815   | Shanghai Fudan Microelectronics  | 2 MB      |1.65~3.60V|
+| FM25W32A       | 0xA12816   | Shanghai Fudan Microelectronics  | 4 MB      |1.65~3.60V|
++----------------+------------+----------------------------------+-----------+----------+

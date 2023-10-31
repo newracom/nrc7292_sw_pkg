@@ -46,12 +46,12 @@ static u16 total_sta=0; /* total number of STA  connected */
 static u16 remain_sta=0; /* number of STA remaining after clearing STA */
 #define TCN  (2*1)
 #define TCNE (0)
-#define CREDIT_AC0	(TCN*2+TCNE)	/* BK (4) */
-#define CREDIT_AC1	(TCN*20+TCNE)	/* BE (40) */
-#define CREDIT_AC1_7292	(TCN*60+TCNE)	/* BE (120) : 7292 has 128 target TX pool */
-#define CREDIT_AC1_7392	(TCN*10+TCNE)	/* BE (20)  : 7392 has small target TX pool */
-#define CREDIT_AC2	(TCN*4+TCNE)	/* VI (8) */
-#define CREDIT_AC3	(TCN*4+TCNE)	/* VO(8) */
+#define CREDIT_AC0		(TCN*2+TCNE)	/* BK (4) */
+#define CREDIT_AC1		(TCN*20+TCNE)	/* BE (40) */
+#define CREDIT_AC1_20	(TCN*10+TCNE)	/* BE (20) */
+#define CREDIT_AC1_80	(TCN*40+TCNE)	/* BE (80) */
+#define CREDIT_AC2		(TCN*4+TCNE)	/* VI (8) */
+#define CREDIT_AC3		(TCN*4+TCNE)	/* VO(8) */
 
 /* N-SPI host-side memory map */
 #define C_SPI_SYS_REG 0x0
@@ -206,7 +206,8 @@ struct nrc_cspi_ops {
 };
 
 int spi_test(struct nrc_hif_device *hdev);
-void spi_reset(struct nrc_hif_device *hdev);
+void spi_reset_device (struct nrc_hif_device *hdev);
+void spi_reset_rx (struct nrc_hif_device *hdev);
 static int spi_update_status(struct spi_device *spi);
 static void c_spi_enable_irq(struct spi_device *spi, bool enable, u8 mask);
 static void c_spi_config(struct nrc_spi_priv *priv);;
@@ -277,15 +278,6 @@ static void prepare_deauth_sta(void *data,  struct ieee80211_sta *sta)
 
 	if(!ieee80211_find_sta(vif, sta->addr))
 		return;
-
-	/* (AP Recovery) Delete BSS Max Idle timer if exist */
-	if (i_sta->max_idle.idle_period > 0 &&
-		timer_pending(&i_sta->max_idle.timer)) {
-		nrc_dbg(NRC_DBG_STATE, "(AP Recovery) Delete STA(%pM)'s bss_max_idle timer(%u)",
-			sta->addr,i_sta->max_idle.idle_period);
-		del_timer_sync(&i_sta->max_idle.timer);
-		i_sta->max_idle.idle_period = 0;
-	}
 
 	/* (AP Recovry) Pretend to receive a deauth from @sta */
 	skb = ieee80211_deauth_get(hw, vif->addr, sta->addr, vif->addr,
@@ -639,11 +631,11 @@ static struct sk_buff *spi_rx_skb(struct spi_device *spi,
 	/* Wait until at least one rx slot is non-empty */
 	ret = wait_event_interruptible(priv->wait,
 			((c_spi_num_slots(priv, RX_SLOT) > 0) ||
-			 kthread_should_stop()|| kthread_should_park()));
+			 kthread_should_stop() || kthread_should_park()));
 	if (ret < 0)
 		goto fail;
 
-	if (kthread_should_stop()|| kthread_should_park())
+	if (kthread_should_stop() || kthread_should_park())
 		goto fail;
 
 #ifdef CONFIG_TRX_BACKOFF
@@ -664,6 +656,7 @@ static struct sk_buff *spi_rx_skb(struct spi_device *spi,
 		SYNC_UNLOCK(hdev);
 		if (cnt1++ < 10) {
 			pr_err("!!!!! garbage rx data");
+			spi_reset_rx(hdev);
 		}
 		goto fail;
 	}
@@ -685,11 +678,13 @@ static struct sk_buff *spi_rx_skb(struct spi_device *spi,
 	/* Calculate how many more slot to read for this hif packet */
 	hif = (void *)skb->data;
 
+
 	if (hif->type >= HIF_TYPE_MAX || hif->len == 0) {
 		nrc_dbg(NRC_DBG_HIF, "rxslot:(h=%d,t=%d)",
 				priv->slot[RX_SLOT].head, priv->slot[RX_SLOT].tail);
 		print_hex_dump(KERN_DEBUG, "rxskb ", DUMP_PREFIX_NONE, 16, 1,
 				skb->data, 480, false);
+		spi_reset_rx(hdev);
 		goto fail;
 	}
 
@@ -719,11 +714,11 @@ static struct sk_buff *spi_rx_skb(struct spi_device *spi,
 	 */
 	ret = wait_event_interruptible(priv->wait,
 				(c_spi_num_slots(priv, RX_SLOT) >= nr_slot) ||
-				kthread_should_stop()|| kthread_should_park());
+				kthread_should_stop() || kthread_should_park());
 	if (ret < 0)
 		goto fail;
 
-	if (kthread_should_stop()|| kthread_should_park())
+	if (kthread_should_stop() || kthread_should_park())
 		goto fail;
 
 	priv->slot[RX_SLOT].tail += nr_slot;
@@ -744,6 +739,7 @@ static struct sk_buff *spi_rx_skb(struct spi_device *spi,
 		if (cnt2++ < 10) {
 			pr_err("@@@@@@ garbage rx data");
 		}
+		spi_reset_rx(hdev);
 		goto fail;
 	}
 	cnt2 = 0;
@@ -797,19 +793,16 @@ static void spi_set_default_credit(struct nrc_spi_priv *priv)
 		priv->credit_max[i] = 0;
 
 	switch (priv->hw.sys.chip_id) {
-	case 0x7291:
 	case 0x7292:
-	case 0x7393:
 	case 0x7394:
 		priv->credit_max[0] = CREDIT_AC0;
-		priv->credit_max[1] = credit_ac_be;
-		//priv->credit_max[1] = CREDIT_AC1_7292;
+		priv->credit_max[1] = CREDIT_AC1_80;
 		priv->credit_max[2] = CREDIT_AC2;
 		priv->credit_max[3] = CREDIT_AC3;
 		priv->credit_max[5] = CREDIT_AC1;
 
 		priv->credit_max[6] = CREDIT_AC0;
-		priv->credit_max[7] = credit_ac_be;
+		priv->credit_max[7] = CREDIT_AC1_80;
 		priv->credit_max[8] = CREDIT_AC2;
 		priv->credit_max[9] = CREDIT_AC3;
 		break;
@@ -819,26 +812,14 @@ static void spi_set_default_credit(struct nrc_spi_priv *priv)
 	case 0x4791:
 	case 0x5291:
 		priv->credit_max[0] = 4;
-		priv->credit_max[1] = CREDIT_AC1_7392;
+		priv->credit_max[1] = CREDIT_AC1_20;
 		priv->credit_max[2] = 4;
 		priv->credit_max[3] = 4;
 
 		priv->credit_max[6] = 4;
-		priv->credit_max[7] = CREDIT_AC1_7392;
+		priv->credit_max[7] = CREDIT_AC1_20;
 		priv->credit_max[8] = 4;
 		priv->credit_max[9] = 4;
-		break;
-
-	case 0x6201:
-		priv->credit_max[0] = CREDIT_AC0;
-		priv->credit_max[1] = CREDIT_AC1;
-		priv->credit_max[2] = CREDIT_AC2;
-		priv->credit_max[3] = CREDIT_AC3;
-
-		priv->credit_max[6] = CREDIT_AC0;
-		priv->credit_max[7] = CREDIT_AC1;
-		priv->credit_max[8] = CREDIT_AC2;
-		priv->credit_max[9] = CREDIT_AC3;
 		break;
 	}
 
@@ -1126,7 +1107,7 @@ static int spi_update_status(struct spi_device *spi)
 	}
 
 	SYNC_LOCK(hdev);
-	ret = c_spi_read_regs(spi, C_SPI_EIRQ_MODE, (void *)status,sizeof(*status));
+	ret = c_spi_read_regs(spi, C_SPI_EIRQ_MODE, (void *)status, sizeof(*status));
 	SYNC_UNLOCK(hdev);
 	if (ret < 0) {
 		return ret;
@@ -1200,7 +1181,6 @@ static int spi_update_status(struct spi_device *spi)
 				/* Do NOT send other frames to target
 					while downloading FW to target_rom(7292/7394) or rom_cspi(7393)*/
 				atomic_set(&nw->fw_state, NRC_FW_LOADING);
-				nrc_hif_cleanup(hdev);
 				if (nrc_check_fw_file(nw)) {
 					nrc_download_fw(nw);
 					spi_enable_irq(hdev);
@@ -1236,12 +1216,19 @@ static int spi_update_status(struct spi_device *spi)
 							* The target was rebooted due to watchdog.
 							* Then, driver always requests deauth for trying to reconnect.
 							*/
+							if ((int)atomic_read(&nw->fw_state) != NRC_FW_ACTIVE) {
+								atomic_set(&nw->fw_state, NRC_FW_ACTIVE);
+								nrc_hif_resume(hdev);
+							}
 							nrc_dbg(NRC_DBG_STATE, "STA(%d) : Reconnect to AP", i);
 							mdelay(300);
 							nrc_mac_cancel_hw_scan(nw->hw, nw->vif[i]);
 							ieee80211_connection_loss(nw->vif[i]);
-							if(!is_relay)
+							if(!is_relay) {
 								goto no_restart;
+							} else {
+								nrc_free_vif_index(nw, nw->vif[i]);
+							}
 						} else if (nw->vif[i]->type == NL80211_IFTYPE_AP) {
 							ieee80211_iterate_stations_atomic(nw->hw, prepare_deauth_sta, (void *)nw->vif[i]);
 							nrc_dbg(NRC_DBG_STATE, "AP(%d) : Now try to clear all STAs(total cnt:%d)", i, total_sta);
@@ -1274,11 +1261,14 @@ static int spi_update_status(struct spi_device *spi)
 							mdelay(5000); //it's for STA's reconnect by CQM
 							nrc_hif_cleanup(nw->hif);
 							nrc_mac_clean_txq(nw);
+							nrc_free_vif_index(nw, nw->vif[i]);
 						}
 						else if (nw->vif[i]->type == NL80211_IFTYPE_MESH_POINT) {
 							nrc_dbg(NRC_DBG_STATE, "mesh(%d) : Restart and do not repeering", i);
+							nrc_hif_cleanup(nw->hif);
+							nrc_mac_clean_txq(nw);
+							nrc_mac_flush_txq(nw);
 						}
-						nrc_free_vif_index(nw, nw->vif[i]);
 #ifdef CONFIG_S1G_CHANNEL
 						init_s1g_channels(nw);
 #endif /* #ifdef CONFIG_S1G_CHANNEL */
@@ -1291,7 +1281,7 @@ no_restart:
 				nw->drv_state = NRC_DRV_RUNNING;
 
 #if defined(CONFIG_SUPPORT_BD)
-				nrc_ps_dbg("[%s,L%d] load board data\n", __func__, __LINE__);
+				nrc_ps_dbg("[%s,L%d] load board data", __func__, __LINE__);
 				nrc_reg_notifier(nw->hw->wiphy, &request);
 #endif
 				goto update;
@@ -1300,16 +1290,15 @@ no_restart:
 				/*
 				 * FW notified the target reboot is done.
 				 */
-				nrc_ps_dbg("TARGET_NOTI_FW_READY_FROM_PS\n");
+				nrc_ps_dbg("TARGET_NOTI_FW_READY_FROM_PS");
 				if (fw_name == NULL) {
 					/* It's for CSPI RAM Mode (no FW download) */
 					spi_config_fw(hdev);
-					nrc_hif_cleanup(nw->hif);
 				}
 				atomic_set(&nw->fw_state, NRC_FW_ACTIVE);
 				nrc_hif_resume(hdev);
 #if defined(CONFIG_SUPPORT_BD)
-				nrc_ps_dbg("[%s,L%d] load board data\n", __func__, __LINE__);
+				nrc_ps_dbg("[%s,L%d] load board data", __func__, __LINE__);
 				nrc_reg_notifier(nw->hw->wiphy, &request);
 #endif
 #ifdef CONFIG_S1G_CHANNEL
@@ -1390,10 +1379,10 @@ no_restart:
 					}
 				}
 				break;
-			}
+		}
 
-			/* don't update slot and credit */
-			goto done;
+		/* don't update slot and credit */
+		goto done;
 	}
 
 update:
@@ -1414,7 +1403,8 @@ update:
 		nrc_dbg(NRC_DBG_COMMON,"[%s,L%d]* RX_gap:%u head:%u vs tail:%u",
 			__func__, __LINE__, c_spi_num_slots(priv, RX_SLOT),
 			priv->slot[RX_SLOT].head, priv->slot[RX_SLOT].tail);
-		priv->slot[RX_SLOT].tail = priv->slot[RX_SLOT].head = 0;
+		//priv->slot[RX_SLOT].tail = priv->slot[RX_SLOT].head = 0;
+		spi_reset_rx(hdev);
 	}
 
 	/* no need to update credit while loopback test */
@@ -1830,7 +1820,7 @@ static int spi_suspend(struct nrc_hif_device *dev)
 	struct spi_device *spi = priv->spi;
 	struct nrc *nw = dev->nw;
 
-	nrc_ps_dbg("[%s] drv_state:%d wowlan_enabled:%x power_save:%d",
+	nrc_ps_dbg("[%s] drv_state:%d wowlan_enabled:%x power_save:%d\n",
 			__func__, nw->drv_state, nw->wowlan_enabled, power_save);
 
 	if (priv->kthread) {
@@ -1946,7 +1936,7 @@ static int spi_resume(struct nrc_hif_device *dev)
 	return 0;
 }
 
-void spi_reset(struct nrc_hif_device *hdev)
+void spi_reset_device(struct nrc_hif_device *hdev)
 {
 	struct nrc_spi_priv *priv = hdev->priv;
 	struct spi_device *spi = priv->spi;
@@ -1958,6 +1948,17 @@ void spi_reset(struct nrc_hif_device *hdev)
 	}
 	/* 0xC8 is magic number for reset the device */
 	c_spi_write_reg(spi, C_SPI_DEVICE_STATUS, 0xC8);
+}
+
+void spi_reset_rx (struct nrc_hif_device *hdev)
+{
+	struct nrc_spi_priv *priv = hdev->priv;
+	struct spi_device *spi = priv->spi;
+	struct nrc *nw = spi_get_drvdata(spi);
+
+	dev_err(&spi->dev, "Reset SPI RX\n");
+	priv->slot[RX_SLOT].tail = priv->slot[RX_SLOT].head = 0;
+	nrc_wim_reset_hif_tx(nw);
 }
 
 static void spi_disable_irq(struct nrc_hif_device *hdev);
@@ -2236,7 +2237,8 @@ static struct nrc_hif_ops spi_ops = {
 	.suspend = spi_suspend,
 	.resume = spi_resume,
 	.close = spi_close,
-	.reset = spi_reset,
+	.reset_device = spi_reset_device,
+	.reset_rx = spi_reset_rx,
 	.wakeup = spi_wakeup,
 	.test = spi_test,
 	.config = spi_config_fw,
@@ -2600,7 +2602,7 @@ static struct spi_device *nrc_create_spi_device (void)
 	/* Apply module parameters */
 	bi.bus_num = spi_bus_num;
 	bi.chip_select = spi_cs_num;
-	bi.irq = gpio_to_irq(spi_gpio_irq);
+	bi.irq = spi_gpio_irq >= 0 ? gpio_to_irq(spi_gpio_irq) : -1;
 	bi.max_speed_hz = hifspeed;
 
 	/* Find the spi master that our device is attached to */

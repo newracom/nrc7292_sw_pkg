@@ -1571,6 +1571,18 @@ static int cli_app_driver_cmd(struct sk_buff *skb, struct genl_info *info)
 				ampdu_mode = NRC_AMPDU_AUTO;
 			}
 			sprintf(cmd_resp, "success");
+#ifdef CONFIG_SUPPORT_MESH_ROUTING
+		} else if (argc == 3 && strcmp(argv[1], "mesh_rssi_threshold") == 0) {
+			int rssi;
+			if (kstrtoint(argv[2], 10, &rssi) < 0) {
+				sprintf(cmd_resp, "fail");
+			}
+			if (nrc_stats_set_mesh_rssi_threshold(rssi) < 0) {
+				sprintf(cmd_resp, "fail");
+			} else {
+				sprintf(cmd_resp, "success");
+			}
+#endif
 		} else {
 			sprintf(cmd_resp, "fail");
 		}

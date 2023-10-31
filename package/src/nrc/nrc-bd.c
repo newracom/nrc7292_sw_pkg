@@ -154,40 +154,24 @@ static const struct bd_ch_table g_bd_ch_table[CC_MAX][NRC_BD_MAX_CH_LIST] = {
 		{8645,  5185,   3, 37},
 		{8655,  5190,   5, 38},
 		{8665,  5195,   7, 39},
-		{8675,  5200,   9, 40},
+		{8675,  5200,   9, 40}
 	},
 	{
 		/* CN */
-		{7555,	5180,	1,	36},
-		{7565,	5185,	3,	37},
-		{7575,	5190,	5,	38},
-		{7585,	5195,	7,	39},
-		{7595,	5200,	9,	40},
-		{7605,	5205,	11,	41},
-		{7615,	5210,	13,	42},
-		{7625,	5215,	15,	43},
-		{7635,	5220,	17,	44},
-		{7645,	5225,	19,	45},
-		{7655,	5230,	21,	46},
-		{7665,	5235,	23,	47},
-		{7675,	5240,	25,	48},
-		{7685,	5745,	27,	149},
-		{7695,	5750,	29,	150},
-		{7705,	5755,	31,	151},
-		{7795,	5760,	16,	152},
-		{7805,	5765,	18,	153},
-		{7815,	5770,	20,	154},
-		{7825,	5775,	22,	155},
-		{7835,	5780,	24,	156},
-		{7845,	5785,	26,	157},
-		{7855,	5790,	28,	158},
-		{7865,	5795,	30,	159},
-		{7800,	5800,	2,	160},
-		{7820,	5805,	6,	161},
-		{7840,	5810,	10,	162},
-		{7860,	5815,	14,	163},
-		{7810,	5820,	4,	164},
-		{7850,	5825,	12,	165}
+		{7495,	5180,	1,	36},
+		{7505,	5185,	3,	37},
+		{7515,	5190,	5,	38},
+		{7525,	5195,	7,	39},
+		{7535,	5200,	9,	40},
+		{7545,	5205,	11,	41},
+		{7555,	5210,	13,	42},
+		{7565,	5215,	15,	43},
+		{7500,	5745,	2,	149},
+		{7520,	5755,	6,	151},
+		{7540,	5765,	10,	153},
+		{7560,	5775,	14,	155},
+		{7510,	5750,	4,	150},
+		{7550,	5770,	12,	154}
 	},
 	{
 		/* NZ */
@@ -435,7 +419,7 @@ struct wim_bd_param * nrc_read_bd_tx_pwr(struct nrc *nw, uint8_t *country_code)
 	if (!g_bd_size)
 		return NULL;
 	else
-		nrc_dbg(NRC_DBG_STATE,"size of bd file is %d",g_bd_size);
+		nrc_dbg(NRC_DBG_BD,"size of bd file is %d",g_bd_size);
 
 	if (country_code[0] == 'U' && country_code[1] == 'S')
 		cc_index = CC_US;
@@ -474,7 +458,7 @@ struct wim_bd_param * nrc_read_bd_tx_pwr(struct nrc *nw, uint8_t *country_code)
 		return NULL;
 	}
 
-	nrc_dbg(NRC_DBG_STATE, "Major %02X Minor %02X Total len %04X Num_Data_Groups %04X Checksum %04X",
+	nrc_dbg(NRC_DBG_BD, "Major %02X Minor %02X Total len %04X Num_Data_Groups %04X Checksum %04X",
 			bd->ver_major, bd->ver_minor, bd->total_len, bd->num_data_groups, bd->checksum_data);
 
 #if BD_DEBUG
@@ -529,7 +513,7 @@ struct wim_bd_param * nrc_read_bd_tx_pwr(struct nrc *nw, uint8_t *country_code)
 					bd_sel->value[j] = bd->data[8 + len + 4*i + j];
 				}
 				check_bd_flag = true;
-				nrc_dbg(NRC_DBG_STATE, "type %04X, len %04X, checksum %04X target_ver %04X",
+				nrc_dbg(NRC_DBG_BD, "type %04X, len %04X, checksum %04X target_ver %04X",
 						bd_sel->type, bd_sel->length, bd_sel->checksum, bd_sel->hw_version);
 				break;
 			} else {

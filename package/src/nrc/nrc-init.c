@@ -255,13 +255,6 @@ module_param(debug_level_all, bool, 0600);
 MODULE_PARM_DESC(debug_level_all, "Driver debug level all");
 
 /**
- * credit number for AC_BE
- */
-int credit_ac_be = 40; //default 40
-module_param(credit_ac_be, int, 0600);
-MODULE_PARM_DESC(credit_ac_be, "(Test only) credit number for AC_BE");
-
-/**
  * discard TX deauth frame for Mult-STA test
  */
 bool discard_deauth = false;
@@ -315,6 +308,42 @@ MODULE_PARM_DESC(beacon_loss_count, "Number of beacon intervals before we decide
 bool ignore_listen_interval = false;
 module_param(ignore_listen_interval, bool, 0600);
 MODULE_PARM_DESC(ignore_listen_interval, "Ignore listen interval value while comparing it with bss max idle on AP");
+
+/**
+ * Supported CH width (0 (1/2Mhz)  or 1 (1/2/4MHz))
+ */
+int support_ch_width = 1;
+module_param(support_ch_width, int, 0600);
+MODULE_PARM_DESC(support_ch_width, "Supported CH width (0:1/2MHz Support, 1:1/2/4Mhz Support");
+
+/**
+ * Set rate control mode
+ */
+uint8_t ap_rc_mode = 2;
+module_param(ap_rc_mode, byte, 0600);
+MODULE_PARM_DESC(ap_rc_mode, "AP Rate control mode (1:Disable,Use default_mcs, 2:Individual RC for each STA. 3:RC incorporating RX MCS");
+
+uint8_t sta_rc_mode = 2;
+module_param(sta_rc_mode, byte, 0600);
+MODULE_PARM_DESC(sta_rc_mode, "STA Rate control mode (1:Disable,Use default_mcs, 2:Individual RC for each STA. 3:RC incorporating RX MCS");
+
+/**
+ * Set default mcs
+ */
+uint8_t ap_rc_default_mcs = 2;
+module_param(ap_rc_default_mcs, byte, 0600);
+MODULE_PARM_DESC(ap_rc_default_mcs, "AP Default MCS");
+
+uint8_t sta_rc_default_mcs = 2;
+module_param(sta_rc_default_mcs, byte, 0600);
+MODULE_PARM_DESC(sta_rc_default_mcs, "STA Default MCS");
+
+/**
+ * Power save pretend value for no response STA
+ */
+bool ps_pretend = false;
+module_param(ps_pretend, bool, 0600);
+MODULE_PARM_DESC(ps_pretend, "Power save pretend for no response STA");
 
 static bool has_macaddr_param(uint8_t *dev_mac)
 {
@@ -527,6 +556,7 @@ int nrc_fw_start(struct nrc *nw)
 	p->bitmap_encoding = bitmap_encoding;
 	p->reverse_scrambler = reverse_scrambler;
 	p->kern_ver = (NRC_TARGET_KERNEL_VERSION>>8)&0x0fff; // 12 bits for kernel version (4 for major, 8 for minor)
+	p->ps_pretend_flag = ps_pretend;
 	p->vendor_oui = VENDOR_OUI;
 	if (nw->chip_id == 0x7292) {
 		p->deepsleep_gpio_dir = TARGET_DEEP_SLEEP_GPIO_DIR_7292;
@@ -539,6 +569,7 @@ int nrc_fw_start(struct nrc *nw)
 	if(sw_enc < 0)
 		sw_enc = 0;
 	p->sw_enc = sw_enc;
+	p->supported_ch_width = support_ch_width;
 	skb_resp = nrc_xmit_wim_request_wait(nw, skb_req, (WIM_RESP_TIMEOUT * 30));
 	if (skb_resp)
 		nrc_on_fw_ready(skb_resp, nw);
@@ -713,9 +744,9 @@ int nrc_nw_stop(struct nrc *nw)
 	}
 
 	nw->drv_state = NRC_DRV_CLOSING;
-
+#ifdef CONFIG_USE_TXQ
 	nrc_cleanup_txq_all(nw);
-
+#endif
 	nrc_exit_debugfs();
 
 	nrc_hif_stop(nw->hif);
@@ -782,10 +813,12 @@ struct nrc *nrc_nw_alloc(struct device *dev, struct nrc_hif_device *hdev)
 	INIT_DELAYED_WORK(&nw->roc_finish, nrc_mac_roc_finish);
 	INIT_DELAYED_WORK(&nw->rm_vendor_ie_wowlan_pattern, nrc_rm_vendor_ie_wowlan_pattern);
 
+#ifdef CONFIG_USE_TXQ
 #ifdef CONFIG_NEW_TASKLET_API
 	tasklet_setup(&nw->tx_tasklet, nrc_tx_tasklet);
 #else
 	tasklet_init(&nw->tx_tasklet, nrc_tx_tasklet, (unsigned long) nw);
+#endif
 #endif
 
 	if (!disable_cqm) {

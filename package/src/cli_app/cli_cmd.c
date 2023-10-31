@@ -121,6 +121,7 @@ static int cmd_set_wakeup_source(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_set_addba(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_set_delba(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_set_rts(cmd_tbl_t *t, int argc, char *argv[]);
+static int cmd_set_cts(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_set_tx_time(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_set_drop_frame(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_set_temp_sensor(cmd_tbl_t *t, int argc, char *argv[]);
@@ -132,6 +133,9 @@ static int cmd_set_report(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_set_support_ch_width(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_set_ampdu_mode(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_set_bcn_mcs(cmd_tbl_t *t, int argc, char *argv[]);
+static int cmd_set_bgscan_trx(cmd_tbl_t *t, int argc, char *argv[]);
+static int cmd_set_scan_period(cmd_tbl_t *t, int argc, char *argv[]);
+static int cmd_set_mesh_rssi_threshold(cmd_tbl_t *t, int argc, char *argv[]);
 
 
 /*******************************************************************************
@@ -234,7 +238,6 @@ cmd_tbl_t show_sub_list[] = {
 	{ "ap", cmd_show_ap, "show ap information", "show ap [vif_id]",  "", 0},
 	{ "tx_time", cmd_show_tx_time, "show tx_time about {CS time} {Blank time}", "show tx_time", SHOW_TX_TIME_KEY_LIST, 0},
 	{ "cca_thresh", cmd_show_cca_thresh, "show cca_thresh(unit: dBm)", "show cca_thresh", "", 0},
-
 	{ "self_config", cmd_self_configuration, "show self_config", "show self_config {Country(KR,US...)} {BW} {dwell time}", "", 0},
 	{ "optimal_channel", cmd_optimal_channel, "show optimal_channel", "show optimal_channel {Country(US,NZ...)} {BW} {dwell time}", "", 0},
 	{ "app_version", cmd_show_app_version, "show app version", "show app_version",  "", 0},
@@ -246,7 +249,7 @@ cmd_tbl_t show_sub_list[] = {
 
 /* sub command list on set */
 cmd_tbl_t set_sub_list[] = {
-	{ "gi", cmd_set_guard_interval, "set guard interval", "set gi {short|long} {vif_id(0|1)}", "", 0},
+	{ "gi", cmd_set_guard_interval, "set guard interval", "set gi {auto|short|long} {vif_id(0|1)}", "", 0},
 	{ "maxagg", cmd_set_max_aggregation, "set aggregation", "set maxagg {AC(0-3)} {Max(0-8(1Mhz),0-16(2,4Mhz),0:off)} {size:default=0}", SET_MAXAGG_KEY_LIST, 0},
 	{ "ack_mode", cmd_set_ackmode, "set ack mode", "set ack_mode {no|ndp|normal|show}", SET_ACK_MODE_LIST, 0},
 	{ "rc", cmd_set_rate_control, "set rate control", "set rc {on|off} [vif_id] [mode]", SET_RC_KEY_LIST, 0},
@@ -257,7 +260,8 @@ cmd_tbl_t set_sub_list[] = {
 	{ "wakeup_source", cmd_set_wakeup_source, "set wakeup source for deepsleep", "set wakeup_soruce rtc gpio hspi", SET_WAKEUP_SOURCE_KEY_LIST, 0},
 	{ "addba", cmd_set_addba, "set addba tid / send addba with mac address", "set addba [tid] {mac address}", "", 0},
 	{ "delba", cmd_set_delba, "set delba tid / send delba with mac address", "set delba [tid] {mac address}", "", 0},
-	{ "rts", cmd_set_rts, "set rts on/off", "set rts {on|off|default} <threshold> <vif_id> {ndp:1, legacy:0}", "", 0},
+	{ "rts", cmd_set_rts, "set rts on/off", "set rts {on|off|default} <threshold> <vif_id> {ndp rts ri:1, normal rts ri:2}", "", 0},
+	{ "cts", cmd_set_cts, "set cts on/off", "set cts {adaptive cts:on, legacy cts:off}", "", 0},
 	{ "tx_time", cmd_set_tx_time, "set tx_time about {CS time} {Blank time}", "set tx_time {CS time} {Blank time}", SET_TXTIME_KEY_LIST, 0},
 	{ "drop", cmd_set_drop_frame, "set drop frames from configured mac address", "set drop [vif id] [mac address] {on|off}", SET_DROP_KEY_LIST, 0},
 	{ "self_config", cmd_self_configuration, "set self_config", "set self_config {Country(KR,US...)} {BW} {dwell time}", "", 0},
@@ -271,6 +275,9 @@ cmd_tbl_t set_sub_list[] = {
 	{ "bcn_mcs", cmd_set_bcn_mcs, "set bcn_mcs ", "set bcn_mcs [vif_id] [10|0|1|2|3|4|5|6|7]\n", "", 0},
 	{ "rc_pf", cmd_set_rc_pf, "set rate control profile number", "set rc_pf [1|2]", SET_RC_PF_KEY_LIST, 0},
 	{ "rc_param", cmd_set_rc_param, "set rate control parameter", "set rc_param {1|2|3|4|5} {1|2|3|4|5|6|7}", SET_RC_PARAM_KEY_LIST, 0},
+	{ "bgscan_trx", cmd_set_bgscan_trx, "set bgscan_trx ", "set bgscan_trx [1:enable|0:disable] [wait time operation ch for rx: (0~100)msec]", "", 0},
+	{ "scan_period", cmd_set_scan_period, "set scan_period", "set scan_period [dwell time (min 20ms)]", "", 0},
+	{ "mesh_rssi_threshold", cmd_set_mesh_rssi_threshold, "set mesh_rssi_threshold ", "set mesh_rssi_threshold {-120~-10dBm}", "", 0},
 };
 
 /* sub command list on test */
@@ -1964,7 +1971,7 @@ static int cmd_show_bcn_mcs(cmd_tbl_t *t, int argc, char *argv[])
 static int cmd_set_guard_interval(cmd_tbl_t *t, int argc, char *argv[])
 {
 	if(!argv[2]||((strcmp("short", argv[2]) != 0)&&
-		(strcmp("long", argv[2]) != 0))){
+		(strcmp("long", argv[2]) != 0) && (strcmp("auto", argv[2]) != 0))){
 		printf("usage : %s\n", (char*)t->usage);
 		return CMD_RET_FAILURE;
 	}
@@ -2096,7 +2103,7 @@ static int cmd_set_bcn_mcs(cmd_tbl_t *t, int argc, char *argv[])
 		printf("Usage : %s\n", (char*)t->usage);
 		return CMD_RET_FAILURE;
 	}
-	
+
 	vif_id = atoi(argv[2]);
 	if(vif_id != 0 && vif_id != 1) {
 		printf("Usage : %s\n", (char*)t->usage);
@@ -2260,6 +2267,16 @@ static int cmd_set_rts(cmd_tbl_t *t, int argc, char *argv[])
 	}
 
 	return run_shell_cmd(t, argc, argv, "set rts", NULL, 0);
+}
+
+static int cmd_set_cts(cmd_tbl_t *t, int argc, char *argv[])
+{
+	if (strcmp(argv[2], "on") != 0 && strcmp(argv[2], "off") != 0) {
+		printf("usage : %s\n", (char*)t->usage);
+		return CMD_RET_FAILURE;
+	}
+
+	return run_shell_cmd(t, argc, argv, "set cts", NULL, 0);
 }
 
 static int cmd_set_tx_time(cmd_tbl_t *t, int argc, char *argv[])
@@ -2431,6 +2448,44 @@ static int cmd_set_ampdu_mode(cmd_tbl_t *t, int argc, char *argv[])
 	}
 
 	return run_driver_cmd(t, argc, argv, "set ampdu_mode", NULL, 0);
+}
+
+static int cmd_set_bgscan_trx(cmd_tbl_t *t, int argc, char *argv[])
+{
+	int ret = CMD_RET_SUCCESS;
+	if (strcmp(argv[2], "0") != 0 && strcmp(argv[2], "1") != 0) {
+		printf("usage : %s\n", (char*)t->usage);
+		return CMD_RET_FAILURE;
+	}
+
+	ret = run_shell_cmd(t, argc, argv, "set bgscan_trx", NULL, 0);
+	if(ret == CMD_RET_SUCCESS){
+		printf("set bgscan_trx: %s\n", argv[2]);
+	}
+	return ret;
+}
+
+
+static int cmd_set_scan_period(cmd_tbl_t *t, int argc, char *argv[])
+{
+	int ret = CMD_RET_SUCCESS;
+	ret = run_shell_cmd(t, argc, argv, "set scan_period", NULL, 0);
+	if(ret == CMD_RET_SUCCESS){
+		printf("set scan_period: %s\n", argv[2]);
+	}
+	return ret;
+}
+
+static int cmd_set_mesh_rssi_threshold(cmd_tbl_t *t, int argc, char *argv[])
+{
+	int ret = CMD_RET_SUCCESS;
+
+	if (atoi(argv[2]) > -10 || atoi(argv[2]) < -120) {
+		printf("usage : %s\n", (char*)t->usage);
+		return CMD_RET_FAILURE;
+	}
+
+	return run_driver_cmd(t, argc, argv, "set mesh_rssi_threshold", NULL, 0);
 }
 
 

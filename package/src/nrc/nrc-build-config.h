@@ -57,6 +57,11 @@
 /* #define CONFIG_S1G_CHANNEL */
 
 /*
+ * To improve mesh routing at low RSSI.
+ */
+#define CONFIG_SUPPORT_MESH_ROUTING
+
+/*
  * These depend on kernel version.
  */
 /*
@@ -214,6 +219,8 @@
 #if KERNEL_VERSION(5, 9, 0) <= NRC_TARGET_KERNEL_VERSION
 #define CONFIG_NEW_TASKLET_API
 #endif
+
+#define CONFIG_QOS_NULL_OFFLOAD
 
 /* If this configuration is enabled, 
    the function to wake up the target will be delayed 

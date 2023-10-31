@@ -102,6 +102,8 @@ def run_mp(interface, country, security, debug, peermac, ip, batman):
         os.system("sudo ifconfig " + interface + " mtu 1532")
         intf = batman
     else:
+        os.system("sudo iw dev " + interface + " set mesh_param mesh_hwmp_rootmode 2")
+        os.system("sudo iw dev " + interface + " set mesh_param mesh_hwmp_root_interval 1000")
         intf = interface
 
     os.system("sudo iw dev " + interface + " set mesh_param mesh_plink_timeout 0")
@@ -178,7 +180,8 @@ def run_mpp(interface, country, security, debug, peermac, ip, batman):
         os.system("sudo ifconfig " + interface + " mtu 1532")
         intf = batman
     else:
-        os.system("sudo iw dev " + interface + " set mesh_param mesh_hwmp_rootmode 4")
+        os.system("sudo iw dev " + interface + " set mesh_param mesh_hwmp_rootmode 2")
+        os.system("sudo iw dev " + interface + " set mesh_param mesh_hwmp_root_interval 1000")
         os.system("sudo iw dev " + interface + " set mesh_param mesh_gate_announcements 1")
         if ip == 'nodhcp':
             os.system("sudo ifconfig " + interface + " 0.0.0.0")
@@ -261,6 +264,8 @@ def run_map(wlan, mesh, country, security, debug, peermac, ip, batman):
         os.system("sudo ifconfig " + mesh + " mtu 1532")
         intf = batman
     else:
+        os.system("sudo iw dev " + mesh + " set mesh_param mesh_hwmp_rootmode 2")
+        os.system("sudo iw dev " + mesh + " set mesh_param mesh_hwmp_root_interval 1000")
         intf = mesh
 
     os.system("sudo iw dev " + mesh + " set mesh_param mesh_plink_timeout 0")

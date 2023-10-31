@@ -120,8 +120,8 @@ void init_s1g_channels(struct nrc *nw);
 #endif /* #ifdef CONFIG_S1G_CHANNEL */
 
 void nrc_mac_clean_txq(struct nrc *nw);
+void nrc_mac_flush_txq(struct nrc *nw);
 void nrc_send_beacon_loss(struct nrc *nw);
-#endif
 
 
 void nrc_mac_roc_finish(struct work_struct *work);
@@ -138,10 +138,15 @@ void nrc_tx_tasklet(struct tasklet_struct *t);
 #else
 void nrc_tx_tasklet(unsigned long cookie);
 #endif
+#ifdef CONFIG_USE_TXQ
 void nrc_cleanup_txq_all(struct nrc *nw);
+#endif
 void nrc_cleanup_txq (struct nrc *nw, struct ieee80211_txq *txq);
-
+void nrc_cleanup_txq_by_macaddr (struct nrc *nw, struct ieee80211_vif *vif,
+					uint8_t *macaddr);
 
 void nrc_cleanup_ba_session_sta (void *data, struct ieee80211_sta *sta);
 void nrc_cleanup_ba_session_vif (struct nrc *nw, struct ieee80211_vif *vif);
 void nrc_cleanup_ba_session_all (struct nrc *nw);
+
+#endif

@@ -92,7 +92,11 @@ void nrc_hif_free_skb(struct nrc *nw, struct sk_buff *skb)
 	struct frame_hdr *fh = (struct frame_hdr *)(hif + 1);
 	bool ack = true;
 	int credit;
-	struct ieee80211_hdr *mh;
+
+	if (!skb) {
+		pr_err("[%s] skb is NULL!", __func__);
+		return;
+	}
 
 	if (hif->type == HIF_TYPE_FRAME) {
 		struct ieee80211_tx_info *txi = IEEE80211_SKB_CB(skb);
@@ -111,22 +115,6 @@ void nrc_hif_free_skb(struct nrc *nw, struct sk_buff *skb)
 		atomic_sub(credit, &nw->tx_pend[fh->flags.tx.ac]);
 		/* Peel out our headers */
 		skb_pull(skb, nw->fwinfo.tx_head_size);
-
-		mh = (struct ieee80211_hdr *)skb->data;
-		if (ieee80211_is_assoc_resp(mh->frame_control) ||
-			ieee80211_is_reassoc_resp(mh->frame_control)) {
-			struct ieee80211_mgmt *mgmt = (struct ieee80211_mgmt *)skb->data;
-			if (mgmt->u.assoc_resp.status_code == 51) { // DENIED_LISTEN_INTERVAL_TOO_LARGE
-				struct sk_buff *skb_deauth;
-				/* Pretend to receive a deauth from @sta */
-				skb_deauth = ieee80211_deauth_get(nw->hw, mgmt->bssid, mgmt->da, mgmt->bssid, WLAN_REASON_DEAUTH_LEAVING, NULL, false);
-				if (!skb_deauth) {
-					nrc_dbg(NRC_DBG_STATE, "%s Fail to alloc skb", __func__);
-					return;
-				}
-				ieee80211_rx_irqsafe(nw->hw, skb_deauth);
-			}
-		}
 
 		ieee80211_tx_status_irqsafe(nw->hw, skb);
 #ifdef CONFIG_USE_TXQ
@@ -218,8 +206,12 @@ static void nrc_hif_work(struct work_struct *work)
 							skb_frame = NULL;
 						}
 					}
-				}	
+				}
 			} else { // Frame
+#ifndef CONFIG_USE_TXQ
+				if (nw->drv_state == NRC_DRV_PS)
+					break;
+#endif
 				/*
 				 * UDP packets can reach here continuously
 				 * without checking credit and then it makes infinite loop.
@@ -319,9 +311,8 @@ static void nrc_hif_ps_work(struct work_struct *work)
 #ifdef CONFIG_USE_TXQ
 			nrc_cleanup_txq_all(nw);
 #endif
-			nrc_ps_dbg("Enter DEEPSLEEP2!!!\n");
-			nrc_ps_dbg("sleep_duration: %lld ms\n", p->ps_duration);
-
+			nrc_ps_dbg("Enter DEEPSLEEP2!!!");
+			nrc_ps_dbg("sleep_duration: %lld ms", p->ps_duration);
 		} else {
 			nrc_ps_dbg("Enter MODEMSLEEP!!!\n");
 		}
@@ -537,9 +528,21 @@ int nrc_xmit_wim(struct nrc *nw, struct sk_buff *skb, enum HIF_SUBTYPE stype)
 	struct ieee80211_vif *vif = txi->control.vif;
 	int len = skb->len;
 	int ret = 0;
+	struct wim *wim = (void *) skb->data;
 
-	if ((nw->drv_state == NRC_DRV_PS) &&
+	if (nw->drv_state == NRC_DRV_PS &&
 		atomic_read(&nw->d_deauth.delayed_deauth)) {
+		dev_kfree_skb(skb);
+		return 0;
+	}
+
+	if (nw->hif->suspended) {
+		nrc_ps_dbg("@@@ HIF is suspended. delete wim (stype:%d, cmd:%d, len:%d)",
+			stype, wim->cmd, len);
+		if (!atomic_read(&nw->d_deauth.delayed_deauth)) {
+			nrc_ps_dbg("@@@ delayed_deauth is 0");
+			//WARN_ON(true);
+		}
 		dev_kfree_skb(skb);
 		return 0;
 	}
@@ -1020,6 +1023,12 @@ static int hif_receive_skb(struct nrc_hif_device *dev, struct sk_buff *skb)
 
 void nrc_hif_wake_target (struct nrc_hif_device *dev)
 {
+	struct nrc *nw;
+
+	BUG_ON(dev == NULL);
+	nw = to_nw(dev);
+	BUG_ON(nw == NULL);
+
 #if defined(CONFIG_DELAY_WAKE_TARGET)
 	ktime_t cur_time, elapsed;
 	unsigned int elapsed_msecs;
@@ -1035,9 +1044,13 @@ void nrc_hif_wake_target (struct nrc_hif_device *dev)
 		nrc_ps_dbg("Nothing to do, %u", elapsed_msecs);
 	}
 #endif
-	
-	gpio_set_value(power_save_gpio[0], 1);
-	nrc_ps_dbg("Set GPIO high for wakeup");
+
+	if ((int)atomic_read(&nw->fw_state) == NRC_FW_LOADING) {
+		nrc_mac_dbg("Loading FW is in progress\n");
+	} else {
+		gpio_set_value(power_save_gpio[0], 1);
+		nrc_ps_dbg("Set GPIO high for wakeup");
+	}
 }
 
 void nrc_hif_sleep_target_prepare (struct nrc_hif_device *dev, int mode)
@@ -1089,8 +1102,18 @@ int nrc_hif_wakeup_device(struct nrc_hif_device *dev)
 
 int nrc_hif_reset_device(struct nrc_hif_device *dev)
 {
-	if (dev->hif_ops->reset) {
-		dev->hif_ops->reset(dev);
+	if (dev->hif_ops->reset_device) {
+		dev->hif_ops->reset_device(dev);
+		return 0;
+	}
+
+	return -1;
+}
+
+int nrc_hif_reset_rx (struct nrc_hif_device *dev)
+{
+	if (dev->hif_ops->reset_rx) {
+		dev->hif_ops->reset_rx(dev);
 		return 0;
 	}
 

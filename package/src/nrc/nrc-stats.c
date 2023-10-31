@@ -231,46 +231,21 @@ int nrc_stats_rssi(void)
 	return rssi;
 }
 
-static int metric_compute(void *arr_t, int index, int count)
-{
-	int i;
-	uint16_t min = U16_MAX;
-	uint16_t max = 0;
-	int sum = 0;
-	uint16_t *arr = arr_t;
-
-	BUG_ON(!arr);
-
-	for (i = 0; i < count; i++) {
-		uint16_t metric = arr[i];
-
-		min = min(metric, min);
-		max = max(metric, max);
-		sum += metric;
-	}
-
-	sum -= min;
-	sum -= max;
-
-	BUG_ON(count == 2);
-	return sum/(count-2);
-}
-
-int nrc_stats_metric(uint8_t *macaddr)
+uint32_t nrc_stats_metric(uint8_t *macaddr)
 {
 	struct stats_sta *cur, *next;
-	uint16_t metric = 0;
+	int rssi = 0;
 
 	spin_lock(&state_lock);
 	list_for_each_entry_safe(cur, next, &state_head, list) {
 		if (memcmp(cur->macaddr, macaddr, 6) == 0) {
-			metric = moving_average_compute(cur->metric);
+			rssi = moving_average_compute(cur->rssi);
 			break;
 		}
 	}
 	spin_unlock(&state_lock);
 
-	return metric;
+	return nrc_stats_calc_metric(rssi);
 }
 
 static struct moving_average *nrc_stats_rssi_init2(void)
@@ -287,13 +262,6 @@ static struct moving_average *nrc_stats_snr_init2(void)
 	return moving_average_init(sizeof(uint8_t), count, snr_compute);
 }
 
-static struct moving_average *nrc_stats_metric_init(void)
-{
-	const int count = 4;
-
-	return moving_average_init(sizeof(uint16_t), count, metric_compute);
-}
-
 static void nrc_stats_rssi_update2(struct moving_average *h, int8_t rssi)
 {
 	moving_average_update(h, &rssi);
@@ -304,15 +272,64 @@ static void nrc_stats_snr_update2(struct moving_average *h, uint8_t snr)
 	moving_average_update(h, &snr);
 }
 
-#define TX_OFFSET (100)
-#define PATH_LOSS_CONSTANT (1)
-static void nrc_stats_metric_update(struct moving_average *h, int8_t rssi)
+#ifdef CONFIG_SUPPORT_MESH_ROUTING
+#define MESH_PATH_RSSI_THRESHOLD (-90)
+static int mesh_rssi_threshold = MESH_PATH_RSSI_THRESHOLD;
+int nrc_stats_set_mesh_rssi_threshold(int rssi)
 {
-	uint16_t metric;
+	if (rssi > -10 || rssi < -120) {
+		return -1;
+	}
+
+	mesh_rssi_threshold = rssi;
+	return 0;
+}
+
+int nrc_stats_get_mesh_rssi_threshold(void)
+{
+	return mesh_rssi_threshold;
+}
+#endif
+
+/* Must larger than 0 and lower than STA_SLOW_THRESHOLD(6000).
+ * Codel parameters get more TX delays in this condition.
+ * Ref: https://newracom.atlassian.net/browse/MACSW-4 */
+#define METRIC_DEFAULT (5000)
+
+/* Worthless to calculate RSSI which is lower than -120 */
+#define METRIC_TX_OFFSET (120)
+
+/* Under bad air if RSSI is lower than -80.
+ * Getting lower RSSI lower than -80, more lower metric. */
+#define METRIC_WEIGHT_THRESHOLD (-80)
+
+uint32_t nrc_stats_calc_metric(int rssi)
+{
+	uint32_t metric;
+	uint32_t weight = 1;
+
+	/* return default metric before rssi measured once */
+	if (rssi >= 0) {
+		return METRIC_DEFAULT;
+	}
+
+	if (METRIC_TX_OFFSET + rssi < 0) {
+		rssi = -METRIC_TX_OFFSET;
+	}
+
+#ifdef CONFIG_SUPPORT_MESH_ROUTING
+	if (rssi < METRIC_WEIGHT_THRESHOLD) {
+		weight = METRIC_WEIGHT_THRESHOLD - rssi;
+	}
+#endif
 
 	/* simplified rssi conversion formula */
-	metric = (TX_OFFSET + rssi) * 100 / PATH_LOSS_CONSTANT;
-	moving_average_update(h, &metric);
+	metric = (uint32_t)(METRIC_TX_OFFSET + rssi) * 1000 / weight;
+	if (metric < 0) {
+		metric = 0;
+	}
+
+	return metric;
 }
 
 int nrc_stats_init(void)
@@ -333,7 +350,6 @@ void nrc_stats_deinit(void)
 		list_del(&cur->list);
 		kfree(cur->rssi);
 		kfree(cur->snr);
-		kfree(cur->metric);
 		kfree(cur);
 	}
 	spin_unlock(&state_lock);
@@ -348,7 +364,6 @@ int nrc_stats_update(uint8_t *macaddr, int8_t snr, int8_t rssi)
 		if (memcmp(cur->macaddr, macaddr, 6) == 0) {
 			nrc_stats_rssi_update2(cur->rssi, rssi);
 			nrc_stats_snr_update2(cur->snr, snr);
-			nrc_stats_metric_update(cur->metric, rssi);
 			spin_unlock(&state_lock);
 			return 0;
 		}
@@ -386,7 +401,6 @@ int nrc_stats_add(uint8_t *macaddr, int count)
 
 	sta->rssi = nrc_stats_rssi_init2();
 	sta->snr = nrc_stats_snr_init2();
-	sta->metric = nrc_stats_metric_init();
 
 	nrc_stats_dbg("[add] %pM\n", macaddr);
 	spin_unlock(&state_lock);
@@ -405,7 +419,6 @@ int nrc_stats_del(uint8_t *macaddr)
 			list_del(&cur->list);
 			kfree(cur->rssi);
 			kfree(cur->snr);
-			kfree(cur->metric);
 			kfree(cur);
 		}
 	}

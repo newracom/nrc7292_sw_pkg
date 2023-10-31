@@ -16,10 +16,6 @@
 			spidev@0{
 				status = "disabled";
 			};
-			spidev@1{
-				status = "disabled";
-			};
-
 		};
 	};
 
@@ -57,4 +53,3 @@
         max_speed_hz = <&nrc>,"spi-max-frequency:0";
     };
 };
-

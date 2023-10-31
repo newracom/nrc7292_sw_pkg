@@ -29,10 +29,14 @@ def BtnPressedEvent(c):
     os.system(cmd)
 
 def init():
-    if int(sys.argv[1]) == 26 or int(sys.argv[1]) == 16:
+    if int(sys.argv[1]) == 26:
+        GPIO.setmode(GPIO.BCM)
+        GPIO.setup(int(sys.argv[1]), GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        GPIO.add_event_detect(int(sys.argv[1]), GPIO.FALLING, callback=BtnPressedEvent, bouncetime=300)
+    elif int(sys.argv[1]) == 16:
         GPIO.setmode(GPIO.BCM)
         GPIO.setup(int(sys.argv[1]), GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
-        GPIO.add_event_detect(int(sys.argv[1]), GPIO.RISING, callback=BtnPressedEvent, bouncetime=300)
+        GPIO.add_event_detect(int(sys.argv[1]), GPIO.RISING, callback=BtnPressedEvent, bouncetime=300)        
     else:
         usage_print()        
 

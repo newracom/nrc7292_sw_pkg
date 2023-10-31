@@ -54,7 +54,7 @@ bd_name           = ''       # board data name (bd defines max TX Power per CH/M
                              # specify your bd name here. If not, follow naming rules in strBDName()
 ##################################################################################
 # PHY Conf.
-guard_int         = 'long'   # Guard Interval ('long'(LGI) or 'short'(SGI))
+guard_int         = 'auto'   # Guard Interval ('auto' (adaptive) or 'long'(LGI) or 'short'(SGI))
 ##################################################################################
 # MAC Conf.
 # S1G Short Beacon (AP & MESH Only)
@@ -113,7 +113,7 @@ listen_interval   = 1000     # STA (listen interval in BI unit) (max:65535)
 #  Period is in unit of 1000TU(1024ms, 1TU=1024us)
 #  Note: if disabled, AP removes STAs' info only with explicit disconnection like deauth
 bss_max_idle_enable = 1      # 0 (disable) or 1 (enable)
-bss_max_idle        = 1800   # time interval (e.g. 1800: 1843.2 sec) (1 ~ 65535)
+bss_max_idle        = 1800   # time interval (e.g. 1800: 1843.2 sec) (1 ~ 163,830,000)
 #--------------------------------------------------------------------------------#
 #  SW encryption/decryption (default HW offload)
 sw_enc              = 0     # 0 (HW), 1 (SW), 2 (HYBRID: SW GTK HW PTK)
@@ -130,9 +130,6 @@ self_config       = 0        # 0 (disable)  or 1 (enable)
 prefer_bw         = 0        # 0: no preferred bandwidth, 1: 1M, 2: 2M, 4: 4M
 dwell_time        = 100      # max dwell is 1000 (ms), min: 10ms, default: 100ms
 #--------------------------------------------------------------------------------#
-# Credit num of AC_BE for flow control between host and target (Test only)
-credit_ac_be      = 40        # number of buffer (min: 40, max: 120)
-#--------------------------------------------------------------------------------#
 # Filter tx deauth frame for Multi Connection Test (STA Only) (Test only)
 discard_deauth    = 0         # 1: discard TX deauth frame on STA
 #--------------------------------------------------------------------------------#
@@ -143,8 +140,22 @@ bitmap_encoding   = 1         # 0 (disable) or 1 (enable)
 reverse_scrambler = 1         # 0 (disable) or 1 (enable)
 #--------------------------------------------------------------------------------#
 # Use bridge setup in br0 interface
-use_bridge_setup = 0         # AP & STA : 0 (not use bridge setup) or n (use bridge setup with eth(n-1))
-                             # RELAY : 0 (not use bridge setup) or 1 (use bridge setup with wlan0,wlan1)
+use_bridge_setup  = 0         # AP & STA : 0 (not use bridge setup) or n (use bridge setup with eth(n-1))
+                              # RELAY : 0 (not use bridge setup) or 1 (use bridge setup with wlan0,wlan1)
+#--------------------------------------------------------------------------------#
+# Supported CH Width (STA Only)
+support_ch_width  = 1         # 0 (1/2MHz Support) or 1 (1/2/4MHz Support)
+#--------------------------------------------------------------------------------#
+# Rate control configuration
+# Types of RC: (0) System default, (1)Disable,Use default_mcs (2)Feedback RC. (3)Consistent RC.
+ap_rc_mode = 2
+sta_rc_mode = 2
+#  Default MCS: (0 ~ 7)
+ap_rc_default_mcs = 2
+sta_rc_default_mcs = 2
+#--------------------------------------------------------------------------------#
+# Use Power save pretend operation for no response STA
+power_save_pretend  = 0      # 0 (disable) or 1 (enable)
 ##################################################################################
 
 def check(interface):
@@ -331,6 +342,16 @@ def strOriCountry():
     else:
         return str(sys.argv[3])
 
+def strRCMode(param):
+    if int(param) == 0:
+        return 'Disabled'
+    elif int(param) == 1:
+        return 'Feedback RC'
+    elif int(param) == 2:
+        return 'Consistent RC'
+    else:
+        return 'Invalid Mode'
+
 def isNumber(s):
     try:
         float(s)
@@ -387,8 +408,9 @@ def argv_print():
     if int(fw_download) == 1:
         print("Download FW      : " + fw_name)
     print ("MAX TX Power     : " + str(max_txpwr) + " dBm")
-    if int(bss_max_idle_enable) == 1 and strSTA() == 'AP':
-        print("BSS MAX IDLE     : " + str(bss_max_idle))
+    if int(bss_max_idle_enable) == 1 :
+        if strSTA() == 'AP' or strSTA() == 'RELAY' or strSTA() == 'STA':
+            print("BSS MAX IDLE     : " + str(bss_max_idle))
     if strSTA() == 'STA':
         print("Power Save Type  : " + strPSType())
         if int(power_save) > 0:
@@ -399,6 +421,12 @@ def argv_print():
             print("Listen Interval  : " + str(listen_interval))
     if strSTA() == 'MESH':
         print("Mesh Mode        : " + strMeshMode())
+    if strSTA() == 'AP':
+        print("Rate Control     : " + strRCMode(ap_rc_mode))
+        print("Default MCS      : " + str(ap_rc_default_mcs))
+    if strSTA() == 'STA':
+        print("Rate Control     : " + strRCMode(sta_rc_mode))
+        print("Default MCS      : " + str(sta_rc_default_mcs))
     print("------------------------------")
 
 def copyConf():
@@ -539,9 +567,10 @@ def setModuleParam():
     # Initialize arguments for module params
     spi_arg = fw_arg = power_save_arg = sleep_duration_arg = \
     bss_max_idle_arg = ndp_preq_arg = ndp_ack_1m_arg = auto_ba_arg =\
-    sw_enc_arg =  cqm_arg = listen_int_arg = drv_dbg_arg = credit_acbe_arg = \
+    sw_enc_arg =  cqm_arg = listen_int_arg = drv_dbg_arg = \
     sbi_arg = discard_deauth_arg = dbg_fc_arg = kr_band_arg = legacy_ack_arg = \
-    be_arg = rs_arg = beacon_bypass_arg = ps_gpio_arg = bd_name_arg = ""
+    be_arg = rs_arg = beacon_bypass_arg = ps_gpio_arg = bd_name_arg = \
+    support_ch_width_arg = ps_pretend_arg = ""
 
     # Check ft232h_usb_spi
     if int(ft232h_usb_spi) > 0:
@@ -591,7 +620,7 @@ def setModuleParam():
     # module param for bss_max_idle (keep alive)
     # default: bss_max_idle(0: disabled)
     if int(bss_max_idle_enable) == 1:
-        if strSTA() == 'AP' or strSTA() == 'RELAY':
+        if strSTA() == 'AP' or strSTA() == 'RELAY' or strSTA() == 'STA':
             bss_max_idle_arg = " bss_max_idle=" + str(bss_max_idle)
 
     # module param for NDP Prboe Request (NDP scan)
@@ -646,11 +675,6 @@ def setModuleParam():
     elif str(sys.argv[3]) == 'K2':
         kr_band_arg = " kr_band=2"
 
-    # module param for flow control between host and target (test only)
-    # default: credit_ac_be(40)
-    if int(credit_ac_be) > 40 and (credit_ac_be) <= 120:
-        credit_acbe_arg = " credit_ac_be=" + str(credit_ac_be)
-
     # module param for deauth-discard on STA (test only)
     # default: discard_deauth(0: disabled)
     if int(discard_deauth) == 1:
@@ -676,9 +700,21 @@ def setModuleParam():
     if int(reverse_scrambler) == 0:
         rs_arg = " reverse_scrambler=0"
 
+    # module param for power save pretend
+    # default: use power save pretend (0: disabled)
+    if int(power_save_pretend) == 1:
+        ps_pretend_arg = " ps_pretend=1"
+
     # module param for board data file
     # default: bd.dat
     bd_name_arg = " bd_name=" + strBDName()
+
+    # module param for rate control mode
+    # default:  rc_mode=1(Individual for each STA)
+    rc_mode_arg = " ap_rc_mode=" + str(ap_rc_mode) + " sta_rc_mode=" + str(sta_rc_mode)
+    # default:  rc_default_mcs=2(mcs2)
+    rc_default_mcs_arg = " ap_rc_default_mcs=" + str(ap_rc_default_mcs) + \
+                        " sta_rc_default_mcs=" + str(sta_rc_default_mcs)
 
     # module parameter setting while loading NRC driver
     # Default value is used if arg is not defined
@@ -687,15 +723,21 @@ def setModuleParam():
     # From linux kernel version 5.16 or later, spi_arg is not used as a module param.
     major, minor, patch = get_linux_kernel_release_version()
 
+    # module param for supported channel width
+    # default : support 1/2/4MHz (1: 1/2/4Mhz)
+    if strSTA() == 'STA' and int(support_ch_width) == 0:
+        support_ch_width_arg = " support_ch_width=0"
+
     if major*1000+minor < 5016:
         module_param = spi_arg
 
     module_param += fw_arg + \
                  power_save_arg + sleep_duration_arg + bss_max_idle_arg + \
                  ndp_preq_arg + ndp_ack_1m_arg + auto_ba_arg + sw_enc_arg + \
-                 cqm_arg + listen_int_arg + drv_dbg_arg + credit_acbe_arg + \
+                 cqm_arg + listen_int_arg + drv_dbg_arg + \
                  sbi_arg + discard_deauth_arg + dbg_fc_arg + kr_band_arg + legacy_ack_arg + \
-                 be_arg + rs_arg + beacon_bypass_arg + ps_gpio_arg + bd_name_arg \
+                 be_arg + rs_arg + beacon_bypass_arg + ps_gpio_arg + bd_name_arg + support_ch_width_arg + \
+                 rc_mode_arg + rc_default_mcs_arg + ps_pretend_arg \
 
     return module_param
 
@@ -752,8 +794,9 @@ def run_common():
         print("[*] Transmission Power Control(TPC) is activated")
         os.system('sudo iw phy nrc80211 set txpower limit ' + str(int(max_txpwr) * 100))
 
-    print("[5] Set guard interval")
-    os.system('/home/pi/nrc_pkg/script/cli_app set gi ' + guard_int)
+    print("[5] Set guard interval: " + guard_int)
+    if str(guard_int) != 'auto':
+        os.system('/home/pi/nrc_pkg/script/cli_app set gi ' + guard_int)
 
     print("[*] Start DHCPCD and DNSMASQ")
     startDHCPCD()

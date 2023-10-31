@@ -79,7 +79,8 @@ struct nrc_hif_ops {
 	int (*wait_for_xmit)(struct nrc_hif_device *dev, struct sk_buff *skb);
 	int (*receive)(struct nrc_hif_device *dev, struct sk_buff *skb);
 	void (*close)(struct nrc_hif_device *dev);
-	void (*reset)(struct nrc_hif_device *dev);
+	void (*reset_device)(struct nrc_hif_device *dev);
+	void (*reset_rx)(struct nrc_hif_device *dev);
 	void (*wakeup)(struct nrc_hif_device *dev);
 	int (*test)(struct nrc_hif_device *dev);
 	void (*config)(struct nrc_hif_device *dev);

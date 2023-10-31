@@ -4,105 +4,156 @@
 *
 *******************************************************************
 
+[2023-10-31]
+Change summary for version 1.5:
+
+    New features
+    * Multi-STA rate control (RC) for AP (v1.5)
+      o Configured by module param, 'ap_rc_mode'
+        1: disabled RC
+        2: original RC algorithm (AP will use statistics for each STA)
+        3: use the same MCS which is used by STA when sending frame
+    * RSSI-based rate control (RC) for STA (v1.5)
+      o cli_app set rc_pf <1|2> (This should be done before the Wi-Fi connection.)
+        1: original RC (default)
+        2: RSSI based RC
+
+    Changes
+    * Coverage enhancement by using 1/2MHz MCS0 frame on 2/4MHz channels
+    * 1/2MHz STA support at 4MHz AP
+    * DTS update for SPI interface: enable spidev0.1
+    * Enhance auto guard interval (GI) with peer node's GI capability check
+    * Add auto RX gain control
+    * Increase buffer pool and credit number of AC_BE for flow control between host and target (from 40 to 80 and it's not configurable anymore via the module parameter)
+    * WDT reset recovery support on MAP
+    * Enhance to discard frames with corrupted host interface header
+    * Check traveling pilot support field of S1G capabilities element
+    * Enhance to conduct TRX operation during the background scanning
+    * Improve routing at the low RSSI on the mesh node
+    * Recover 'rxskb' error through the reset HSPI controller
+    * Mesh inactivity timer off by default
+    * China channel update: 749.0MHz ~ 757.0MHz
+
+    Bugfix
+    * NDP CTS compliance for RTS with response indication (RI) 1 on AP
+    * Not to send WIM message when target is in deep sleep
+    * Delayed ping issue triggered by powering off the STA
+    * Long beacon only duty cycle setting issue
+    * Null pointer dereference triggered by a keep alive frame after the disassociation
+    * Bandwidth misconfiguration in the MCS10 frame triggered by fragmentation cancellation under strong RSSI
+    * Kernel panic triggerd by the inaccessable vif address when hostapd is disabled in 4-address (bridge) mode
+    * Fail to enable hybrid security on the relay node
+    * Occasional modem recovery operation on the bridged relay node
+
+    Known Issues
+    * Not Support 5 US channels due to hostapd channel capacity reason
+      (Not supported channel: 100(BW_1M, 925.5MHz), 104(BW_1M, 926.5MHz),
+      108(BW_1M, 927.5MHz), 112(BW_2M, 927MHz), 116(BW_4M, 926MHz))
+    * Due to the legacy Wi-Fi/HaLow channel mapping, "hostapd_cli chan_switch" command experiences a 60-second delay when using radar channels below:
+      5500(#100/925.5MHz), 5520(#104/926.5MHz), 5540(#108/927.5MHz),
+      5560(#112/927MHz), 5580(#116/926MHz)
+    * DHCP failure or delay in multi-hop MBSS
+      (Recommend using static IP in more than 3-hop MBSS)
+
 [2023-09-08]
 Change summary for version 1.4.1:
 
     Changes
-        * Enhanced dynamic vendor IE to encompass probe request/response and association request frames
-        * Configuration for beacon transmission rates
-        * Introduction of Continuous TX mode
-        * Elimination of the K0 band and restoration of K1/K2 for backward compatibility
-        * Expanded support for up to 1000 STAs
-        * Support 1MHz primary channel location of 4MHz AP/STA
-        * Avoidance of fragmented data frames in strong/mid RF field
-        * Improved transmission of large-size packets
-        * Extended supported Linux kernel version: up to 6.1.x
+    * Enhanced dynamic vendor IE to encompass probe request/response and association request frames
+    * Configuration for beacon transmission rates
+    * Introduction of Continuous TX mode
+    * Elimination of the K0 band and restoration of K1/K2 for backward compatibility
+    * Expanded support for up to 1000 STAs
+    * Support 1MHz primary channel location of 4MHz AP/STA
+    * Avoidance of fragmented data frames in strong/mid RF field
+    * Improved transmission of large-size packets
+    * Extended supported Linux kernel version: up to 6.1.x
 
     Bugfix
-        * Scan failures in the K2 band
-        * Incorrect usage of the CTS format for RTS with RI 1 (NDP-Response) in open mode AP
-        * cli_app: if duty cycle setting fails, it is now disabled, and an error is returned to the cli_app
-        * Multicast frame's SN is non-sequential when duty cycle is enabled
-        * rmmod failure which can occur due to target malfunctions or SPI issues
-        * Beacon loss handling at the uCode
-        * Kernel panic that may occur when adding a large number of vendor IEs
-        * Fixed ch_switch_cnt number in the case of hidden SSID AP
-        * Heap leakage during the updating of beacon frames
-        * WDT reset that could occur during frequent ifconfig up/down operations on the AP
-        * Kernel panic that could occur when the enable_beacon_bypass feature is enabled
-        * Failure of connecting to an AP with TW country code
-        * PN order mismatch for big-size packet transmission
-        * iw scan meshid command failure
-        * 2MHz secondary CCA operation
+    * Scan failures in the K2 band
+    * Incorrect usage of the CTS format for RTS with RI 1 (NDP-Response) in open mode AP
+    * cli_app: if duty cycle setting fails, it is now disabled, and an error is returned to the cli_app
+    * Multicast frame's SN is non-sequential when duty cycle is enabled
+    * rmmod failure which can occur due to target malfunctions or SPI issues
+    * Beacon loss handling at the uCode
+    * Kernel panic that may occur when adding a large number of vendor IEs
+    * Fixed ch_switch_cnt number in the case of hidden SSID AP
+    * Heap leakage during the updating of beacon frames
+    * WDT reset that could occur during frequent ifconfig up/down operations on the AP
+    * Kernel panic that could occur when the enable_beacon_bypass feature is enabled
+    * Failure of connecting to an AP with TW country code
+    * PN order mismatch for big-size packet transmission
+    * iw scan meshid command failure
+    * 2MHz secondary CCA operation
 
     Known Issues
-        * Not Support 5 US channels due to hostapd channel capacity reason
-          (Not supported channel: 100(BW_1M, 925.5MHz), 104(BW_1M, 926.5MHz),
-          108(BW_1M, 927.5MHz), 112(BW_2M, 927MHz), 116(BW_4M, 926MHz))
-        * Due to the legacy Wi-Fi/HaLow channel mapping, "hostapd_cli chan_switch" command experiences a 60-second delay when using radar channels below:
-          5500(#100/925.5MHz), 5520(#104/926.5MHz), 5540(#108/927.5MHz),
-          5560(#112/927MHz), 5580(#116/926MHz)
-        * DHCP failure or delay in multi-hop MBSS
-          (Recommend using static IP in more than 3-hop MBSS)
+    * Not Support 5 US channels due to hostapd channel capacity reason
+      (Not supported channel: 100(BW_1M, 925.5MHz), 104(BW_1M, 926.5MHz),
+      108(BW_1M, 927.5MHz), 112(BW_2M, 927MHz), 116(BW_4M, 926MHz))
+    * Due to the legacy Wi-Fi/HaLow channel mapping, "hostapd_cli chan_switch" command experiences a 60-second delay when using radar channels below:
+      5500(#100/925.5MHz), 5520(#104/926.5MHz), 5540(#108/927.5MHz),
+      5560(#112/927MHz), 5580(#116/926MHz)
+    * DHCP failure or delay in multi-hop MBSS
+      (Recommend using static IP in more than 3-hop MBSS)
 
 [2023-06-16]
 Change summary for version 1.4:
 
     New features
-        * HaLow certification features
-          o HaLow R1 mandatory features (v1.4)
-          o HaLow R1 optional features (v1.4)
-            - AP optional features: BSS color, fragmentation
-            - STA optional features: MCS 3-7, NDP probing, A-MPDU TX
-        * Kr00k vulnerability (v1.4)
-        * Dynamic fragmentation (v1.4)
-        * Network bridge (v1.4)
-        * RSSI-based roaming (v1.4)
-        * Duty cycle (v1.4)
+    * HaLow certification features
+      o HaLow R1 mandatory features (v1.4)
+      o HaLow R1 optional features (v1.4)
+        - AP optional features: BSS color, fragmentation
+        - STA optional features: MCS 3-7, NDP probing, A-MPDU TX
+    * Kr00k vulnerability (v1.4)
+    * Dynamic fragmentation (v1.4)
+    * Network bridge (v1.4)
+    * RSSI-based roaming (v1.4)
+    * Duty cycle (v1.4)
 
     Changes
-        * Support HaLow certification with the single firmware package
-        * Regulation related updates
-          (1) Updated JP LBT/duty cycle regulation support
-          (2) KR channel update: K0/K1/K2 channels
-          (3) EU channel update: remove 2MHz channel based on IEEE 802.11-2020
-        * Firmware/host driver refactoring
-        * Remove modem sleep feature
-        * Support faster wake-up time in deep sleep mode
-        * Support serial flash power down in the deep sleep mode
-        * Support active scanning on mesh
-        * Enhance duty cycle feature in terms of stability and monitoring
-        * Update the maximum supported STA count from 1000 to 700 due to the increased heap usage in the firmware
-        * Association control based on BSS max idle period and listen interval values
-        * cli_app update (refer to UG-7292-007-Commnad line application v2.0 document)
+    * Support HaLow certification with the single firmware package
+    * Regulation related updates
+      (1) Updated JP LBT/duty cycle regulation support
+      (2) KR channel update: K0/K1/K2 channels
+      (3) EU channel update: remove 2MHz channel based on IEEE 802.11-2020
+    * Firmware/host driver refactoring
+    * Remove modem sleep feature
+    * Support faster wake-up time in deep sleep mode
+    * Support serial flash power down in the deep sleep mode
+    * Support active scanning on mesh
+    * Enhance duty cycle feature in terms of stability and monitoring
+    * Update the maximum supported STA count from 1000 to 700 due to the increased heap usage in the firmware
+    * Association control based on BSS max idle period and listen interval values
+    * cli_app update (refer to UG-7292-007-Commnad line application v2.0 document)
 
     Bugfix
-        * HSPI problem detection and recovery issue
-        * hw_verion update error issue under frequent power on/off situation
-        * Initialized aggregation/guard interval setting issue after target recovery
-        * Default CCA level of 4MHz channel bandwidth
-        * Fast synchronization of rx_slot count of host driver to avoid HSPI operation failure on the low-performance host platform
-        * Unexpected operating channel change caused by self_config during JP 4MHz channel operation
-        * Buffer mismatch triggered disconnection in the bridged node
-        * Generating assert during the stop of relay node
-        * Irrecoverable FW by mishandling of IP/DHCP/ARP frames in mesh and relay node
-        * Long beacon_int compliance in TIM mode deep sleep
-        * Imbalanced uplink/downlink performance at the repeater mode * lay) node
-        * Host driver build error in the Linux kernel version 4.4 or lower
-        * Incorrect 1MHz primary channel location and primary channel number
-        * Inflexible S1G format for probe response frame
-        * Inflexible 1MHz control response support
-        * Fail to set output of relevant GPIO before entering the deep sleep
-        * Mesh control field correction to consider 4-address usage
+    * HSPI problem detection and recovery issue
+    * hw_verion update error issue under frequent power on/off situation
+    * Initialized aggregation/guard interval setting issue after target recovery
+    * Default CCA level of 4MHz channel bandwidth
+    * Fast synchronization of rx_slot count of host driver to avoid HSPI operation failure on the low-performance host platform
+    * Unexpected operating channel change caused by self_config during JP 4MHz channel operation
+    * Buffer mismatch triggered disconnection in the bridged node
+    * Generating assert during the stop of relay node
+    * Irrecoverable FW by mishandling of IP/DHCP/ARP frames in mesh and relay node
+    * Long beacon_int compliance in TIM mode deep sleep
+    * Imbalanced uplink/downlink performance at the repeater mode * lay) node
+    * Host driver build error in the Linux kernel version 4.4 or lower
+    * Incorrect 1MHz primary channel location and primary channel number
+    * Inflexible S1G format for probe response frame
+    * Inflexible 1MHz control response support
+    * Fail to set output of relevant GPIO before entering the deep sleep
+    * Mesh control field correction to consider 4-address usage
 
     Known Issues
-        * Not Support 5 US channels due to hostapd channel capacity reason
-          (Not supported channel: 100(BW_1M, 925.5MHz), 104(BW_1M, 926.5MHz),
-          108(BW_1M, 927.5MHz), 112(BW_2M, 927MHz), 116(BW_4M, 926MHz))
-        * Due to the legacy Wi-Fi/HaLow channel mapping, "hostapd_cli chan_switch" command can’t be applied to following radar channels:
-          5500(#100/925.5MHz), 5520(#104/926.5MHz), 5540(#108/927.5MHz),
-          5560(#112/927MHz), 5580(#116/926MHz)
-        * DHCP failure or delay in multi-hop MBSS
-          (Recommend using static IP in more than 3-hop MBSS)
-        * Not supported on KR MIC package
-          (The concurrent mode can’t be applied due to the KR MIC regulation)
+    * Not Support 5 US channels due to hostapd channel capacity reason
+      (Not supported channel: 100(BW_1M, 925.5MHz), 104(BW_1M, 926.5MHz),
+      108(BW_1M, 927.5MHz), 112(BW_2M, 927MHz), 116(BW_4M, 926MHz))
+    * Due to the legacy Wi-Fi/HaLow channel mapping, "hostapd_cli chan_switch" command can’t be applied to following radar channels:
+      5500(#100/925.5MHz), 5520(#104/926.5MHz), 5540(#108/927.5MHz),
+      5560(#112/927MHz), 5580(#116/926MHz)
+    * DHCP failure or delay in multi-hop MBSS
+      (Recommend using static IP in more than 3-hop MBSS)
+    * Not supported on KR MIC package
+      (The concurrent mode can’t be applied due to the KR MIC regulation)
