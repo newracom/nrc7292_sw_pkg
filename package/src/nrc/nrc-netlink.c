@@ -31,8 +31,13 @@ static struct nrc *nrc_nw;
 
 
 #ifdef CONFIG_SUPPORT_NEW_NETLINK
+#if KERNEL_VERSION(6, 2, 0) > NRC_TARGET_KERNEL_VERSION
 static int nrc_nl_pre_doit(const struct genl_ops *ops,
 			   struct sk_buff *skb, struct genl_info *info)
+#else
+static int nrc_nl_pre_doit(const struct genl_split_ops *ops,
+			   struct sk_buff *skb, struct genl_info *info)
+#endif
 #else
 static int nrc_nl_pre_doit(struct genl_ops *ops,
 			   struct sk_buff *skb, struct genl_info *info)
@@ -42,8 +47,13 @@ static int nrc_nl_pre_doit(struct genl_ops *ops,
 }
 
 #ifdef CONFIG_SUPPORT_NEW_NETLINK
+#if KERNEL_VERSION(6, 2, 0) > NRC_TARGET_KERNEL_VERSION
 static void nrc_nl_post_doit(const struct genl_ops *ops,
 			     struct sk_buff *skb, struct genl_info *info)
+#else
+static void nrc_nl_post_doit(const struct genl_split_ops *ops,
+			     struct sk_buff *skb, struct genl_info *info)
+#endif
 #else
 static void nrc_nl_post_doit(struct genl_ops *ops,
 			     struct sk_buff *skb, struct genl_info *info)
