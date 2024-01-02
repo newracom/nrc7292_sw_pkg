@@ -179,11 +179,11 @@ void nrc_download_fw(struct nrc *nw)
 
 	nrc_hif_disable_irq(hdev);
 
-	pr_err("start FW %d", priv->num_chunks);
+	/* pr_err("start FW %d", priv->num_chunks); */
 	do {
 		nrc_fw_send_frag(nw, priv);
 	} while (nrc_fw_check_next_frag(nw, priv));
-	pr_err("end FW");
+	/* pr_err("end FW"); */
 
 	priv->fw_requested = false;
 }
