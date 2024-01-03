@@ -2208,8 +2208,10 @@ static bool spi_check_ready(struct nrc_hif_device *hdev)
 	if (ret < 0)
 		return false;
 
+	/*
 	dev_info(&spi->dev, "[%s] chip_id:%04x build_chip_id:%04x target_sw_id:%u host_sw_id:%u  status:%d",
 				__func__, sys.chip_id, (sys.sw_id >> 16), sys.sw_id & 0xFFFF, NRC_SW_ID, sys.status);
+	*/
 
 	if (fw_name && !(sys.status & 0x1)) {
 		return false;
