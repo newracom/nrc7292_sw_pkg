@@ -2348,11 +2348,11 @@ int nrc_cspi_gpio_alloc(struct spi_device *spi)
 #endif
 
 #if defined(ENABLE_HW_RESET)
-	if (gpio_request(RPI_GPIO_FOR_RST, "nrc-reset") < 0) {
+	if (gpio_request(TARGET_GPIO_FOR_RST, "nrc-reset") < 0) {
 		dev_err(&spi->dev, "[Error] gpio_reqeust(nrc-reset) is failed");
 		goto err_dbg_irq_free;
 	}
-	gpio_direction_output(RPI_GPIO_FOR_RST, 1);
+	gpio_direction_output(TARGET_GPIO_FOR_RST, 1);
 #endif
 
 	if (power_save >= NRC_PS_DEEPSLEEP_TIM) {
@@ -2385,7 +2385,7 @@ err_free_all:
 
 err_rst_free:
 #if defined(ENABLE_HW_RESET)
-	gpio_free(RPI_GPIO_FOR_RST);
+	gpio_free(TARGET_GPIO_FOR_RST);
 err_dbg_irq_free:
 #endif
 #if  defined(SPI_DBG)
@@ -2403,10 +2403,10 @@ void nrc_cspi_gpio_free(struct spi_device *spi)
 #endif
 
 #if defined(ENABLE_HW_RESET)
-	gpio_set_value(RPI_GPIO_FOR_RST, 0);
+	gpio_set_value(TARGET_GPIO_FOR_RST, 0);
 	msleep(10);
-	gpio_set_value(RPI_GPIO_FOR_RST, 1);
-	gpio_free(RPI_GPIO_FOR_RST);
+	gpio_set_value(TARGET_GPIO_FOR_RST, 1);
+	gpio_free(TARGET_GPIO_FOR_RST);
 #endif
 
 	if (power_save >= NRC_PS_DEEPSLEEP_TIM) {
