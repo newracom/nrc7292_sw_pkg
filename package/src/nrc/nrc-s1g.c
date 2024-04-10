@@ -308,27 +308,27 @@ int nrc_get_current_ccid_by_country(char * country_code)
 {
 	uint8_t cc_index;
 
-	if (strcmp(country_code, "JP") == 0)
+	if (strcmp(country_code, "JP") == 0) {
 		cc_index = JP;
-	else if (strcmp(country_code, "K1") == 0)
+	} else if (strcmp(country_code, "K1") == 0) {
 		cc_index = K1;
-	else if (strcmp(country_code, "TW") == 0)
+	} else if (strcmp(country_code, "TW") == 0) {
 		cc_index = TW;
-	else if (strcmp(country_code, "US") == 0)
+	} else if (strcmp(country_code, "US") == 0) {
 		cc_index = US;
-	else if (strcmp(country_code, "EU") == 0)
+	} else if (strcmp(country_code, "EU") == 0) {
 		cc_index = EU;
-	else if (strcmp(country_code, "DE") == 0)
+	} else if (strcmp(country_code, "DE") == 0) {
 		cc_index = EU;
-	else if (strcmp(country_code, "CN") == 0)
+	} else if (strcmp(country_code, "CN") == 0) {
 		cc_index = CN;
-	else if (strcmp(country_code, "NZ") == 0)
+	} else if (strcmp(country_code, "NZ") == 0) {
 		cc_index = NZ;
-	else if (strcmp(country_code, "AU") == 0)
+	} else if (strcmp(country_code, "AU") == 0) {
 		cc_index = AU;
-	else if (strcmp(country_code, "K2") == 0)
+	} else if (strcmp(country_code, "K2") == 0) {
 		cc_index = K2;
-	else {
+	} else {
 		cc_index = -1;
 	}
 	return cc_index;
@@ -343,26 +343,29 @@ void nrc_set_s1g_country(char* country_code)
 {
 	uint8_t cc_index = nrc_get_current_ccid_by_country(country_code);
 
-	//set to default country "US"
-	if (cc_index < 0) {
+	// Set "US" as the default if it doesn't exist in the S1G channel table
+	if (cc_index >= MAX_COUNTRY_CODE) {
+                cc_index = US;
+                s1g_alpha2[0] = 'U';
+                s1g_alpha2[1] = 'S';
+                nrc_dbg(NRC_DBG_MAC, "%s: Country index %d out of range. Setting default country (US)!", __func__, cc_index);
+        } if (cc_index < 0) {
 		cc_index = US;
 		s1g_alpha2[0] = 'U';
 		s1g_alpha2[1] = 'S';
-		// nrc_dbg(NRC_DBG_MAC, "%s: No country code %s. Set as default country (US)", __func__, country_code);
-	}
-	else if (cc_index == EU ) {
+		// nrc_dbg(NRC_DBG_MAC, "%s: No country code %s. Setting default country (US)", __func__, country_code);
+	} else if (cc_index == EU) {
 		// convert country code DE to EU for target firmware
 		s1g_alpha2[0] = 'E';
 		s1g_alpha2[1] = 'U';
-	}
-	else {
+	} else {
 		s1g_alpha2[0] = country_code[0];
 		s1g_alpha2[1] = country_code[1];
 	}
 	s1g_alpha2[2] = '\0';
 	ptr_nrc_s1g_ch_table = &s1g_ch_table_set[cc_index][0];
 
-	nrc_dbg(NRC_DBG_MAC, "%s: Country code %s, number of channels:%d", __func__, country_code, nrc_get_num_channels_by_current_country());
+	nrc_dbg(NRC_DBG_MAC, "%s: Country code %s, number of channels: %d", __func__, country_code, nrc_get_num_channels_by_current_country());
 }
 
 const struct s1g_channel_table * nrc_get_current_s1g_cc_table(void)
