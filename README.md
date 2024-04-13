@@ -7,6 +7,9 @@
 https://github.com/newracom/nrc7292_sw_pkg/tree/master/package/evk/sw_pkg/nrc_pkg/sw/firmware are intended solely for this model.
 > If users plan to use this software package with other devices that incorporate the NRC7292 chip, they should utilize the board data file supplied by the device's vendor.
 
+> [!IMPORTANT]
+> For support regarding the SAE Hash-to-Element (H2E), please refer to https://github.com/newracom/nrc7292_sw_pkg/blob/master/README-H2E.md
+
 ### Release roadmap
 - v1.5 (2023.10.31)
 - v1.4.1 (2023.09.08)
