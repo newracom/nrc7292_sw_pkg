@@ -182,7 +182,7 @@ static struct ieee80211_channel nrc_channels_5ghz[] = {
 };
 #endif /* CONFIG_S1G_CHANNEL */
 
-#if !defined(CONFIF_S1G_CHANNEL)
+#if !defined(CONFIG_S1G_CHANNEL)
 static struct ieee80211_rate nrc_rates[] = {
 	/* 11b rates */
 	{ .bitrate = 10 },
