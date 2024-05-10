@@ -361,6 +361,12 @@ static inline int hw_vifindex(struct ieee80211_vif *vif)
 	return i_vif->index;
 }
 
+struct rx_ba_session {
+	bool started;
+	u16 sn;
+	u16 buf_size;
+};
+
 /* sta driver data structure */
 struct nrc_sta {
 	struct nrc *nw;
@@ -381,6 +387,7 @@ struct nrc_sta {
 	/* Block Ack Session per TID */
 	enum ieee80211_tx_ba_state tx_ba_session[NRC_MAX_TID];
 	uint32_t ba_req_last_jiffies[NRC_MAX_TID];
+	struct rx_ba_session rx_ba_session[NRC_MAX_TID];
 };
 
 #define to_ieee80211_sta(s) \

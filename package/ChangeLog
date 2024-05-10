@@ -4,6 +4,26 @@
 *
 *******************************************************************
 
+[2024-05-10]
+Change summary for version 1.5.1:
+
+  Hotfix
+    * Enhanced RC scheme
+      o Hotfix for slow rate adaptation in specific RF environments
+
+    Changes
+    * Increase supported MTU size (up to 2304)
+    * Host driver update: beacon_loss_count=20 to accommodate weak RF field conditions
+    * Update cli_app command 'set rc_param' for the probe interval configuration
+
+    Bugfix
+    * TX sequence number corruption issue
+    * Update the SN for devices in poor connectivity conditions to prevent discarding out-of-date frames in mac80211
+    * Host driver memory leak issue
+    * Host driver kernel panic issue
+    * JP primary channel interoperability issue
+    * Multicast transmission halts when the duty window is set too small
+
 [2023-10-31]
 Change summary for version 1.5:
 

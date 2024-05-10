@@ -311,7 +311,7 @@ static void sta_max_idle_period_expire(struct timer_list *t)
 	struct nrc_vif *i_vif = from_timer(i_vif, t, max_idle_timer);
 #endif
 	struct ieee80211_hw *hw = i_vif->nw->hw;
-	struct nrc_sta *i_sta = NULL, *tmp = NULL;
+	struct nrc_sta *i_sta = NULL, *tmp = NULL, *tmp_sta = NULL;
 	unsigned long flags;
 #ifdef CONFIG_SUPPORT_TX_CONTROL
 	struct ieee80211_tx_control control;
@@ -326,7 +326,10 @@ static void sta_max_idle_period_expire(struct timer_list *t)
 	struct ieee80211_hdr_3addr_qos *qosnullfunc;
 
 	spin_lock_irqsave(&i_vif->preassoc_sta_lock, flags);
-	list_for_each_entry_safe(i_sta, tmp, &i_vif->preassoc_sta_list, list) break;
+	list_for_each_entry_safe(tmp_sta, tmp, &i_vif->preassoc_sta_list, list) {
+		i_sta = tmp_sta;
+		break;
+	}
 	spin_unlock_irqrestore(&i_vif->preassoc_sta_lock, flags);
 
 	if(!i_sta){
@@ -720,16 +723,23 @@ static int rx_h_bss_max_idle_period(struct nrc_trx_data *rx)
 	if (ie) {
 		if (rx->vif->type == NL80211_IFTYPE_AP) {
 			i_sta->max_idle.period = i_vif->max_idle_period;
+			nrc_mac_dbg("%s: IE exist, period from vif 0x%x", __FUNCTION__, i_vif->max_idle_period);
 			i_sta->max_idle.options = 0;
 		}else{
-			i_sta->max_idle.period = ie->max_idle_period;
-			i_sta->max_idle.options = ie->idle_option;
+			if (ie->max_idle_period != 0) {
+				i_sta->max_idle.period = ie->max_idle_period;
+				i_sta->max_idle.options = ie->idle_option;
+			} else {
+				/* An case that can never happen */
+				nrc_mac_dbg("%s: max_idle_period is zero in IE, no set!!!", __FUNCTION__);
+			}
 		}
 
 	} else {
 		i_sta->max_idle.options = 0;
 		if (rx->vif->type == NL80211_IFTYPE_AP) {
 			i_sta->max_idle.period = i_vif->max_idle_period;
+			nrc_mac_dbg("%s: IE not exist, period from vif 0x%x", __FUNCTION__, i_vif->max_idle_period);
 		} else {
 			i_sta->max_idle.period = 0;
 		}

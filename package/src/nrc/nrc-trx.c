@@ -853,10 +853,12 @@ int nrc_mac_rx(struct nrc *nw, struct sk_buff *skb)
 				skb_deauth = ieee80211_deauth_get(nw->hw, mgmt->bssid, mgmt->sa, mgmt->bssid, WLAN_REASON_DEAUTH_LEAVING, NULL, false);
 				if (!skb_deauth) {
 					nrc_dbg(NRC_DBG_STATE, "%s Fail to alloc skb", __func__);
+					dev_kfree_skb(skb);
 					return 0;
 				}
 				nrc_mac_dbg("%s: %pM connected, but auth received. send to kernel after convert auth -> deauth.", __func__, mgmt->sa);
 				ieee80211_rx_irqsafe(nw->hw, skb_deauth);
+				dev_kfree_skb(skb);
 				return 0;
 			}
 		}
@@ -880,6 +882,7 @@ int nrc_mac_rx(struct nrc *nw, struct sk_buff *skb)
 		}
 #endif
 		ieee80211_rx_irqsafe(nw->hw, rx.skb);
+
 		if (ieee80211_hw_check(nw->hw, SUPPORTS_DYNAMIC_PS)) {
 			if (ieee80211_is_data(fc) && nw->ps_enabled &&
 				nw->hw->conf.dynamic_ps_timeout > 0) {
@@ -1005,6 +1008,54 @@ static int rx_h_decrypt(struct nrc_trx_data *rx)
 	return 0;
 }
 RXH(rx_h_decrypt, NL80211_IFTYPE_ALL);
+
+#if KERNEL_VERSION(4, 6, 0) <= NRC_TARGET_KERNEL_VERSION
+static int rx_h_check_sn(struct nrc_trx_data *rx)
+{
+	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *)rx->skb->data;
+	__le16 fc;
+
+	if (!rx->sta) {
+		return 0;
+	}
+
+	/* BA session sequence number inversion workaround.
+	 * Over 2048 data frames can be transmitted while the peer is far away
+	 * but enough to keep connection. When the peer comes back close to transmitter,
+	 * the received packets will be dropped in mac80211
+	 * because 2048 sequence numbers are already missed in air.
+	 * SN will be recovered after it increses by 4096.
+	 * This is a normal operation in protocol but may cause problem in usecases.
+	 * So, we need to check SN and clear BA session if necessary.
+	 * Allow additional AMPDU buffer size since we can't get a head SN of the BA session.
+	 * SN Inversion: 2048 < SN Diff < 4096 - AMPDU Buffer
+	 */
+
+	fc = hdr->frame_control;
+	if (ieee80211_is_data_qos(fc) && !is_multicast_ether_addr(hdr->addr1)) {
+		struct nrc_sta *i_sta = to_i_sta(rx->sta);
+#if KERNEL_VERSION(4, 17, 0) <= NRC_TARGET_KERNEL_VERSION
+		u8 tid = ieee80211_get_tid(hdr);
+#else
+		u8 *qc = ieee80211_get_qos_ctl(hdr);
+		u8 tid = qc[0] & IEEE80211_QOS_CTL_TID_MASK;
+#endif
+		if (tid < NRC_MAX_TID && i_sta->rx_ba_session[tid].started) {
+			u16 sn = (le16_to_cpu(hdr->seq_ctrl) & IEEE80211_SCTL_SEQ) >> 4;
+			u16 sn_diff = (sn - i_sta->rx_ba_session[tid].sn) & IEEE80211_SN_MASK;
+			if (ieee80211_sn_less(sn, i_sta->rx_ba_session[tid].sn) &&
+				sn_diff <= IEEE80211_SN_MODULO - i_sta->rx_ba_session[tid].buf_size) {
+				ieee80211_mark_rx_ba_filtered_frames(rx->sta, tid, sn, 0, IEEE80211_SN_MODULO >> 1);
+				nrc_mac_dbg("BA session[%d] SN inversion! last_sn:%d, sn:%d\n", tid, i_sta->rx_ba_session[tid].sn, sn);
+			}
+			i_sta->rx_ba_session[tid].sn = sn;
+		}
+	}
+
+	return 0;
+}
+RXH(rx_h_check_sn, NL80211_IFTYPE_ALL);
+#endif
 
 #if defined (CONFIG_SUPPORT_IBSS)
 extern u64 current_bssid_beacon_timestamp;

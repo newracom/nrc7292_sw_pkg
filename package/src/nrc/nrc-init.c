@@ -298,7 +298,7 @@ MODULE_PARM_DESC(power_save_gpio, "gpio for power save");
 /**
  * Maximum beacon loss count
  */
-int beacon_loss_count = 7;
+int beacon_loss_count = 20;
 module_param(beacon_loss_count, int, 0600);
 MODULE_PARM_DESC(beacon_loss_count, "Number of beacon intervals before we decide beacon was lost");
 
@@ -319,24 +319,24 @@ MODULE_PARM_DESC(support_ch_width, "Supported CH width (0:1/2MHz Support, 1:1/2/
 /**
  * Set rate control mode
  */
-uint8_t ap_rc_mode = 2;
-module_param(ap_rc_mode, byte, 0600);
-MODULE_PARM_DESC(ap_rc_mode, "AP Rate control mode (1:Disable,Use default_mcs, 2:Individual RC for each STA. 3:RC incorporating RX MCS");
+uint8_t ap_rc_mode = 0xff;
+//module_param(ap_rc_mode, byte, 0600);
+//MODULE_PARM_DESC(ap_rc_mode, "AP Rate control mode (1:Disable,Use default_mcs, 2:Individual RC for each STA. 3:RC incorporating RX MCS");
 
-uint8_t sta_rc_mode = 2;
-module_param(sta_rc_mode, byte, 0600);
-MODULE_PARM_DESC(sta_rc_mode, "STA Rate control mode (1:Disable,Use default_mcs, 2:Individual RC for each STA. 3:RC incorporating RX MCS");
+uint8_t sta_rc_mode = 0xff;
+//module_param(sta_rc_mode, byte, 0600);
+//MODULE_PARM_DESC(sta_rc_mode, "STA Rate control mode (1:Disable,Use default_mcs, 2:Individual RC for each STA. 3:RC incorporating RX MCS");
 
 /**
  * Set default mcs
  */
-uint8_t ap_rc_default_mcs = 2;
-module_param(ap_rc_default_mcs, byte, 0600);
-MODULE_PARM_DESC(ap_rc_default_mcs, "AP Default MCS");
+uint8_t ap_rc_default_mcs = 0xff;
+//module_param(ap_rc_default_mcs, byte, 0600);
+//MODULE_PARM_DESC(ap_rc_default_mcs, "AP Default MCS");
 
-uint8_t sta_rc_default_mcs = 2;
-module_param(sta_rc_default_mcs, byte, 0600);
-MODULE_PARM_DESC(sta_rc_default_mcs, "STA Default MCS");
+uint8_t sta_rc_default_mcs = 0xff;
+//module_param(sta_rc_default_mcs, byte, 0600);
+//MODULE_PARM_DESC(sta_rc_default_mcs, "STA Default MCS");
 
 /**
  * Power save pretend value for no response STA
@@ -545,7 +545,7 @@ int nrc_fw_start(struct nrc *nw)
 	struct sk_buff *skb_req, *skb_resp;
 	struct wim_drv_info_param *p;
 
-	skb_req = nrc_wim_alloc_skb(nw, WIM_CMD_START, sizeof(int));
+	skb_req = nrc_wim_alloc_skb(nw, WIM_CMD_START, tlv_len(sizeof(struct wim_drv_info_param)));
 	if (!skb_req)
 		return -ENOMEM;
 

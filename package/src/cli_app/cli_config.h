@@ -26,7 +26,7 @@
 #ifndef _CLI_CONFIG_H_
 #define _CLI_CONFIG_H_
 
-#define NRC_CLI_APP_VER "2.21.5"
+#define NRC_CLI_APP_VER "2.21.6"
 #define NRC_CLI_APP_NAME "Newracom Command Line Application"
 #define NRC_CLI_APP_EXIT_MSG "Exit Newracom Command Line Application"
 #define NRC_CLI_APP_PROMPT "NRC"

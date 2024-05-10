@@ -583,16 +583,16 @@ int nrc_xmit_wim_request(struct nrc *nw, struct sk_buff *skb)
 struct sk_buff *nrc_xmit_wim_request_wait(struct nrc *nw,
 		struct sk_buff *skb, int timeout)
 {
+	mutex_lock(&nw->target_mtx);
 	nw->last_wim_responded = NULL;
 
-	if (nrc_xmit_wim(nw, skb, HIF_WIM_SUB_REQUEST) < 0)
+	if (nrc_xmit_wim(nw, skb, HIF_WIM_SUB_REQUEST) < 0) {
+		mutex_unlock(&nw->target_mtx);
 		return NULL;
-
-	if (nw->last_wim_responded) {
-		pr_err("received already");
-		return nw->last_wim_responded;
 	}
 
+	mutex_unlock(&nw->target_mtx);
+	
 	reinit_completion(&nw->wim_responded);
 	if (wait_for_completion_timeout(&nw->wim_responded,
 			timeout) == 0)

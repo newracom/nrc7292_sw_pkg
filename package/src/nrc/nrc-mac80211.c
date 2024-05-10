@@ -643,6 +643,12 @@ void nrc_cleanup_txq_by_macaddr (struct nrc *nw, struct ieee80211_vif *vif,
 
 	sta = ieee80211_find_all_sta(vif, macaddr);
 
+	if (!sta) {
+		rcu_read_unlock();
+		nrc_mac_dbg("[%s] sta is NULL", __func__);
+		return;
+	}
+
 	for (i = 0; i < ARRAY_SIZE(sta->txq); i++) {
 		nrc_cleanup_txq(nw, sta->txq[i]);
 	}
@@ -1755,17 +1761,24 @@ void nrc_mac_bss_info_changed(struct ieee80211_hw *hw,
 		if (info->assoc) {
 #endif
 			nrc_bss_assoc(hw, vif, info, skb);
+
+			spin_lock_bh(&nw->vif_lock);
+			nw->associated_vif = vif;
 			if (!disable_cqm) {
+				nrc_mac_dbg("mod_timer in %s:%d", __FUNCTION__, __LINE__);
 				mod_timer(&nw->bcn_mon_timer,
 					jiffies + msecs_to_jiffies(nw->beacon_timeout));
 			}
-			nw->associated_vif = vif;
+			spin_unlock_bh(&nw->vif_lock);
 		} else {
+			spin_lock_bh(&nw->vif_lock);
 			if (!disable_cqm) {
 				nw->beacon_timeout = 0;
+				nrc_mac_dbg("del_timer in %s:%d", __FUNCTION__, __LINE__);
 				try_to_del_timer_sync(&nw->bcn_mon_timer);
 			}
 			nw->associated_vif = NULL;
+			spin_unlock_bh(&nw->vif_lock);
 		}
 		nrc_mac_dbg("[BSS_CHANGED_ASSOC] associated_vif:%d beacon_timeout:%lu",
 			nw->associated_vif?i_vif->index:-1, nw->beacon_timeout);
@@ -2021,6 +2034,13 @@ static void nrc_init_sta_ba_session(struct ieee80211_sta *sta)
 			for (i=0 ; i < NRC_MAX_TID; i++) {
 				i_sta->tx_ba_session[i] = IEEE80211_BA_NONE;
 				i_sta->ba_req_last_jiffies[i] = 0;
+				i_sta->rx_ba_session[i].started = false;
+				i_sta->rx_ba_session[i].sn = 0;
+#if KERNEL_VERSION(4, 19, 0) <= NRC_TARGET_KERNEL_VERSION
+				i_sta->rx_ba_session[i].buf_size = IEEE80211_MAX_AMPDU_BUF_HT;
+#else
+				i_sta->rx_ba_session[i].buf_size = IEEE80211_MAX_AMPDU_BUF;
+#endif
 			}
 		}
 	}
@@ -2104,6 +2124,17 @@ int nrc_mac_sta_state(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 		spin_lock_irqsave(&i_vif->preassoc_sta_lock, flags);
 		list_add_tail(&i_sta->list, &i_vif->preassoc_sta_list);
 		spin_unlock_irqrestore(&i_vif->preassoc_sta_lock, flags);
+
+
+		/* This value is set in rx_h_bss_max_idle_period normally when assoc frames are received 
+		   but, While test of ifconfig up /down, some weired transition occured without any frame exchanges.
+		   so, values is set to zero. this causes invalid timer setting on STA.
+		*/
+
+		/* set default max_idle_period from AP */
+		nrc_mac_dbg("%s: set default max_idle_period with AP's period: 0x%x", __FUNCTION__, i_vif->max_idle_period);
+		i_sta->max_idle.period = i_vif->max_idle_period;
+		i_sta->max_idle.options = 0;
 
 	} else if (state_changed(NONE, NOTEXIST)) {
 		spin_lock_irqsave(&i_vif->preassoc_sta_lock, flags);
@@ -2318,6 +2349,8 @@ static int nrc_mac_ampdu_action(struct ieee80211_hw *hw,
 	enum ieee80211_ampdu_mlme_action action = params->action;
 	struct ieee80211_sta *sta = params->sta;
 	u16 tid = params->tid;
+	u16 *ssn = &params->ssn;
+	u16 buf_size = params->buf_size;
 #endif
 
 	if (nw->ampdu_supported && !nw->ampdu_started) {
@@ -2382,6 +2415,9 @@ static int nrc_mac_ampdu_action(struct ieee80211_hw *hw,
 		return 0;
 	case IEEE80211_AMPDU_RX_START:
 		nrc_dbg(NRC_DBG_MAC, "%s: IEEE80211_AMPDU_RX_START", __func__);
+		i_sta->rx_ba_session[tid].sn = *ssn;
+		i_sta->rx_ba_session[tid].buf_size = buf_size;
+		i_sta->rx_ba_session[tid].started = true;
 		if (nw->ampdu_reject) {
 			nrc_dbg(NRC_DBG_MAC, "%s: Reject AMPDU", __func__);
 			return -EOPNOTSUPP;
@@ -2389,6 +2425,7 @@ static int nrc_mac_ampdu_action(struct ieee80211_hw *hw,
 		return 0;
 	case IEEE80211_AMPDU_RX_STOP:
 		nrc_dbg(NRC_DBG_MAC, "%s: IEEE80211_AMPDU_RX_STOP", __func__);
+		i_sta->rx_ba_session[tid].started = false;
 		if (nw->ampdu_reject) {
 			nrc_dbg(NRC_DBG_MAC, "%s: Reject AMPDU", __func__);
 			return -EOPNOTSUPP;
@@ -4752,7 +4789,7 @@ int nrc_register_hw(struct nrc *nw)
 	hw->extra_tx_headroom =
 		(sizeof(struct hif) + sizeof(struct frame_hdr) + 32);
 #ifdef CONFIG_USE_MAX_MTU
-	hw->max_mtu = ETH_DATA_LEN + 32; /* 32 for batman-adv */
+	hw->max_mtu = IEEE80211_MAX_DATA_LEN;
 #endif
 	hw->max_rates = 4;
 	hw->max_rate_tries = 11;
@@ -4880,11 +4917,17 @@ void nrc_send_beacon_loss(struct nrc *nw)
 {
 	struct nrc_vif *i_vif;
 
-	BUG_ON(nw->associated_vif == NULL);
+	spin_lock_bh(&nw->vif_lock);
+	if (nw->associated_vif == NULL) {
+		nrc_mac_dbg("beacon loss event, but not associated");
+		goto done;
+	}
 	i_vif = to_i_vif(nw->associated_vif);
 
 	nrc_mac_dbg("beacon loss event to vif(%d)", i_vif->index);
 	ieee80211_beacon_loss(nw->associated_vif);
+done:
+	spin_unlock_bh(&nw->vif_lock);
 }
 
 void nrc_cleanup_ba_session_sta (void *data, struct ieee80211_sta *sta)

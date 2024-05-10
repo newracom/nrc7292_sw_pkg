@@ -49,7 +49,6 @@ ft232h_usb_spi = 0            # FTDI FT232H USB-SPI bridge
 #################################################################################
 # RF Conf.
 max_txpwr         = 24       # Maximum TX Power (in dBm)
-epa               = 0        # (7394 only) External PA : 0(none) or 1(used)
 bd_name           = ''       # board data name (bd defines max TX Power per CH/MCS/CC)
                              # specify your bd name here. If not, follow naming rules in strBDName()
 ##################################################################################
@@ -145,14 +144,6 @@ use_bridge_setup  = 0         # AP & STA : 0 (not use bridge setup) or n (use br
 #--------------------------------------------------------------------------------#
 # Supported CH Width (STA Only)
 support_ch_width  = 1         # 0 (1/2MHz Support) or 1 (1/2/4MHz Support)
-#--------------------------------------------------------------------------------#
-# Rate control configuration
-# Types of RC: (0) System default, (1)Disable,Use default_mcs (2)Feedback RC. (3)Consistent RC.
-ap_rc_mode = 2
-sta_rc_mode = 2
-#  Default MCS: (0 ~ 7)
-ap_rc_default_mcs = 2
-sta_rc_default_mcs = 2
 #--------------------------------------------------------------------------------#
 # Use Power save pretend operation for no response STA
 power_save_pretend  = 0      # 0 (disable) or 1 (enable)
@@ -342,16 +333,6 @@ def strOriCountry():
     else:
         return str(sys.argv[3])
 
-def strRCMode(param):
-    if int(param) == 0:
-        return 'Disabled'
-    elif int(param) == 1:
-        return 'Feedback RC'
-    elif int(param) == 2:
-        return 'Consistent RC'
-    else:
-        return 'Invalid Mode'
-
 def isNumber(s):
     try:
         float(s)
@@ -421,12 +402,6 @@ def argv_print():
             print("Listen Interval  : " + str(listen_interval))
     if strSTA() == 'MESH':
         print("Mesh Mode        : " + strMeshMode())
-    if strSTA() == 'AP':
-        print("Rate Control     : " + strRCMode(ap_rc_mode))
-        print("Default MCS      : " + str(ap_rc_default_mcs))
-    if strSTA() == 'STA':
-        print("Rate Control     : " + strRCMode(sta_rc_mode))
-        print("Default MCS      : " + str(sta_rc_default_mcs))
     print("------------------------------")
 
 def copyConf():
@@ -709,13 +684,6 @@ def setModuleParam():
     # default: bd.dat
     bd_name_arg = " bd_name=" + strBDName()
 
-    # module param for rate control mode
-    # default:  rc_mode=1(Individual for each STA)
-    rc_mode_arg = " ap_rc_mode=" + str(ap_rc_mode) + " sta_rc_mode=" + str(sta_rc_mode)
-    # default:  rc_default_mcs=2(mcs2)
-    rc_default_mcs_arg = " ap_rc_default_mcs=" + str(ap_rc_default_mcs) + \
-                        " sta_rc_default_mcs=" + str(sta_rc_default_mcs)
-
     # module parameter setting while loading NRC driver
     # Default value is used if arg is not defined
     module_param = ""
@@ -737,7 +705,7 @@ def setModuleParam():
                  cqm_arg + listen_int_arg + drv_dbg_arg + \
                  sbi_arg + discard_deauth_arg + dbg_fc_arg + kr_band_arg + legacy_ack_arg + \
                  be_arg + rs_arg + beacon_bypass_arg + ps_gpio_arg + bd_name_arg + support_ch_width_arg + \
-                 rc_mode_arg + rc_default_mcs_arg + ps_pretend_arg \
+                 ps_pretend_arg \
 
     return module_param
 

@@ -89,6 +89,7 @@ static int cmd_optimal_channel(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_show_sysconfig(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_show_bcn_mcs(cmd_tbl_t *t, int argc, char *argv[]);
 
+static int cmd_show_rc(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_show_rc_pf(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_show_rc_param(cmd_tbl_t *t, int argc, char *argv[]);
 
@@ -142,7 +143,6 @@ static int cmd_set_mesh_rssi_threshold(cmd_tbl_t *t, int argc, char *argv[]);
 * sub commands on set and show
 *******************************************************************************/
 static int cmd_self_configuration(cmd_tbl_t *t, int argc, char *argv[]);
-static int cmd_set_rc_pf(cmd_tbl_t *t, int argc, char *argv[]);
 static int cmd_set_rc_param(cmd_tbl_t *t, int argc, char *argv[]);
 
 /*******************************************************************************
@@ -242,7 +242,7 @@ cmd_tbl_t show_sub_list[] = {
 	{ "optimal_channel", cmd_optimal_channel, "show optimal_channel", "show optimal_channel {Country(US,NZ...)} {BW} {dwell time}", "", 0},
 	{ "app_version", cmd_show_app_version, "show app version", "show app_version",  "", 0},
 	{ "sysconfig", cmd_show_sysconfig, "show sysconfig", "show sysconfig",  "", 0},
-	{ "rc_pf", cmd_show_rc_pf, "show rate control profile number", "show rc_pf", SHOW_RC_PF_KEY_LIST, 0},
+	{ "rc", cmd_show_rc, "show tx's retry mcs info, maxtp/tp2/maxp/lowest","show rc [vif_id] [aid]", SHOW_RC_KEY_LIST, 0},
 	{ "rc_param", cmd_show_rc_param, "show configured rate control parameter", "show rc_param", SHOW_RC_PARAM_KEY_LIST, 0},
 	{ "bcn_mcs", cmd_show_bcn_mcs, "show beacon mcs", "show bcn_mcs [vif_id]",  "", 1},
 };
@@ -272,9 +272,8 @@ cmd_tbl_t set_sub_list[] = {
 	{ "report", cmd_set_report, "set lmac periodic report", "set report {on/off}", "", 0},
 	{ "support_ch_width", cmd_set_support_ch_width, "set supported ch width in s1g capa ie (0:1/2M, 1:1/2/4M)", "set support_ch_width [0|1]", "", 0},
 	{ "ampdu_mode", cmd_set_ampdu_mode, "set ampdu_mode ", "set ampdu_mode [disable|manual|auto]", "", 0},
-	{ "bcn_mcs", cmd_set_bcn_mcs, "set bcn_mcs ", "set bcn_mcs [vif_id] [10|0|1|2|3|4|5|6|7]\n", "", 0},
-	{ "rc_pf", cmd_set_rc_pf, "set rate control profile number", "set rc_pf [1|2]", SET_RC_PF_KEY_LIST, 0},
-	{ "rc_param", cmd_set_rc_param, "set rate control parameter", "set rc_param {1|2|3|4|5} {1|2|3|4|5|6|7}", SET_RC_PARAM_KEY_LIST, 0},
+	{ "bcn_mcs", cmd_set_bcn_mcs, "set bcn_mcs ", "set bcn_mcs [vif_id] [10|0|1|2|3|4|5|6|7]", "", 0},
+	{ "rc_param", cmd_set_rc_param, "set rate control parameter", "set rc_param {1|2|3|4|5} {1|2|3|4|5|6|7} {1|..|255}", SET_RC_PARAM_KEY_LIST, 0},
 	{ "bgscan_trx", cmd_set_bgscan_trx, "set bgscan_trx ", "set bgscan_trx [1:enable|0:disable] [wait time operation ch for rx: (0~100)msec]", "", 0},
 	{ "scan_period", cmd_set_scan_period, "set scan_period", "set scan_period [dwell time (min 20ms)]", "", 0},
 	{ "mesh_rssi_threshold", cmd_set_mesh_rssi_threshold, "set mesh_rssi_threshold ", "set mesh_rssi_threshold {-120~-10dBm}", "", 0},
@@ -352,7 +351,7 @@ cmd_tbl_t * get_cmd_list(enum cmd_list_type type, int *list_size, int *list_dept
 			*list_size = sizeof(show_stats_sub_list)/sizeof(cmd_tbl_t);
 			*list_depth = 2;
 			break;
-		case SHWO_MAC_SUB_CMD:
+		case SHOW_MAC_SUB_CMD:
 			ret = show_mac_sub_list;
 			*list_size = sizeof(show_mac_sub_list)/sizeof(cmd_tbl_t);
 			*list_depth = 2;
@@ -550,7 +549,7 @@ static int cmd_help(cmd_tbl_t *t, int argc, char *argv[])
 	cmd_list_display(MAIN_CMD);
 	cmd_list_display(SHOW_SUB_CMD);
 	cmd_list_display(SHOW_STATS_SUB_CMD);
-	cmd_list_display(SHWO_MAC_SUB_CMD);
+	cmd_list_display(SHOW_MAC_SUB_CMD);
 	cmd_list_display(SHOW_MAC_TX_SUB_CMD);
 	cmd_list_display(SHOW_MAC_RX_SUB_CMD);
 	cmd_list_display(SET_SUB_CMD);
@@ -827,7 +826,7 @@ static int cmd_show_mac(cmd_tbl_t *t, int argc, char *argv[])
 {
 	int ret = CMD_RET_FAILURE;
 	int sub_cmd_list_size, sub_cmd_list_depth;
-	cmd_tbl_t * sub_cmd_list = get_cmd_list(SHWO_MAC_SUB_CMD, &sub_cmd_list_size, &sub_cmd_list_depth);
+	cmd_tbl_t * sub_cmd_list = get_cmd_list(SHOW_MAC_SUB_CMD, &sub_cmd_list_size, &sub_cmd_list_depth);
 
 	if(argc == sub_cmd_list_depth){
 		printf("There is no sub command. Please see the help.\n");
@@ -1393,38 +1392,13 @@ static int cmd_show_cca_thresh(cmd_tbl_t *t, int argc, char *argv[])
 	return ret;
 }
 
-static int cmd_show_rc_pf(cmd_tbl_t *t, int argc, char *argv[])
-{
-	int ret = CMD_RET_SUCCESS;
-	char param[NRC_MAX_CMDLINE_SIZE];
-	char response[NL_MSG_MAX_RESPONSE_SIZE];
-	int netlink_ret = 0;
-	int display_per_line= 1;
-
-	memset(response, 0x0, NL_MSG_MAX_RESPONSE_SIZE);
-	memset(param, 0x0, sizeof(param));
-	strcpy(param, "show rc_pf -sr");
-	netlink_ret = netlink_send_data(NL_SHELL_RUN, param, response);
-	if(!netlink_ret){
-		if(strcmp(response, response_timeout_str)== 0){
-			ret =  CMD_RET_RESPONSE_TIMEOUT;
-		}else{
-			cmd_result_parse((char*)t->key_list, response, display_per_line);
-			ret = CMD_RET_SUCCESS;
-		}
-	}else{
-		ret = CMD_RET_FAILURE;
-	}
-	return ret;
-}
-
 static int cmd_show_rc_param(cmd_tbl_t *t, int argc, char *argv[])
 {
 	int ret = CMD_RET_SUCCESS;
 	char param[NRC_MAX_CMDLINE_SIZE];
 	char response[NL_MSG_MAX_RESPONSE_SIZE];
 	int netlink_ret = 0;
-	int display_per_line= 2;
+	int display_per_line= 1;
 
 	memset(response, 0x0, NL_MSG_MAX_RESPONSE_SIZE);
 	memset(param, 0x0, sizeof(param));
@@ -2338,34 +2312,26 @@ static int cmd_set_color(cmd_tbl_t *t, int argc, char *argv[])
 	return run_shell_cmd(t, argc, argv, "set color", NULL, 0);
 }
 
-static int cmd_set_rc_pf(cmd_tbl_t *t, int argc, char *argv[])
+static int cmd_show_rc(cmd_tbl_t *t, int argc, char *argv[])
 {
 	int ret = CMD_RET_SUCCESS;
-	char param[NRC_MAX_CMDLINE_SIZE];
 	char response[NL_MSG_MAX_RESPONSE_SIZE];
-	int netlink_ret = 0;
-	int display_per_line= 1;
+	const int display_per_line= 1;
 
-	memset(response, 0x0, NL_MSG_MAX_RESPONSE_SIZE);
-	memset(param, 0x0, sizeof(param));
-
-	if (argc < 3) {
-		return CMD_RET_FAILURE;
+	ret = run_shell_cmd(t, argc, argv, "show rc", response, sizeof(response));
+	if(ret == CMD_RET_SUCCESS){
+		printf("---------------------------------------- \n");
+		printf(" order				  mcs bw \n");
+		printf("---------------------------------------- \n");
+		cmd_result_parse((char*)t->key_list, response, display_per_line);
+		printf("---------------------------------------- \n");
+	} else if(ret == CMD_RET_FAILURE){
+		printf("\nusage : %s\n\n", (char*)t->usage);
+		printf("AP mode needs to specify AID# of STA because our rate control algorithm has statistics per each STA.\n");
+		printf("If you don't know corresponding AID# of STA, please use a cli command, 'show uinfo [vif_id] .\n");
+		printf("You can check corresponding AID#.\n");
 	}
 
-	sprintf(param, "set rc_pf %s -sr", argv[2]);
-
-	netlink_ret = netlink_send_data(NL_SHELL_RUN, param, response);
-	if(!netlink_ret){
-		if(strcmp(response, response_timeout_str)== 0){
-			ret =  CMD_RET_RESPONSE_TIMEOUT;
-		}else{
-			cmd_result_parse((char*)t->key_list, response, display_per_line);
-			ret = CMD_RET_SUCCESS;
-		}
-	}else{
-		ret = CMD_RET_FAILURE;
-	}
 	return ret;
 }
 
@@ -2380,7 +2346,7 @@ static int cmd_set_rc_param(cmd_tbl_t *t, int argc, char *argv[])
 	memset(response, 0x0, NL_MSG_MAX_RESPONSE_SIZE);
 	memset(param, 0x0, sizeof(param));
 
-	if(argc == 4){
+	if(argc == 5){
 		sprintf(param, "set rc_param %s %s -sr", argv[2], argv[3]);
 	}else{
 		return CMD_RET_FAILURE;

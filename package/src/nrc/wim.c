@@ -527,26 +527,35 @@ int nrc_wim_set_sta_type(struct nrc *nw, struct ieee80211_vif *vif)
 		if (sta_type == WIM_STA_TYPE_AP) {
 			nrc_wim_set_ndp_preq(nw, skb, true);
 
-			if (ap_rc_mode > 3) {
-				ap_rc_mode = 3;
+			if (ap_rc_mode >= 1 && ap_rc_mode <= 3) {
+				nrc_dbg(NRC_DBG_MAC, "set ap rc_mode to %d", ap_rc_mode);
+				nrc_wim_set_rc_mode(nw, skb, ap_rc_mode);
+			} else {
+				nrc_dbg(NRC_DBG_MAC, "system default ap rc_mode");
 			}
-			nrc_wim_set_rc_mode(nw, skb, ap_rc_mode);
 
-			if (ap_rc_default_mcs > 7) {
-				ap_rc_default_mcs = 7;
+			if ((ap_rc_default_mcs >= 0 && ap_rc_default_mcs <= 7) || ap_rc_default_mcs == 10) {
+				nrc_dbg(NRC_DBG_MAC, "set ap default mcs to %d", ap_rc_default_mcs);
+				nrc_wim_set_default_mcs(nw, skb, ap_rc_default_mcs);
+			} else {
+				nrc_dbg(NRC_DBG_MAC, "system default ap mcs");
 			}
-			nrc_wim_set_default_mcs(nw, skb, ap_rc_default_mcs);
 		}
 		else if(sta_type == WIM_STA_TYPE_STA) {
-			if (sta_rc_mode > 3) {
-				sta_rc_mode = 3;
+			if (sta_rc_mode >= 1 && sta_rc_mode <= 3) {
+				nrc_dbg(NRC_DBG_MAC, "set sta rc_mode to %d", sta_rc_mode);
+				nrc_wim_set_rc_mode(nw, skb, sta_rc_mode);
+			} else {
+				nrc_dbg(NRC_DBG_MAC, "system default sta rc_mode");
 			}
-			nrc_wim_set_rc_mode(nw, skb, sta_rc_mode);
 
-			if (sta_rc_default_mcs > 7) {
-				sta_rc_default_mcs = 7;
+			if ((sta_rc_default_mcs >= 0 && sta_rc_default_mcs <= 7) || sta_rc_default_mcs == 10) {
+				nrc_dbg(NRC_DBG_MAC, "set sta default mcs to %d", sta_rc_default_mcs);
+				nrc_wim_set_default_mcs(nw, skb, sta_rc_default_mcs);
+			} else {
+				nrc_dbg(NRC_DBG_MAC, "system default sta mcs");
 			}
-			nrc_wim_set_default_mcs(nw, skb, sta_rc_default_mcs);
+
 		}
 	}
 
@@ -670,7 +679,9 @@ static int nrc_wim_request_handler(struct nrc *nw,
 static int nrc_wim_response_handler(struct nrc *nw,
 				    struct sk_buff *skb)
 {
+	mutex_lock(&nw->target_mtx);
 	nw->last_wim_responded = skb;
+	mutex_unlock(&nw->target_mtx);
 	if (completion_done(&nw->wim_responded)) {
 	/* No completion waiters, free the SKB */
 		pr_err("no completion");

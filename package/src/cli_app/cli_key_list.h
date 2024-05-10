@@ -35,11 +35,14 @@
 
 /* show config */
 #define SHOW_CONFIG_DISP		"%s,%s,\
-%s,%s,%d (%d),%d (%d),%s,%d,%s,%s,\
+%s,%s,%d (%d),%d (%d),\
+%d,%s,%s,%s,%s,\
 %s,%s,%s,%d,%s,%s,%s,\
 0x%x,%s,%s,%s,%s,%d,%d,%s"
+
 #define SHOW_CONFIG_KEY_LIST "[MAC Configuration]\nDevice Mode,MAC Address,\
-Country,Bandwidth,Frequency,MAC80211_freq,Rate Control, -MCS, -bw,Guard Interval,\
+Country,Bandwidth,Frequency,MAC80211_freq,\
+Default MCS,Rate Control, - Info, - MCS10(MGMT),Guard Interval,\
 Security,Type,RTS,RTS threshold,Format,Preamble type,Promiscuous Mode,\
 color,Auto CFO Cal,BSSID,AID,\n[PHY Configuration]\nTX_Gain,Base RX_Gain,Compensated RX_Gain,Tx Power Type"
 
@@ -114,13 +117,9 @@ ampdu_len_exp,min mpdu_start_spacing,rx_s1gmcs_map"
 #define SET_RC_KEY_DISP	"%s,%d,%s"
 #define SET_RC_KEY_LIST	"rc,vif_id,mode"
 
-/* set rc_pf [Profile#] */
-#define SET_RC_PF_KEY_DISP	"%d"
-#define SET_RC_PF_KEY_LIST	"Profile#"
-
 /* set rc_param <EWMA value> <Update interval value> */
-#define SET_RC_PARAM_KEY_DISP	"%d,%d"
-#define SET_RC_PARAM_KEY_LIST	"EWMA value,Update interval value"
+#define SET_RC_PARAM_KEY_DISP	"%d,%d,%d"
+#define SET_RC_PARAM_KEY_LIST	"EWMA value,Update interval value,Probe interval value"
 
 /* set duty <on|off> {duty window} {tx duration in duty window} {duty margin}*/
 #define SET_DUTY_KEY_DISP	"%s,%lu,%lu,%lu"
@@ -191,12 +190,12 @@ Tx power index for MCS 6,Tx power index for MCS 7,Tx power index for MCS 10"
 #define SHOW_XTAL_STATUS_DISP "%d"
 #define SHOW_XTAL_STATUS_LIST "XTAL status"
 
-/* show rc_pf */
-#define SHOW_RC_PF_KEY_DISP	"%d"
-#define SHOW_RC_PF_KEY_LIST	"Profile#"
+/* show rc */
+#define SHOW_RC_KEY_DISP	"%2d %2d,%2d %2d,%2d %2d,%2d %2d"
+#define SHOW_RC_KEY_LIST	" maxtp, tp2, maxp, lowest"
 
 /* show rc_param */
-#define SHOW_RC_PARAM_KEY_DISP	"%ld,%d"
-#define SHOW_RC_PARAM_KEY_LIST	"EWMA(%),Update interval(ms)"
+#define SHOW_RC_PARAM_KEY_DISP	"%ld,%d,%d"
+#define SHOW_RC_PARAM_KEY_LIST	"EWMA(%),Update interval(ms),Probe interval(ms)"
 
 #endif /* _CLI_KEY_LIST_H_ */
