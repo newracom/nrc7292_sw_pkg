@@ -352,6 +352,7 @@ static int _c_spi_write_dummy(struct spi_device *spi)
 static int _c_spi_read_regs(struct spi_device *spi,
 		u8 addr, u8 *buf, ssize_t size)
 {
+	struct nrc *nw = spi_get_drvdata(spi);
 	struct spi_transfer xfer[4] = {{0},};
 	u32 cmd, crc, dummy;
 	u8 tx[8];
@@ -390,7 +391,7 @@ static int _c_spi_read_regs(struct spi_device *spi,
 	arr_len = (size > 1) ? ARRAY_SIZE(xfer) : 2;
 	status = spi_sync_transfer(spi, xfer, arr_len);
 	if (status < 0) {
-		pr_err("[%s] reading spi failed(%zd).", __func__, status);
+		dev_err(nw->dev, "[%s] reading spi failed(%zd).", __func__, status);
 		return status;
 	}
 
@@ -414,6 +415,7 @@ static int _c_spi_read_regs(struct spi_device *spi,
 
 static int _c_spi_write_reg(struct spi_device *spi, u8 addr, u8 data)
 {
+	struct nrc *nw = spi_get_drvdata(spi);
 	struct spi_transfer xfer[2] = {{0},};
 	u32 cmd, dummy;
 	u8 tx[8];
@@ -435,7 +437,7 @@ static int _c_spi_write_reg(struct spi_device *spi, u8 addr, u8 data)
 
 	status = spi_sync_transfer(spi, xfer, 2);
 	if (status < 0) {
-		pr_err("[%s] writing spi failed(%zd).", __func__, status);
+		dev_err(nw->dev, "[%s] writing spi failed(%zd).", __func__, status);
 		return status;
 	}
 
@@ -454,6 +456,7 @@ static int _c_spi_write_reg(struct spi_device *spi, u8 addr, u8 data)
 
 static ssize_t _c_spi_read(struct spi_device *spi, u8 *buf, ssize_t size)
 {
+	struct nrc *nw = spi_get_drvdata(spi);
 	struct spi_transfer xfer[4] = {{0},};
 	u32 cmd, crc, dummy;
 	u8 tx[8];
@@ -483,7 +486,7 @@ static ssize_t _c_spi_read(struct spi_device *spi, u8 *buf, ssize_t size)
 	spi_set_transfer(&xfer[3], &dummy, NULL, sizeof(dummy));
 	status = spi_sync_transfer(spi, xfer, ARRAY_SIZE(xfer));
 	if (status < 0) {
-		pr_err("[%s] reading spi failed(%zd).", __func__, status);
+		dev_err(nw->dev, "[%s] reading spi failed(%zd).", __func__, status);
 		return status;
 	}
 
@@ -500,6 +503,7 @@ static ssize_t _c_spi_read(struct spi_device *spi, u8 *buf, ssize_t size)
 static ssize_t _c_spi_write(struct spi_device *spi, u8 *buf, ssize_t size)
 {
 
+	struct nrc *nw = spi_get_drvdata(spi);
 	struct spi_transfer xfer[4] = {{0},};
 	u32 cmd, dummy = 0xffffffff;
 	u8 tx[8];
@@ -530,7 +534,7 @@ static ssize_t _c_spi_write(struct spi_device *spi, u8 *buf, ssize_t size)
 	status = spi_sync_transfer(spi, xfer, ARRAY_SIZE(xfer));
 	if (status < 0)
 	{
-		pr_err("[%s] writing spi failed(%zd).", __func__, status);
+		dev_err(nw->dev, "[%s] writing spi failed(%zd).", __func__, status);
 		return status;
 	}
 
@@ -655,7 +659,7 @@ static struct sk_buff *spi_rx_skb(struct spi_device *spi,
 	if (c_spi_num_slots(priv, RX_SLOT) > 32) {
 		SYNC_UNLOCK(hdev);
 		if (cnt1++ < 10) {
-			pr_err("!!!!! garbage rx data");
+			dev_err(nw->dev, "!!!!! garbage rx data");
 			spi_reset_rx(hdev);
 		}
 		goto fail;
@@ -737,7 +741,7 @@ static struct sk_buff *spi_rx_skb(struct spi_device *spi,
 	if (c_spi_num_slots(priv, RX_SLOT) > 32) {
 		SYNC_UNLOCK(hdev);
 		if (cnt2++ < 10) {
-			pr_err("@@@@@@ garbage rx data");
+			dev_err(nw->dev, "@@@@@@ garbage rx data");
 		}
 		spi_reset_rx(hdev);
 		goto fail;
@@ -1427,7 +1431,7 @@ update:
 		for (ac = 0; ac < 4; ac++)
 			priv->rear[6+ac] = (rear >> 8*ac) & 0xff;
 	} else {
-		//pr_err("Invalid queue (%d)\n", nw->hw_queues);
+		//dev_err(nw->dev, "Invalid queue (%d)\n", nw->hw_queues);
 		//BUG();
 	}
 
@@ -1689,7 +1693,7 @@ static int spi_poll_thread (void *data)
 			ret = gpio_get_value_cansleep(gpio);
 
 			if (ret < 0)
-				pr_err("%s: gpio_get_value_cansleep() failed, ret=%d", __func__, ret);
+				dev_err(&priv->spi->dev, "%s: gpio_get_value_cansleep() failed, ret=%d", __func__, ret);
 			else if (ret == !!(CSPI_EIRQ_MODE & 1))
 				spi_irq(gpio, hdev);
 		}
@@ -1756,7 +1760,7 @@ static int spi_start(struct nrc_hif_device *dev)
 	/* Start rx thread */
 	priv->kthread = kthread_run(spi_rx_thread, dev, "nrc-spi-rx");
 	if (IS_ERR(priv->kthread)) {
-		pr_err("kthread_run() is failed");
+		dev_err(&priv->spi->dev, "kthread_run() is failed");
 		return PTR_ERR(priv->kthread);
 	}
 
@@ -1784,9 +1788,9 @@ static int spi_start(struct nrc_hif_device *dev)
 
 		if (ret < 0) {
 #ifdef CONFIG_SUPPORT_THREADED_IRQ
-			pr_err("request_irq() is failed");
+			dev_err(&priv->spi->dev, "request_irq() is failed");
 #else
-			pr_err("request_threaded_irq() is failed");
+			dev_err(&priv->spi->dev, "request_threaded_irq() is failed");
 #endif
 			goto kill_kthread;
 		}
@@ -1794,7 +1798,7 @@ static int spi_start(struct nrc_hif_device *dev)
 		atomic_set(&irq_enabled, 1);
 	}
 	else {
-		pr_err("invalid module parameters: spi_gpio_irq < 0 && spi_gpio_poll <= 0 && spi_regs_poll <= 0");
+		dev_err(&priv->spi->dev, "invalid module parameters: spi_gpio_irq < 0 && spi_gpio_poll <= 0 && spi_regs_poll <= 0");
 		goto kill_kthread;
 	}
 
@@ -2610,7 +2614,7 @@ static struct spi_device *nrc_create_spi_device (void)
 	/* Find the spi master that our device is attached to */
 	master = spi_busnum_to_master(spi_bus_num);
 	if (!master) {
-		pr_err("Could not find spi master with the bus number %d.",
+		dev_err(&master->dev, "Could not find spi master with the bus number %d.",
 			spi_bus_num);
 		return NULL;
 	}
@@ -2618,7 +2622,7 @@ static struct spi_device *nrc_create_spi_device (void)
 	/* Instantiate and add a spi device */
 	spi = spi_new_device(master, &bi);
 	if (!spi) {
-		pr_err("Failed to instantiate a new spi device.");
+		dev_err(&master->dev, "Failed to instantiate a new spi device.");
 		return NULL;
 	}
 
@@ -2643,7 +2647,7 @@ static int __init nrc_cspi_init (void)
 #ifndef CONFIG_SPI_USE_DT
 	spi = nrc_create_spi_device();
 	if (IS_ERR(spi)) {
-		pr_err("Failed to nrc_create_spi_dev\n");
+		dev_err(&spi->dev, "Failed to nrc_create_spi_dev\n");
 		goto out;
 	}
 	g_spi_dev = spi;
