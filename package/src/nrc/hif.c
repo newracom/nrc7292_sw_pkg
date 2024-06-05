@@ -94,7 +94,7 @@ void nrc_hif_free_skb(struct nrc *nw, struct sk_buff *skb)
 	int credit;
 
 	if (!skb) {
-		pr_err("[%s] skb is NULL!", __func__);
+		dev_err(nw->dev, "[%s] skb is NULL!", __func__);
 		return;
 	}
 
@@ -977,14 +977,14 @@ static int hif_receive_skb(struct nrc_hif_device *dev, struct sk_buff *skb)
 		}
 		if (hif_new->index == 0) {
 			rcv_time_first = rcv_time_last;
-			pr_err("[Loopback Test] First frame received time: %llu", rcv_time_first);
+			dev_err(nw->dev, "[Loopback Test] First frame received time: %llu", rcv_time_first);
 		}
 
 		if (hif_new->subtype == LOOPBACK_MODE_TX_ONLY) {
 			d = (u32*)(skb->data);
 			arv_time_first = *d;
 			arv_time_last = *(d + 2);
-			pr_err("[Loopback Test][TX only] -- test done --\n\n\n\n\n");
+			dev_err(nw->dev, "[Loopback Test][TX only] -- test done --\n\n\n\n\n");
 		} else {
 			if (hif_new->index > hif_new->count - 4) {
 				if (lb_hexdump) {
@@ -999,11 +999,11 @@ static int hif_receive_skb(struct nrc_hif_device *dev, struct sk_buff *skb)
 				arv_time_last = *(d + 2);
 			}
 			if (hif_new->index == hif_new->count - 1) {
-				pr_err("[Loopback Test] Last frame received time: %llu\n\n", rcv_time_last);
+				dev_err(nw->dev, "[Loopback Test] Last frame received time: %llu\n\n", rcv_time_last);
 				if (hif_new->subtype == LOOPBACK_MODE_ROUNDTRIP) {
-					pr_err("[Loopback Test][Round-trip] -- test done --\n\n\n\n\n");
+					dev_err(nw->dev, "[Loopback Test][Round-trip] -- test done --\n\n\n\n\n");
 				} else if (hif_new->subtype == LOOPBACK_MODE_RX_ONLY) {
-					pr_err("[Loopback Test][RX only] -- test done --\n\n\n\n\n");
+					dev_err(nw->dev, "[Loopback Test][RX only] -- test done --\n\n\n\n\n");
 				}
 			}
 		}

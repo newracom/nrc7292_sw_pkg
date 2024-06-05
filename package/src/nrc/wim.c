@@ -684,7 +684,7 @@ static int nrc_wim_response_handler(struct nrc *nw,
 	mutex_unlock(&nw->target_mtx);
 	if (completion_done(&nw->wim_responded)) {
 	/* No completion waiters, free the SKB */
-		pr_err("no completion");
+		dev_err(nw->dev, "no completion");
 		return 0;
 	}
 	complete(&nw->wim_responded);

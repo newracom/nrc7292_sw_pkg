@@ -504,7 +504,7 @@ static int ssp_probe(struct spi_device *spi)
 
 	nrc_dbg(NRC_DBG_HIF, "--spi_gpio_irq Set Done");
 	if (err) {
-		pr_err("can't get hif IRQ");
+		dev_err(nw->dev, "can't get hif IRQ");
 		goto ssp_free;
 	}
 

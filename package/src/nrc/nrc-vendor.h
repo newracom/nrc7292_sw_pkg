@@ -34,11 +34,16 @@
 #define NRC_SUBCMD_RM_VENDOR_IE				0xDE
 
 /**
- * GPIO pin number on Raspberry Pi.
- * This is used to wake up the target in deep-sleep.
+ * GPIO pin number on the target device used for SPI IRQ.
+ * [direction]: INPUT
+ */
+#define TARGET_GPIO_SPI_IRQ				(5) //NRC7292 EVB
+
+/**
+ * GPIO pin number on the target device used to wake the nrc7292 from deep sleep.
  * [direction]: OUTPUT
  */
-#define RPI_GPIO_FOR_PS						(20) //NRC7292 EVB
+#define TARGET_GPIO_FOR_PS				(20) //NRC7292 EVB
 
 /**
  * GPIO pin number on the target device.
@@ -54,7 +59,13 @@
  * which will raise signal to wake up host system.
  * [direction]: OUTPUT
  */
-#define TARGET_GPIO_FOR_WAKEUP_HOST			(10)
+#define TARGET_GPIO_FOR_WAKEUP_HOST			(10) //NRC7292 EVB
+
+/**
+ * GPIO pin number on target device used to reset the nrc7292.
+ * [direction]: OUTPUT
+ */
+#define TARGET_GPIO_FOR_RST				(4) //NRC7292 EVB
 
 /**
  * GPIO configuration during deep sleep operation.
@@ -67,8 +78,6 @@
 #define TARGET_DEEP_SLEEP_GPIO_DIR_739X		(0xCFEF8D07) // NRC default: 03-07, 09, 12-14, 20, 28-29 => input
 #define TARGET_DEEP_SLEEP_GPIO_OUT			(0x0)
 #define TARGET_DEEP_SLEEP_GPIO_PULLUP		(0x0)
-
-#define RPI_GPIO_FOR_RST					(4)
 
 enum nrc_vendor_event {
 	NRC_SUBCMD_ANNOUNCE1 = 0,

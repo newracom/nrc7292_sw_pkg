@@ -31,8 +31,13 @@ static struct nrc *nrc_nw;
 
 
 #ifdef CONFIG_SUPPORT_NEW_NETLINK
+#if KERNEL_VERSION(6, 2, 0) > NRC_TARGET_KERNEL_VERSION
 static int nrc_nl_pre_doit(const struct genl_ops *ops,
 			   struct sk_buff *skb, struct genl_info *info)
+#else
+static int nrc_nl_pre_doit(const struct genl_split_ops *ops,
+			   struct sk_buff *skb, struct genl_info *info)
+#endif
 #else
 static int nrc_nl_pre_doit(struct genl_ops *ops,
 			   struct sk_buff *skb, struct genl_info *info)
@@ -42,8 +47,13 @@ static int nrc_nl_pre_doit(struct genl_ops *ops,
 }
 
 #ifdef CONFIG_SUPPORT_NEW_NETLINK
+#if KERNEL_VERSION(6, 2, 0) > NRC_TARGET_KERNEL_VERSION
 static void nrc_nl_post_doit(const struct genl_ops *ops,
 			     struct sk_buff *skb, struct genl_info *info)
+#else
+static void nrc_nl_post_doit(const struct genl_split_ops *ops,
+			     struct sk_buff *skb, struct genl_info *info)
+#endif
 #else
 static void nrc_nl_post_doit(struct genl_ops *ops,
 			     struct sk_buff *skb, struct genl_info *info)
@@ -804,7 +814,7 @@ static int capi_sta_send_addba(struct sk_buff *skb, struct genl_info *info)
 	struct capi_data param = { 0 };
 
 	if (nrc_nw->drv_state != NRC_DRV_RUNNING) {
-		pr_err("[Error] the target device cannot respond while deep sleep.");
+		dev_err(nrc_nw->dev, "[Error] the target device cannot respond while deep sleep.");
 		return -EIO;
 	}
 
@@ -828,7 +838,7 @@ static int capi_sta_send_addba(struct sk_buff *skb, struct genl_info *info)
 					    &param);
 #endif
 	if (!param.done)
-		pr_err("WFA_CAPI: failed to send ADDBA");
+		dev_err(nrc_nw->dev, "WFA_CAPI: failed to send ADDBA");
 
 	return capi_sta_reply(NL_WFA_CAPI_SEND_ADDBA, info,
 			      param.done ?
@@ -882,7 +892,7 @@ static int capi_sta_send_delba(struct sk_buff *skb, struct genl_info *info)
 	struct capi_data param = { 0 };
 
 	if (nrc_nw->drv_state != NRC_DRV_RUNNING) {
-		pr_err("[Error] the target device cannot respond while deep sleep.");
+		dev_err(nrc_nw->dev, "[Error] the target device cannot respond while deep sleep.");
 		return -EIO;
 	}
 
@@ -906,7 +916,7 @@ static int capi_sta_send_delba(struct sk_buff *skb, struct genl_info *info)
 					    &param);
 #endif
 	if (!param.done)
-		pr_err("WFA_CAPI: failed to send DELBA");
+		dev_err(nrc_nw->dev, "WFA_CAPI: failed to send DELBA");
 
 	return capi_sta_reply(NL_WFA_CAPI_SEND_DELBA, info,
 			      param.done ?
@@ -927,7 +937,7 @@ static int capi_bss_max_idle_offset(struct sk_buff *skb, struct genl_info *info)
 	int32_t bss_max_idle_offset;
 
 	if (nrc_nw->drv_state != NRC_DRV_RUNNING) {
-		pr_err("[Error] the target device cannot respond while deep sleep.");
+		dev_err(nrc_nw->dev, "[Error] the target device cannot respond while deep sleep.");
 		return -EIO;
 	}
 
@@ -989,7 +999,7 @@ static int capi_bss_max_idle(struct sk_buff *skb, struct genl_info *info)
 	struct ieee80211_vif *vif;
 
 	if (nrc_nw->drv_state != NRC_DRV_RUNNING) {
-		pr_err("[Error] the target device cannot respond while deep sleep.");
+		dev_err(nrc_nw->dev, "[Error] the target device cannot respond while deep sleep.");
 		return -EIO;
 	}
 
@@ -1144,7 +1154,7 @@ static int test_mmic_failure(struct sk_buff *skb, struct genl_info *info)
 #endif
 
 	if (!param.done)
-		pr_err("WFA_CAPI: failed to generate MMIC failure");
+		dev_err(nrc_nw->dev, "WFA_CAPI: failed to generate MMIC failure");
 
 	return capi_sta_reply(NL_TEST_MMIC_FAILURE, info,
 			      param.done ?
@@ -1211,7 +1221,7 @@ static int nrc_shell_run_simple(struct sk_buff *skb, struct genl_info *info)
 	struct sk_buff *wim_skb;
 
 	if (nrc_nw->drv_state != NRC_DRV_RUNNING) {
-		pr_err("[Error] the target device cannot respond while deep sleep.");
+		dev_err(nrc_nw->dev, "[Error] the target device cannot respond while deep sleep.");
 		return -EIO;
 	}
 	if (!nrc_access_vif(nrc_nw)) {
@@ -1261,7 +1271,7 @@ static int nrc_shell_run(struct sk_buff *skb, struct genl_info *info)
 	void *hdr;
 
 	if (nrc_nw->drv_state != NRC_DRV_RUNNING) {
-		pr_err("[Error] the target device cannot respond while deep sleep.");
+		dev_err(nrc_nw->dev, "[Error] the target device cannot respond while deep sleep.");
 		return -EIO;
 	}
 	if (!nrc_access_vif(nrc_nw)) {
@@ -1335,7 +1345,7 @@ static int nrc_shell_run_raw(struct sk_buff *skb, struct genl_info *info)
 	void *hdr;
 
 	if (nrc_nw->drv_state != NRC_DRV_RUNNING) {
-		pr_err("[Error] the target device cannot respond while deep sleep.");
+		dev_err(nrc_nw->dev, "[Error] the target device cannot respond while deep sleep.");
 		return -EIO;
 	}
 	if (!nrc_access_vif(nrc_nw)) {
@@ -1415,7 +1425,7 @@ static int cli_app_get_info(struct sk_buff *skb, struct genl_info *info)
 	memset(cmd_resp, 0x0, sizeof(cmd_resp));
 
 	if (nrc_nw->drv_state != NRC_DRV_RUNNING) {
-		pr_err("[Error] the target device cannot respond while deep sleep.");
+		dev_err(nrc_nw->dev, "[Error] the target device cannot respond while deep sleep.");
 		return -EIO;
 	}
 	if (!nrc_access_vif(nrc_nw)) {
@@ -1523,7 +1533,7 @@ static int cli_app_driver_cmd(struct sk_buff *skb, struct genl_info *info)
 	memset(cmd_resp, 0x0, sizeof(cmd_resp));
 
 	if (nrc_nw->drv_state != NRC_DRV_RUNNING) {
-		pr_err("[Error] the target device cannot respond while deep sleep.");
+		dev_err(nrc_nw->dev, "[Error] the target device cannot respond while deep sleep.");
 		return -EIO;
 	}
 	if (!nrc_access_vif(nrc_nw)) {
@@ -2002,7 +2012,7 @@ int nrc_netlink_init(struct nrc *nw)
 #endif
 
 	if (rc) {
-		pr_err("genl_register_family_with_ops_groups() is failed (%d).",
+		dev_err(nw->dev, "genl_register_family_with_ops_groups() is failed (%d).",
 				rc);
 		return -EINVAL;
 	}
@@ -2010,7 +2020,7 @@ int nrc_netlink_init(struct nrc *nw)
 	rc = netlink_register_notifier(&nl_umac_netlink_notifier);
 
 	if (rc) {
-		pr_err("netlink_register_notifier() is failed (%d).",
+		dev_err(nw->dev, "netlink_register_notifier() is failed (%d).",
 				rc);
 		genl_unregister_family(&nrc_nl_fam);
 		return -EINVAL;
@@ -2022,7 +2032,7 @@ int nrc_netlink_init(struct nrc *nw)
 
 void nrc_netlink_exit(void)
 {
-	pr_err("%s", __func__);
+	dev_err(nrc_nw->dev, "%s", __func__);
 	netlink_unregister_notifier(&nl_umac_netlink_notifier);
 	genl_unregister_family(&nrc_nl_fam);
 }
