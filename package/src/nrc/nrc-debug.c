@@ -417,7 +417,7 @@ static int nrc_debugfs_loopback_write(void *data, u64 val)
 
 	time_info_array = (struct lb_time_info*)kzalloc(sizeof(struct lb_time_info) * lb_count, GFP_KERNEL);
 	if (!time_info_array) {
-		pr_err("Failed to alloc buffers...");
+		dev_err(nw->dev, "Failed to alloc buffers...");
 		return 0;
 	}
 	hif = (struct hif_lb_hdr *)g_skb->data;
@@ -463,7 +463,7 @@ static int nrc_debugfs_loopback_write(void *data, u64 val)
 		queue_work(nw->workqueue, &hdev->work);
 	}
 	nrc_hif_test_status(hdev);
-	pr_err("[Loopback Test] TX Done.");
+	dev_err(nw->dev, "[Loopback Test] TX Done.");
 
 	return 0;
 }

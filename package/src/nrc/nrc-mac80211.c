@@ -334,7 +334,7 @@ static void force_sw_enc_mode_by_sta_type (struct nrc *nw, struct ieee80211_vif 
 			}
 			break;
 		default:
-			pr_err("Unknown Newracom IEEE80211 chipset %04x",
+			dev_err(nw->dev, "Unknown Newracom IEEE80211 chipset %04x",
 					nw->chip_id);
 			BUG();
 	}
@@ -1130,7 +1130,7 @@ static int nrc_mac_add_interface(struct ieee80211_hw *hw,
 			else if(nw->hw_queues == 11) { /* 7393 type, Use BK1, BE1,... */
 				vif->cab_queue = 10;
 			} else {
-				pr_err("Invalid Chip ID(0x%x), queues:%d\n", nw->chip_id, nw->hw_queues);
+				dev_err(nw->dev, "Invalid Chip ID(0x%x), queues:%d\n", nw->chip_id, nw->hw_queues);
 				BUG();
 			}
 			
@@ -1162,12 +1162,12 @@ static int nrc_mac_add_interface(struct ieee80211_hw *hw,
 				vif->hw_queue[IEEE80211_AC_BK] = 6;
 				break;
 			default:
-				pr_err("Invalid Chip ID(0x%x), queues:%d\n", nw->chip_id, nw->hw_queues);
+				dev_err(nw->dev, "Invalid Chip ID(0x%x), queues:%d\n", nw->chip_id, nw->hw_queues);
 				BUG();
 		}
 	}
 	if (i_vif->index > 1) {
-		pr_err("Invalid Vif Index(%d)\n", i_vif->index);
+		dev_err(nw->dev, "Invalid Vif Index(%d)\n", i_vif->index);
 		BUG();
 	}
 	nrc_dbg(NRC_DBG_MAC, "%s: VIF%d's hwqueue:%d", __func__, i_vif->index, nw->hw_queues);
@@ -2839,7 +2839,7 @@ static int nrc_mac_set_key(struct ieee80211_hw *hw, enum set_key_cmd cmd,
 
 	/* if not use HW SECURITY of VIF , return 1 */
 	if (!(nw->cap.vif_caps[vif_id].cap_mask & WIM_SYSTEM_CAP_HWSEC)) {
-		pr_err("failed to set caps");
+		dev_err(nw->dev, "failed to set caps");
 		return 1;
 	}
 
@@ -3530,7 +3530,7 @@ int nrc_reg_notifier(struct wiphy *wiphy,
 	nrc_cc[1] = request->alpha2[1];
 	if ((request->alpha2[0] == '0' && request->alpha2[1] == '0') ||
 		(request->alpha2[0] == '9' && request->alpha2[1] == '9')) {
-		pr_err("[Error] CC is 00 or 99. Skip loading BD and setting CC");
+		dev_err(nw->dev, "[Error] CC is 00 or 99. Skip loading BD and setting CC");
 #ifdef CONFIG_NEW_REG_NOTIFIER
 		return;
 #else

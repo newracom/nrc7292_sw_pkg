@@ -85,7 +85,7 @@ int spi_cs_num;
 module_param(spi_cs_num, int, 0600);
 MODULE_PARM_DESC(spi_cs_num, "SPI chip select number");
 
-int spi_gpio_irq = 5;
+int spi_gpio_irq = TARGET_GPIO_SPI_IRQ;
 module_param(spi_gpio_irq, int, 0600);
 MODULE_PARM_DESC(spi_gpio_irq, "SPI gpio irq");
 
@@ -291,7 +291,7 @@ MODULE_PARM_DESC(nrc_country_code, "Two letter fw country code");
 /**
  * gpio for power save (default Host_output(GP20) --> Target_input(GP11))
  */
-int power_save_gpio[2] = {RPI_GPIO_FOR_PS, TARGET_GPIO_FOR_WAKEUP};
+int power_save_gpio[2] = {TARGET_GPIO_FOR_PS, TARGET_GPIO_FOR_WAKEUP};
 module_param_array(power_save_gpio, int, NULL, 0600);
 MODULE_PARM_DESC(power_save_gpio, "gpio for power save");
 
