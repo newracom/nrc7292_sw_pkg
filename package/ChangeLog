@@ -4,6 +4,15 @@
 *
 *******************************************************************
 
+[2024-12-04]
+Change summary for version 1.5.2:
+
+    Hotfix
+    * Bugfix for corner cases related to 1MHz primary channel location
+
+    Changes
+    * Clean up obsolete feature-related parts of the start.py script
+
 [2024-05-10]
 Change summary for version 1.5.1:
 

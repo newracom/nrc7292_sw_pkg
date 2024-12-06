@@ -190,7 +190,7 @@
 #undef CONFIG_USE_CHANNEL_CONTEXT
 #endif
 
-#define CONFIG_SUPPORT_IBSS
+//#define CONFIG_SUPPORT_IBSS
 
 /* for backports */
 /*

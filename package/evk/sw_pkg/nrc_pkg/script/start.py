@@ -171,7 +171,7 @@ def check(interface):
 def usage_print():
     print("Usage: \n\tstart.py [sta_type] [security_mode] [country] [channel] [sniffer_mode] \
             \n\tstart.py [sta_type] [security_mode] [country] [mesh_mode] [mesh_peering] [mesh_ip]")
-    print("Argument:    \n\tsta_type      [0:STA   |  1:AP  |  2:SNIFFER  | 3:RELAY |  4:MESH | 5:IBSS] \
+    print("Argument:    \n\tsta_type      [0:STA   |  1:AP  |  2:SNIFFER  | 3:RELAY |  4:MESH] \
             \n\tsecurity_mode [0:Open  |  1:WPA2-PSK  |  2:WPA3-OWE  |  3:WPA3-SAE | 4:WPS-PBC] \
                          \n\tcountry       [US:USA  |  JP:Japan  |  TW:Taiwan  | EU:EURO | CN:China | \
                          \n\t               AU:Australia  |  NZ:New Zealand  | K1:Korea-USN  | K2:Korea-MIC] \
@@ -180,18 +180,14 @@ def usage_print():
                          \n\tsniffer_mode  [0:Local | 1:Remote]   * Only for Sniffer \
                          \n\tmesh_mode     [0:MPP | 1:MP | 2:MAP] * Only for Mesh \
                          \n\tmesh_peering  [Peer MAC address]     * Only for Mesh \
-                         \n\tmesh_ip       [Static IP address]    * Only for Mesh \
-                         \n\tibss_ip       [0:DHCPC or static IP | 1:DHCPS]    * Only for IBSS")
+                         \n\tmesh_ip       [Static IP address]    * Only for Mesh")
     print("Example:  \n\tOPEN mode STA for US                : ./start.py 0 0 US \
                       \n\tSecurity mode AP for US                : ./start.py 1 1 US \
                       \n\tLocal Sniffer mode on CH 40 for Japan  : ./start.py 2 0 JP 40 0 \
                       \n\tSAE mode Mesh AP for US                : ./start.py 4 3 US 2 \
                       \n\tMesh Point with static ip              : ./start.py 4 3 US 1 192.168.222.1 \
                       \n\tMesh Point with manual peering         : ./start.py 4 3 US 1 8c:0f:fa:00:29:46 \
-                      \n\tMesh Point with manual peering & ip    : ./start.py 4 3 US 1 8c:0f:fa:00:29:46 192.168.222.1 \
-                      \n\tOPEN mode IBSS for US with DHCP server      : ./start.py 5 0 US 1 \
-                      \n\tSecurity mode IBSS for US with DHCPC client : ./start.py 5 1 US 0 \
-                      \n\tSecurity mode IBSS for US with static IP    : ./start.py 5 1 US 0 192.168.200.17")
+                      \n\tMesh Point with manual peering & ip    : ./start.py 4 3 US 1 8c:0f:fa:00:29:46 192.168.222.1")
     print("Note: \n\tsniffer_mode should be set as '1' when running sniffer on remote terminal \
                   \n\tMPP, MP mode support only Open, WPA3-SAE security mode")
     exit()
@@ -207,13 +203,6 @@ def strSTA():
         return 'RELAY'
     elif int(sys.argv[1]) == 4:
         return 'MESH'
-    elif int(sys.argv[1]) == 5:
-        if int(sys.argv[4]) == 1:
-            return 'IBSS_DHCPS'
-        elif int(sys.argv[4]) == 0:
-            return 'IBSS'
-        else:
-            usage_print()
     else:
         usage_print()
 
@@ -253,15 +242,6 @@ def checkMeshUsage():
             usage_print()
     argv_print()
 
-def checkIBSSUsage():
-    global sw_enc, ampdu_enable, static_ip
-    if len(sys.argv) < 5:
-        usage_print()
-    ampdu_enable = 0
-    if len(sys.argv) == 6:
-        if isIP(sys.argv[5]):
-            static_ip = sys.argv[5]
-
 def checkParamValidity():
     if strSTA() == 'STA' and int(power_save) > 0 and int(listen_interval) > 65535:
         print("Max listen_interval is 65535!")
@@ -284,8 +264,6 @@ def strSecurity():
 def strPSType():
     if int(power_save) == 0:
         return 'Always On'
-    elif int(power_save) == 1:
-        return 'Modem Sleep (TIM)'
     elif int(power_save) == 2:
         return 'Deep Sleep (TIM)'
     elif int(power_save) == 3:
@@ -770,21 +748,6 @@ def run_common():
     startDHCPCD()
     startDNSMASQ()
 
-def run_ibss(interface):
-    country = str(sys.argv[3])
-    os.system("sudo killall -9 wpa_supplicant")
-
-    if int(supplicant_debug) == 1:
-        debug = '-dddd'
-    else:
-        debug = ''
-
-    print("[6] Start wpa_supplicant on " + interface)
-    if strSecurity() == 'OPEN':
-        os.system("sudo wpa_supplicant -i" + interface + " -c /home/pi/nrc_pkg/script/conf/" + country + "/ibss_halow_open.conf " + debug + " &")
-    elif strSecurity() == 'WPA2-PSK':
-        os.system("sudo wpa_supplicant -i" + interface + " -c /home/pi/nrc_pkg/script/conf/" + country + "/ibss_halow_wpa2.conf " + debug + " &")
-
 def run_sta(interface):
     country = str(sys.argv[3])
     os.system("sudo killall -9 wpa_supplicant")
@@ -961,8 +924,6 @@ if __name__ == '__main__':
         usage_print()
     elif strSTA() == 'MESH':
         checkMeshUsage()
-    elif strSTA() == 'IBSS' or strSTA() == 'IBSS_DHCPS':
-        checkIBSSUsage()
     else:
         argv_print()
 
@@ -999,8 +960,6 @@ if __name__ == '__main__':
             run_map('wlan0', 'mesh0', str(sys.argv[3]), strSecurity(), supplicant_debug, peer, static_ip, batman)
         else:
             usage_print()
-    elif strSTA() == 'IBSS' or strSTA() == 'IBSS_DHCPS':
-       run_ibss('wlan0')
     else:
         usage_print()
 

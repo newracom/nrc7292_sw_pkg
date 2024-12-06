@@ -11,6 +11,7 @@ https://github.com/newracom/nrc7292_sw_pkg/tree/master/package/evk/sw_pkg/nrc_pk
 > For support regarding the SAE Hash-to-Element (H2E), please refer to https://github.com/newracom/nrc7292_sw_pkg/blob/master/README-H2E.md
 
 ### Release roadmap
+- v1.5.2 (2024.12.06): Hotfix
 - v1.5.1 (2024.05.10): Hotfix
 - v1.5 (2023.10.31)
 - v1.4.1 (2023.09.08)
@@ -36,7 +37,7 @@ https://github.com/newracom/nrc7292_sw_pkg/tree/master/package/evk/sw_pkg/nrc_pk
 - v1.3.0 (2020.05.30)
 
 ### Latest release
-- [NRC7292_SW_PKG_v1.5.1](https://github.com/newracom/nrc7292_sw_pkg/releases/tag/v1.5.1)
+- [NRC7292_SW_PKG_v1.5.2](https://github.com/newracom/nrc7292_sw_pkg/releases/tag/v1.5.2)
 
 ### Release package contents
 - package: NRC7292 software package for global regulatory domains
